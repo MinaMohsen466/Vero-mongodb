@@ -1,0 +1,403 @@
+import React, { useState, useEffect } from 'react';
+import { Plus, Trash2, Search, CreditCard, ArrowDownCircle, ArrowUpCircle, Edit } from 'lucide-react';
+import Modal from '../components/Modal';
+import { useAuth } from '../App';
+
+function Vouchers() {
+    const { t } = useAuth();
+    const [vouchers, setVouchers] = useState([]);
+    const [customers, setCustomers] = useState([]);
+    const [suppliers, setSuppliers] = useState([]);
+    const [pendingInvoices, setPendingInvoices] = useState([]);
+    const [invoiceSearch, setInvoiceSearch] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('receipt');
+    const [showModal, setShowModal] = useState(false);
+    const [editMode, setEditMode] = useState(false);
+    const [editingId, setEditingId] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [formData, setFormData] = useState({
+        type: 'receipt', date: new Date().toISOString().split('T')[0],
+        amount: 0, customer_id: '', supplier_id: '',
+        payment_method: 'cash', invoice_id: '', reference: '', description: ''
+    });
+
+    useEffect(() => { loadData(); }, []);
+
+    const loadData = async () => {
+        try {
+            const [vouchersData, customersData, suppliersData] = await Promise.all([
+                window.api.vouchers.getAll(),
+                window.api.customers.getAll(),
+                window.api.suppliers.getAll()
+            ]);
+            setVouchers(vouchersData || []);
+            setCustomers(customersData || []);
+            setSuppliers(suppliersData || []);
+        } catch (error) { console.error('Error:', error); }
+        finally { setLoading(false); }
+    };
+
+    // Load ALL unpaid invoices (pending + partial) when customer/supplier changes
+    const loadPendingInvoices = async (type, id) => {
+        if (!id) { setPendingInvoices([]); return; }
+        try {
+            let invoices = [];
+            if (type === 'receipt') {
+                invoices = await window.api.invoices.getByCustomer(parseInt(id));
+            } else {
+                invoices = await window.api.invoices.getBySupplier(parseInt(id));
+            }
+            // Filter to only unpaid invoices (pending or partial)
+            const unpaid = (invoices || []).filter(inv => inv.status === 'pending' || inv.status === 'partial');
+            setPendingInvoices(unpaid);
+        } catch (e) { console.error(e); setPendingInvoices([]); }
+    };
+
+    const handleCustomerChange = (e) => {
+        const customerId = e.target.value;
+        setFormData({ ...formData, customer_id: customerId, invoice_id: '' });
+        setInvoiceSearch('');
+        loadPendingInvoices('receipt', customerId);
+    };
+
+    const handleSupplierChange = (e) => {
+        const supplierId = e.target.value;
+        setFormData({ ...formData, supplier_id: supplierId, invoice_id: '' });
+        setInvoiceSearch('');
+        loadPendingInvoices('payment', supplierId);
+    };
+
+    const handleInvoiceSelect = (invoiceId) => {
+        const invoice = pendingInvoices.find(inv => inv.id === parseInt(invoiceId));
+        if (invoice) {
+            setFormData({ ...formData, invoice_id: String(invoiceId), amount: invoice.total - (invoice.paid || 0) });
+        } else {
+            setFormData({ ...formData, invoice_id: '', amount: 0 });
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            const voucherData = {
+                ...formData,
+                customer_id: formData.customer_id ? parseInt(formData.customer_id) : null,
+                supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
+                invoice_id: formData.invoice_id ? parseInt(formData.invoice_id) : null,
+                amount: parseFloat(formData.amount) || 0,
+                account_id: null
+            };
+
+            if (editMode) {
+                await window.api.vouchers.update({ ...voucherData, id: editingId });
+            } else {
+                await window.api.vouchers.create(voucherData);
+            }
+            loadData();
+            closeModal();
+        } catch (error) { console.error('Error:', error); }
+    };
+
+    const handleDelete = async (id) => {
+        if (confirm(t('vouch_deleteConfirm'))) {
+            await window.api.vouchers.delete(id);
+            loadData();
+        }
+    };
+
+    const handleEdit = async (voucher) => {
+        setEditMode(true);
+        setEditingId(voucher.id);
+        setFormData({
+            type: voucher.type,
+            date: voucher.date,
+            amount: voucher.amount,
+            customer_id: voucher.customer_id ? String(voucher.customer_id) : '',
+            supplier_id: voucher.supplier_id ? String(voucher.supplier_id) : '',
+            payment_method: voucher.payment_method || 'cash',
+            invoice_id: voucher.invoice_id ? String(voucher.invoice_id) : '',
+            reference: voucher.reference || '',
+            description: voucher.description || ''
+        });
+        setInvoiceSearch('');
+        if (voucher.type === 'receipt' && voucher.customer_id) {
+            loadPendingInvoices('receipt', voucher.customer_id);
+        } else if (voucher.type === 'payment' && voucher.supplier_id) {
+            loadPendingInvoices('payment', voucher.supplier_id);
+        }
+        setShowModal(true);
+    };
+
+    const openModal = (type) => {
+        setEditMode(false);
+        setEditingId(null);
+        setPendingInvoices([]);
+        setInvoiceSearch('');
+        setFormData({
+            type, date: new Date().toISOString().split('T')[0],
+            amount: 0, customer_id: '', supplier_id: '',
+            payment_method: 'cash', invoice_id: '', reference: '', description: ''
+        });
+        setShowModal(true);
+    };
+
+    const closeModal = () => {
+        setShowModal(false);
+        setEditMode(false);
+        setEditingId(null);
+        setPendingInvoices([]);
+        setInvoiceSearch('');
+    };
+
+    const filteredVouchers = vouchers.filter(v => {
+        if (v.type !== activeTab) return false;
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        return (
+            v.voucher_number?.toLowerCase().includes(q) ||
+            v.customer_name?.toLowerCase().includes(q) ||
+            v.supplier_name?.toLowerCase().includes(q) ||
+            String(v.amount).includes(q)
+        );
+    });
+
+    // Filter invoices by search
+    const filteredInvoices = pendingInvoices.filter(inv => {
+        if (!invoiceSearch) return true;
+        const q = invoiceSearch.toLowerCase();
+        return (
+            inv.invoice_number?.toLowerCase().includes(q) ||
+            String(inv.total).includes(q)
+        );
+    });
+
+    const formatCurrency = (amount) => new Intl.NumberFormat('ar-KW', { minimumFractionDigits: 3 }).format(amount || 0) + ' د.ك';
+
+    if (loading) return <div className="loading"><div className="spinner"></div></div>;
+
+    return (
+        <div>
+            <div className="page-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div className="tabs" style={{ marginBottom: 0, border: 'none' }}>
+                        <button className={`tab ${activeTab === 'receipt' ? 'active' : ''}`} onClick={() => setActiveTab('receipt')}>
+                            <ArrowDownCircle size={18} style={{ marginLeft: '8px' }} /> {t('vouch_receipt')}
+                        </button>
+                        <button className={`tab ${activeTab === 'payment' ? 'active' : ''}`} onClick={() => setActiveTab('payment')}>
+                            <ArrowUpCircle size={18} style={{ marginLeft: '8px' }} /> {t('vouch_payment')}
+                        </button>
+                    </div>
+                    <div style={{ position: 'relative' }}>
+                        <input type="text" className="form-input" placeholder={t('search')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ width: '250px' }} />
+                    </div>
+                </div>
+                <button className="btn btn-primary" onClick={() => openModal(activeTab)}>
+                    <Plus size={18} /> {activeTab === 'receipt' ? t('vouch_addReceipt') : t('vouch_addPayment')}
+                </button>
+            </div>
+
+            <div className="card">
+                <div className="card-body" style={{ padding: 0 }}>
+                    {filteredVouchers.length === 0 ? (
+                        <div className="empty-state">
+                            <CreditCard size={48} />
+                            <h3>{t('noData')}</h3>
+                        </div>
+                    ) : (
+                        <div className="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>{t('vouch_number')}</th>
+                                        <th>{t('date')}</th>
+                                        <th>{activeTab === 'receipt' ? t('dash_customer') : t('dash_supplier')}</th>
+                                        <th>{t('vouch_amount')}</th>
+                                        <th>{t('inv_paymentMethod')}</th>
+                                        <th>{t('vouch_invoice')}</th>
+                                        <th>{t('actions')}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredVouchers.map(voucher => (
+                                        <tr key={voucher.id}>
+                                            <td className="font-bold">{voucher.voucher_number}</td>
+                                            <td>{new Date(voucher.date).toLocaleDateString('ar-EG')}</td>
+                                            <td>{voucher.customer_name || voucher.supplier_name || '-'}</td>
+                                            <td className={`font-bold ${activeTab === 'receipt' ? 'text-success' : 'text-danger'}`}>
+                                                {formatCurrency(voucher.amount)}
+                                            </td>
+                                            <td>
+                                                <span className="badge badge-primary">
+                                                    {voucher.payment_method === 'cash' ? t('inv_cash') : voucher.payment_method === 'bank' ? t('inv_bank') : t('vouch_check')}
+                                                </span>
+                                            </td>
+                                            <td>{voucher.invoice_id ? `#${voucher.invoice_id}` : '-'}</td>
+                                            <td>
+                                                <div className="table-actions">
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(voucher)} title={t('edit')}>
+                                                        <Edit size={16} />
+                                                    </button>
+                                                    <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(voucher.id)} title={t('delete')}>
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <Modal
+                isOpen={showModal}
+                onClose={closeModal}
+                title={editMode ? (formData.type === 'receipt' ? t('vouch_editReceipt') : t('vouch_editPayment')) : (formData.type === 'receipt' ? t('vouch_addReceipt') : t('vouch_addPayment'))}
+                footer={
+                    <>
+                        <button className="btn btn-secondary" onClick={closeModal}>{t('cancel')}</button>
+                        <button className="btn btn-primary" onClick={handleSubmit}>{editMode ? t('saveChanges') : t('save')}</button>
+                    </>
+                }
+            >
+                <form onSubmit={handleSubmit}>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">{t('date')}</label>
+                            <input type="date" className="form-input" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">{t('vouch_amount')} *</label>
+                            <input type="number" className="form-input" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} step="0.001" required />
+                        </div>
+                    </div>
+
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">{formData.type === 'receipt' ? t('dash_customer') : t('dash_supplier')}</label>
+                            {formData.type === 'receipt' ? (
+                                <select className="form-select" value={formData.customer_id} onChange={handleCustomerChange} disabled={editMode}>
+                                    <option value="">{t('vouch_selectCustomer')}</option>
+                                    {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({formatCurrency(c.balance)})</option>)}
+                                </select>
+                            ) : (
+                                <select className="form-select" value={formData.supplier_id} onChange={handleSupplierChange} disabled={editMode}>
+                                    <option value="">{t('vouch_selectSupplier')}</option>
+                                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name} ({formatCurrency(s.balance)})</option>)}
+                                </select>
+                            )}
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">{t('inv_paymentMethod')}</label>
+                            <select className="form-select" value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}>
+                                <option value="cash">{t('inv_cash')}</option>
+                                <option value="bank">{t('inv_bank')}</option>
+                                <option value="check">{t('vouch_check')}</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Invoice linking section - always visible when customer/supplier is selected */}
+                    {((formData.type === 'receipt' && formData.customer_id) || (formData.type === 'payment' && formData.supplier_id)) && (
+                        <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+                            <label className="form-label" style={{ color: 'var(--primary)', marginBottom: '8px' }}>🔗 {t('vouch_linkInvoice')}</label>
+
+                            {pendingInvoices.length === 0 ? (
+                                <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>
+                                    {t('vouch_noUnpaidInvoices')}
+                                </p>
+                            ) : (
+                                <>
+                                    {/* Search box for invoices */}
+                                    <div style={{ marginBottom: '8px' }}>
+                                        <input
+                                            type="text"
+                                            className="form-input"
+                                            placeholder={t('vouch_searchInvoice')}
+                                            value={invoiceSearch}
+                                            onChange={(e) => setInvoiceSearch(e.target.value)}
+                                        />
+                                    </div>
+
+                                    {/* Invoice list */}
+                                    <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px', backgroundColor: 'var(--bg-primary)' }}>
+                                        {/* No link option */}
+                                        <div
+                                            onClick={() => handleInvoiceSelect('')}
+                                            style={{
+                                                padding: '10px 12px',
+                                                cursor: 'pointer',
+                                                borderBottom: '1px solid var(--border)',
+                                                backgroundColor: !formData.invoice_id ? 'var(--primary-light, rgba(59,130,246,0.1))' : 'transparent',
+                                                fontWeight: !formData.invoice_id ? 'bold' : 'normal'
+                                            }}
+                                        >
+                                            -- {t('vouch_noLink')} --
+                                        </div>
+
+                                        {filteredInvoices.map(inv => {
+                                            const remaining = inv.total - (inv.paid || 0);
+                                            const isSelected = String(formData.invoice_id) === String(inv.id);
+                                            return (
+                                                <div
+                                                    key={inv.id}
+                                                    onClick={() => handleInvoiceSelect(inv.id)}
+                                                    style={{
+                                                        padding: '10px 12px',
+                                                        cursor: 'pointer',
+                                                        borderBottom: '1px solid var(--border)',
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center',
+                                                        backgroundColor: isSelected ? 'var(--primary-light, rgba(59,130,246,0.1))' : 'transparent',
+                                                        fontWeight: isSelected ? 'bold' : 'normal'
+                                                    }}
+                                                >
+                                                    <div>
+                                                        <span style={{ fontWeight: 'bold', marginLeft: '8px' }}>{inv.invoice_number}</span>
+                                                        <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                                                            {new Date(inv.date).toLocaleDateString('ar-EG')}
+                                                        </span>
+                                                    </div>
+                                                    <div style={{ textAlign: 'left' }}>
+                                                        <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{t('total')}: {formatCurrency(inv.total)}</div>
+                                                        <div style={{ fontWeight: 'bold', color: 'var(--danger, #ef4444)' }}>{t('vouch_remaining')}: {formatCurrency(remaining)}</div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+
+                                        {filteredInvoices.length === 0 && invoiceSearch && (
+                                            <div style={{ padding: '12px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                                {t('noData')}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <small style={{ color: 'var(--text-muted)', marginTop: '6px', display: 'block' }}>
+                                        {t('vouch_linkNote')} ({pendingInvoices.length} {t('vouch_unpaidCount')})
+                                    </small>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    <div className="form-group">
+                        <label className="form-label">{t('vouch_reference')}</label>
+                        <input type="text" className="form-input" value={formData.reference} onChange={(e) => setFormData({ ...formData, reference: e.target.value })} placeholder={t('vouch_referencePlaceholder')} />
+                    </div>
+
+                    <div className="form-group">
+                        <label className="form-label">{t('vouch_description')}</label>
+                        <textarea className="form-textarea" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} style={{ minHeight: '60px' }} />
+                    </div>
+                </form>
+            </Modal>
+        </div>
+    );
+}
+
+export default Vouchers;
