@@ -38,7 +38,7 @@ function Vouchers() {
         finally { setLoading(false); }
     };
 
-    // Load ALL unpaid invoices (pending + partial) when customer/supplier changes
+    // Load ALL unpaid invoices (those not fully paid) when customer/supplier changes
     const loadPendingInvoices = async (type, id) => {
         if (!id) { setPendingInvoices([]); return; }
         try {
@@ -48,8 +48,13 @@ function Vouchers() {
             } else {
                 invoices = await window.api.invoices.getBySupplier(parseInt(id));
             }
-            // Filter to only unpaid invoices (pending or partial)
-            const unpaid = (invoices || []).filter(inv => inv.status === 'pending' || inv.status === 'partial');
+            // Filter to only unpaid invoices (exclude if status is 'paid' or if paid >= total)
+            const unpaid = (invoices || []).filter(inv => {
+                if (inv.status === 'paid') return false; // Exclude fully paid invoices
+                const paid = inv.paid || 0;
+                const total = inv.total || 0;
+                return paid < total; // Include if there's still balance due
+            });
             setPendingInvoices(unpaid);
         } catch (e) { console.error(e); setPendingInvoices([]); }
     };

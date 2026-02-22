@@ -28,6 +28,10 @@ const translations = {
         menu_section_other: 'أخرى',
         menu_reports: 'التقارير',
         menu_settings: 'الإعدادات',
+        menu_receiptVoucher: 'سندات القبض',
+        menu_paymentVoucher: 'سندات الصرف',
+        menu_cashBank: 'الصندوق والبنوك',
+        cb_totalBalance: 'إجمالي الرصيد',
 
         // Common
         save: 'حفظ',
@@ -59,6 +63,10 @@ const translations = {
         deleteConfirm: 'هل أنت متأكد من الحذف؟',
         code: 'الكود',
         description: 'الوصف',
+        perm_view: 'عرض',
+        perm_create: 'إنشاء',
+        perm_edit: 'تعديل',
+        perm_delete: 'حذف',
 
         // Dashboard
         dash_totalSales: 'إجمالي المبيعات',
@@ -290,6 +298,8 @@ const translations = {
         set_permissionsNote: 'المدير لديه جميع الصلاحيات تلقائياً. يمكنك تعديل صلاحيات المحاسب والمستخدم العادي.',
         set_module: 'الوحدة',
         set_savePermissions: 'حفظ الصلاحيات',
+        set_users: 'المستخدمين',
+        set_permissions: 'الصلاحيات',
         set_invoiceTitleSales: 'عنوان فاتورة المبيعات',
         set_invoiceTitlePurchase: 'عنوان فاتورة المشتريات',
         set_invoiceFooter: 'ملاحظة أسفل الفاتورة',
@@ -354,6 +364,10 @@ const translations = {
         menu_section_other: 'Other',
         menu_reports: 'Reports',
         menu_settings: 'Settings',
+        menu_receiptVoucher: 'Receipt Vouchers',
+        menu_paymentVoucher: 'Payment Vouchers',
+        menu_cashBank: 'Cash & Banks',
+        cb_totalBalance: 'Total Balance',
 
         // Common
         save: 'Save',
@@ -385,6 +399,10 @@ const translations = {
         deleteConfirm: 'Are you sure you want to delete?',
         code: 'Code',
         description: 'Description',
+        perm_view: 'View',
+        perm_create: 'Create',
+        perm_edit: 'Edit',
+        perm_delete: 'Delete',
 
         // Dashboard
         dash_totalSales: 'Total Sales',

@@ -106,6 +106,18 @@ class AppDatabase {
             if (!hasInvoiceId) {
                 this.exec("ALTER TABLE vouchers ADD COLUMN invoice_id INTEGER");
             }
+
+            // Add journal_entry_id to invoices
+            const hasInvJournal = columns.some(col => col.name === 'journal_entry_id');
+            if (!hasInvJournal) {
+                this.exec("ALTER TABLE invoices ADD COLUMN journal_entry_id INTEGER");
+            }
+
+            // Add journal_entry_id to vouchers
+            const hasVchJournal = voucherCols.some(col => col.name === 'journal_entry_id');
+            if (!hasVchJournal) {
+                this.exec("ALTER TABLE vouchers ADD COLUMN journal_entry_id INTEGER");
+            }
         } catch (e) {
             console.log('Migration check:', e.message);
         }
@@ -133,15 +145,45 @@ class AppDatabase {
 
         // Settings
         const settings = [
-            ['company_name', 'شركتي', 'company'], ['company_address', '', 'company'], ['company_phone', '', 'company'], ['company_email', '', 'company'],
+            ['company_name', 'شركتي', 'company'], ['company_address', '', 'company'], ['company_phone', '', 'company'], ['company_email', '', 'company'], ['company_tax_number', '', 'company'], ['company_logo', '', 'company'],
             ['currency', 'دينار كويتي', 'general'], ['currency_symbol', 'د.ك', 'general'], ['decimal_places', '3', 'general'],
             ['tax_rate', '0', 'tax'], ['theme', 'light', 'appearance'],
             ['invoice_title_sales', 'فاتورة مبيعات', 'invoice'], ['invoice_title_purchase', 'فاتورة مشتريات', 'invoice'],
-            ['invoice_footer', 'شكراً لتعاملكم معنا', 'invoice'], ['show_logo', 'yes', 'invoice'], ['show_company_info', 'yes', 'invoice'],
+            ['invoice_footer', 'شكراً لتعاملكم معنا', 'invoice'], ['invoice_terms', '', 'invoice'], ['show_logo', 'yes', 'invoice'], ['show_company_info', 'yes', 'invoice'],
             ['paper_size', 'A4', 'invoice'], ['paper_orientation', 'portrait', 'invoice']
         ];
         for (const [key, value, category] of settings) {
             this.run("INSERT OR IGNORE INTO settings (key, value, category) VALUES (?, ?, ?)", [key, value, category]);
+        }
+
+        // Default Permissions
+        const permCount = this.get('SELECT COUNT(*) as count FROM permissions');
+        if (permCount.count === 0) {
+            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions'];
+            for (const mod of modules) {
+                // Admin: full access to everything
+                this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', mod]);
+            }
+            // Accountant: view most, create/edit on financial modules, no access to users/settings/permissions
+            const accountantPerms = {
+                dashboard: [1, 0, 0, 0], customers: [1, 1, 1, 0], suppliers: [1, 1, 1, 0], products: [1, 1, 1, 0],
+                sales_invoices: [1, 1, 1, 0], purchase_invoices: [1, 1, 1, 0], receipt_vouchers: [1, 1, 1, 0], payment_vouchers: [1, 1, 1, 0],
+                chart_of_accounts: [1, 0, 0, 0], cash_bank: [1, 0, 0, 0], journal_entries: [1, 1, 0, 0], reports: [1, 0, 0, 0],
+                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0]
+            };
+            for (const [mod, [v, c, e, d]] of Object.entries(accountantPerms)) {
+                this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?)", ['accountant', mod, v, c, e, d]);
+            }
+            // User: very limited - only dashboard, sales invoices, receipt vouchers
+            const userPerms = {
+                dashboard: [1, 0, 0, 0], customers: [0, 0, 0, 0], suppliers: [0, 0, 0, 0], products: [0, 0, 0, 0],
+                sales_invoices: [1, 1, 0, 0], purchase_invoices: [0, 0, 0, 0], receipt_vouchers: [1, 1, 0, 0], payment_vouchers: [0, 0, 0, 0],
+                chart_of_accounts: [0, 0, 0, 0], cash_bank: [0, 0, 0, 0], journal_entries: [0, 0, 0, 0], reports: [0, 0, 0, 0],
+                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0]
+            };
+            for (const [mod, [v, c, e, d]] of Object.entries(userPerms)) {
+                this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?)", ['user', mod, v, c, e, d]);
+            }
         }
     }
 
@@ -156,6 +198,7 @@ class AppDatabase {
         this.journal = new JournalRepo(this);
         this.reports = new ReportsRepo(this);
         this.settings = new SettingsRepo(this);
+        this.permissions = new PermissionsRepo(this);
     }
 
     backup() {
@@ -170,7 +213,17 @@ class UsersRepo {
     constructor(db) { this.db = db; }
     login(username, password) {
         const user = this.db.get('SELECT * FROM users WHERE username = ? AND password_hash = ? AND is_active = 1', [username, password]);
-        if (user) { delete user.password_hash; return { success: true, user }; }
+        if (user) {
+            delete user.password_hash;
+            // Attach permissions
+            const perms = this.db.all('SELECT * FROM permissions WHERE role = ?', [user.role]);
+            const permMap = {};
+            for (const p of perms) {
+                permMap[p.module] = { can_view: !!p.can_view, can_create: !!p.can_create, can_edit: !!p.can_edit, can_delete: !!p.can_delete };
+            }
+            user.permissions = permMap;
+            return { success: true, user };
+        }
         return { success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' };
     }
     getAll() { return this.db.all('SELECT id, username, full_name, role, is_active, created_at FROM users'); }
@@ -241,6 +294,75 @@ class InvoicesRepo {
         }
         return inv;
     }
+    _createInvoiceJournalEntry(inv, invId, num) {
+        // Build journal entry lines based on invoice type and status
+        const total = parseFloat(inv.total) || 0;
+        if (total === 0) return null;
+
+        const lines = [];
+        const cashAccount = this.db.get("SELECT id FROM accounts WHERE code = '111'");
+        const bankAccount = this.db.get("SELECT id FROM accounts WHERE code = '112'");
+        const customersAccount = this.db.get("SELECT id FROM accounts WHERE code = '113'");
+        const suppliersAccount = this.db.get("SELECT id FROM accounts WHERE code = '211'");
+        const revenueAccount = this.db.get("SELECT id FROM accounts WHERE code = '41'");
+        const costAccount = this.db.get("SELECT id FROM accounts WHERE code = '51'");
+
+        if (inv.type === 'sales') {
+            // Debit: cash/bank (paid) or customers (pending)
+            if (inv.status === 'paid') {
+                const debitAcct = (inv.payment_method === 'bank' && bankAccount) ? bankAccount : cashAccount;
+                if (debitAcct) lines.push({ account_id: debitAcct.id, debit: total, credit: 0, description: `فاتورة مبيعات ${num}` });
+            } else {
+                if (customersAccount) lines.push({ account_id: customersAccount.id, debit: total, credit: 0, description: `فاتورة مبيعات آجلة ${num}` });
+            }
+            // Credit: revenue
+            if (revenueAccount) lines.push({ account_id: revenueAccount.id, debit: 0, credit: total, description: `فاتورة مبيعات ${num}` });
+        } else if (inv.type === 'purchase') {
+            // Debit: cost of sales
+            if (costAccount) lines.push({ account_id: costAccount.id, debit: total, credit: 0, description: `فاتورة مشتريات ${num}` });
+            // Credit: cash/bank (paid) or suppliers (pending)
+            if (inv.status === 'paid') {
+                const creditAcct = (inv.payment_method === 'bank' && bankAccount) ? bankAccount : cashAccount;
+                if (creditAcct) lines.push({ account_id: creditAcct.id, debit: 0, credit: total, description: `فاتورة مشتريات ${num}` });
+            } else {
+                if (suppliersAccount) lines.push({ account_id: suppliersAccount.id, debit: 0, credit: total, description: `فاتورة مشتريات آجلة ${num}` });
+            }
+        }
+
+        if (lines.length < 2) return null;
+
+        // Create journal entry
+        const jeMaxNum = this.db.get("SELECT MAX(CAST(SUBSTR(entry_number, 4) AS INTEGER)) as maxNum FROM journal_entries");
+        const jeNextNum = (jeMaxNum?.maxNum || 0) + 1;
+        const jeNum = `JE-${String(jeNextNum).padStart(6, '0')}`;
+        const jeDesc = inv.type === 'sales' ? `قيد فاتورة مبيعات ${num}` : `قيد فاتورة مشتريات ${num}`;
+        const jeR = this.db.run("INSERT INTO journal_entries (entry_number, date, description, reference, created_by) VALUES (?, ?, ?, ?, ?)",
+            [jeNum, inv.date, jeDesc, num, inv.created_by || null]);
+        const jeId = jeR.lastInsertRowid;
+
+        for (const line of lines) {
+            this.db.run("INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?, ?, ?, ?, ?)",
+                [jeId, line.account_id, line.debit, line.credit, line.description]);
+            // Update account balance (debit increases, credit decreases for asset accounts)
+            const change = (line.debit || 0) - (line.credit || 0);
+            this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [change, line.account_id]);
+        }
+
+        return jeId;
+    }
+
+    _deleteJournalEntry(journalEntryId) {
+        if (!journalEntryId) return;
+        // Reverse account balances from journal entry lines
+        const lines = this.db.all("SELECT * FROM journal_entry_lines WHERE entry_id = ?", [journalEntryId]);
+        for (const line of lines) {
+            const change = (line.credit || 0) - (line.debit || 0); // reverse: subtract debits, add credits
+            this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [change, line.account_id]);
+        }
+        this.db.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [journalEntryId]);
+        this.db.run('DELETE FROM journal_entries WHERE id = ?', [journalEntryId]);
+    }
+
     create(inv) {
         try {
             const count = this.db.get('SELECT COUNT(*) as count FROM invoices')?.count || 0;
@@ -255,8 +377,6 @@ class InvoicesRepo {
                 [num, inv.type, n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.payment_account_id), n(inv.notes), n(inv.created_by)]
             );
             const invId = Number(r.lastInsertRowid);
-            console.log('[create] Invoice created with ID:', invId, 'type:', typeof invId);
-            console.log('[create] Items to insert:', inv.items?.length || 0);
 
             // Insert invoice items
             for (const item of inv.items || []) {
@@ -268,7 +388,6 @@ class InvoicesRepo {
                 const tax = parseFloat(item.tax) || 0;
                 const total = parseFloat(item.total) || (quantity * unitPrice);
 
-                console.log('[create] Inserting item with invoice_id:', invId, 'productId:', productId, 'qty:', quantity);
                 this.db.run(
                     "INSERT INTO invoice_items (invoice_id, product_id, description, quantity, unit_price, discount, tax, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     [invId, productId, description, quantity, unitPrice, discount, tax, total]
@@ -281,36 +400,17 @@ class InvoicesRepo {
                 }
             }
 
-            // Verify items were saved
-            const savedItems = this.db.all("SELECT * FROM invoice_items WHERE invoice_id = ?", [invId]);
-            console.log('[create] Verified saved items:', savedItems?.length || 0);
-
             // Update customer/supplier balance ONLY for pending invoices
-            // Paid invoices don't create a debt/receivable
             if (inv.status !== 'paid') {
                 if (inv.type === 'sales' && inv.customer_id) this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [inv.total, inv.customer_id]);
                 else if (inv.type === 'purchase' && inv.supplier_id) this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [inv.total, inv.supplier_id]);
             }
 
-            // Update account balances for paid invoices
-            // Update account balances for paid invoices
-            if (inv.status === 'paid') {
-                let accountToUpdate = null;
-                if (inv.payment_method === 'cash') {
-                    accountToUpdate = this.db.get("SELECT id FROM accounts WHERE code = '111'");
-                } else if (inv.payment_method === 'bank') {
-                    accountToUpdate = this.db.get("SELECT id FROM accounts WHERE code = '112'");
-                }
-
-                if (accountToUpdate) {
-                    if (inv.type === 'sales') {
-                        this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [inv.total, accountToUpdate.id]);
-                    } else if (inv.type === 'purchase') {
-                        this.db.run('UPDATE accounts SET balance = balance - ? WHERE id = ?', [inv.total, accountToUpdate.id]);
-                    }
-                }
+            // Auto-create journal entry
+            const jeId = this._createInvoiceJournalEntry(inv, invId, num);
+            if (jeId) {
+                this.db.run('UPDATE invoices SET journal_entry_id = ? WHERE id = ?', [jeId, invId]);
             }
-
 
             return { success: true, id: invId, invoice_number: num };
         } catch (err) {
@@ -329,37 +429,23 @@ class InvoicesRepo {
             // 1. Reverse old stock changes
             for (const oldItem of oldInvoice.items || []) {
                 if (oldItem.product_id) {
-                    // Reverse: sales = add back, purchase = subtract back
                     const stockReverse = oldInvoice.type === 'sales' ? oldItem.quantity : -oldItem.quantity;
                     this.db.run('UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?', [stockReverse, oldItem.product_id]);
                 }
             }
 
-            // 2. Reverse old account balance (if was paid)
-            if (oldInvoice.status === 'paid') {
-                let oldAccount = null;
-                if (oldInvoice.payment_method === 'cash') {
-                    oldAccount = this.db.get("SELECT id FROM accounts WHERE code = '111'");
-                } else if (oldInvoice.payment_method === 'bank') {
-                    oldAccount = this.db.get("SELECT id FROM accounts WHERE code = '112'");
-                }
-                if (oldAccount) {
-                    // Reverse: sales = subtract, purchase = add
-                    if (oldInvoice.type === 'sales') {
-                        this.db.run('UPDATE accounts SET balance = balance - ? WHERE id = ?', [oldInvoice.total, oldAccount.id]);
-                    } else {
-                        this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [oldInvoice.total, oldAccount.id]);
-                    }
-                }
-            }
-
-            // 3. Reverse old customer/supplier balance (if was pending)
+            // 2. Reverse old customer/supplier balance (if was pending)
             if (oldInvoice.status !== 'paid') {
                 if (oldInvoice.type === 'sales' && oldInvoice.customer_id) {
                     this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [oldInvoice.total, oldInvoice.customer_id]);
                 } else if (oldInvoice.type === 'purchase' && oldInvoice.supplier_id) {
                     this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [oldInvoice.total, oldInvoice.supplier_id]);
                 }
+            }
+
+            // 3. Delete old journal entry (reverses account balances automatically)
+            if (oldInvoice.journal_entry_id) {
+                this._deleteJournalEntry(oldInvoice.journal_entry_id);
             }
 
             // 4. Update invoice header
@@ -399,22 +485,9 @@ class InvoicesRepo {
                 }
             }
 
-            // 7. Apply new account balance (if paid)
-            if (inv.status === 'paid') {
-                let newAccount = null;
-                if (inv.payment_method === 'cash') {
-                    newAccount = this.db.get("SELECT id FROM accounts WHERE code = '111'");
-                } else if (inv.payment_method === 'bank') {
-                    newAccount = this.db.get("SELECT id FROM accounts WHERE code = '112'");
-                }
-                if (newAccount) {
-                    if (oldInvoice.type === 'sales') {
-                        this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [inv.total, newAccount.id]);
-                    } else if (oldInvoice.type === 'purchase') {
-                        this.db.run('UPDATE accounts SET balance = balance - ? WHERE id = ?', [inv.total, newAccount.id]);
-                    }
-                }
-            }
+            // 7. Create new journal entry
+            const jeId = this._createInvoiceJournalEntry({ ...inv, type: oldInvoice.type }, invId, oldInvoice.invoice_number);
+            this.db.run('UPDATE invoices SET journal_entry_id = ? WHERE id = ?', [jeId || null, invId]);
 
             return { success: true };
         } catch (e) {
@@ -430,7 +503,6 @@ class InvoicesRepo {
             // Reverse inventory changes
             for (const item of invoice.items || []) {
                 if (item.product_id) {
-                    // Reverse stock: sales added stock back (+), purchase removed stock (-)
                     const stockChange = invoice.type === 'sales' ? item.quantity : -item.quantity;
                     this.db.run('UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?', [stockChange, item.product_id]);
                 }
@@ -445,27 +517,9 @@ class InvoicesRepo {
                 }
             }
 
-            // Reverse account balance changes for paid invoices
-            if (invoice.status === 'paid') {
-                let accountToUpdate = null;
-
-                if (invoice.payment_method === 'cash') {
-                    // Get the cash account (الصندوق - code 111)
-                    accountToUpdate = this.db.get("SELECT id FROM accounts WHERE code = '111'");
-                } else if (invoice.payment_method === 'bank') {
-                    // Get the bank account (البنك - code 112)
-                    accountToUpdate = this.db.get("SELECT id FROM accounts WHERE code = '112'");
-                }
-
-                if (accountToUpdate) {
-                    if (invoice.type === 'sales') {
-                        // Reverse sales: decrease account balance
-                        this.db.run('UPDATE accounts SET balance = balance - ? WHERE id = ?', [invoice.total, accountToUpdate.id]);
-                    } else if (invoice.type === 'purchase') {
-                        // Reverse purchase: increase account balance
-                        this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [invoice.total, accountToUpdate.id]);
-                    }
-                }
+            // Delete linked journal entry (reverses account balances automatically)
+            if (invoice.journal_entry_id) {
+                this._deleteJournalEntry(invoice.journal_entry_id);
             }
 
             // Delete invoice items and invoice
@@ -507,6 +561,61 @@ class VouchersRepo {
     constructor(db) { this.db = db; }
     getAll(type) { return type ? this.db.all("SELECT v.*, a.name as account_name, c.name as customer_name, s.name as supplier_name FROM vouchers v LEFT JOIN accounts a ON v.account_id=a.id LEFT JOIN customers c ON v.customer_id=c.id LEFT JOIN suppliers s ON v.supplier_id=s.id WHERE v.type=? ORDER BY v.date DESC", [type]) : this.db.all("SELECT v.*, a.name as account_name, c.name as customer_name, s.name as supplier_name FROM vouchers v LEFT JOIN accounts a ON v.account_id=a.id LEFT JOIN customers c ON v.customer_id=c.id LEFT JOIN suppliers s ON v.supplier_id=s.id ORDER BY v.date DESC"); }
     getById(id) { return this.db.get("SELECT v.*, a.name as account_name, c.name as customer_name, s.name as supplier_name FROM vouchers v LEFT JOIN accounts a ON v.account_id=a.id LEFT JOIN customers c ON v.customer_id=c.id LEFT JOIN suppliers s ON v.supplier_id=s.id WHERE v.id=?", [id]); }
+
+    _createVoucherJournalEntry(v, voucherId, num) {
+        const amount = parseFloat(v.amount) || 0;
+        if (amount === 0) return null;
+
+        const lines = [];
+        const cashAccount = this.db.get("SELECT id FROM accounts WHERE code = '111'");
+        const bankAccount = this.db.get("SELECT id FROM accounts WHERE code = '112'");
+        const customersAccount = this.db.get("SELECT id FROM accounts WHERE code = '113'");
+        const suppliersAccount = this.db.get("SELECT id FROM accounts WHERE code = '211'");
+
+        const paymentMethod = v.payment_method || 'cash';
+        const cashBankAcct = (paymentMethod === 'bank' && bankAccount) ? bankAccount : cashAccount;
+
+        if (v.type === 'receipt') {
+            // Receipt: Debit cash/bank, Credit customers
+            if (cashBankAcct) lines.push({ account_id: cashBankAcct.id, debit: amount, credit: 0, description: `سند قبض ${num}` });
+            if (customersAccount) lines.push({ account_id: customersAccount.id, debit: 0, credit: amount, description: `سند قبض ${num}` });
+        } else if (v.type === 'payment') {
+            // Payment: Debit suppliers, Credit cash/bank
+            if (suppliersAccount) lines.push({ account_id: suppliersAccount.id, debit: amount, credit: 0, description: `سند صرف ${num}` });
+            if (cashBankAcct) lines.push({ account_id: cashBankAcct.id, debit: 0, credit: amount, description: `سند صرف ${num}` });
+        }
+
+        if (lines.length < 2) return null;
+
+        const jeCount = this.db.get('SELECT COUNT(*) as count FROM journal_entries')?.count || 0;
+        const jeNum = `JE-${String(jeCount + 1).padStart(6, '0')}`;
+        const jeDesc = v.type === 'receipt' ? `قيد سند قبض ${num}` : `قيد سند صرف ${num}`;
+        const jeR = this.db.run("INSERT INTO journal_entries (entry_number, date, description, reference, created_by) VALUES (?, ?, ?, ?, ?)",
+            [jeNum, v.date, jeDesc, num, v.created_by || null]);
+        const jeId = jeR.lastInsertRowid;
+
+        for (const line of lines) {
+            this.db.run("INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?, ?, ?, ?, ?)",
+                [jeId, line.account_id, line.debit, line.credit, line.description]);
+            // Update account balance
+            const change = (line.debit || 0) - (line.credit || 0);
+            this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [change, line.account_id]);
+        }
+
+        return jeId;
+    }
+
+    _deleteJournalEntry(journalEntryId) {
+        if (!journalEntryId) return;
+        const lines = this.db.all("SELECT * FROM journal_entry_lines WHERE entry_id = ?", [journalEntryId]);
+        for (const line of lines) {
+            const change = (line.credit || 0) - (line.debit || 0);
+            this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [change, line.account_id]);
+        }
+        this.db.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [journalEntryId]);
+        this.db.run('DELETE FROM journal_entries WHERE id = ?', [journalEntryId]);
+    }
+
     create(v) {
         const n = (val) => val === undefined ? null : val;
         try {
@@ -521,27 +630,15 @@ class VouchersRepo {
             if (v.type === 'receipt' && v.customer_id) this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [v.amount, v.customer_id]);
             else if (v.type === 'payment' && v.supplier_id) this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [v.amount, v.supplier_id]);
 
-            // Update cash/bank account balance
-            const paymentMethod = v.payment_method || 'cash';
-            let cashBankAccount = null;
-            if (paymentMethod === 'cash') {
-                cashBankAccount = this.db.get("SELECT id FROM accounts WHERE code = '111'");
-            } else if (paymentMethod === 'bank') {
-                cashBankAccount = this.db.get("SELECT id FROM accounts WHERE code = '112'");
-            }
-            if (cashBankAccount) {
-                if (v.type === 'receipt') {
-                    // Receipt: money comes IN → increase cash/bank
-                    this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [v.amount, cashBankAccount.id]);
-                } else {
-                    // Payment: money goes OUT → decrease cash/bank
-                    this.db.run('UPDATE accounts SET balance = balance - ? WHERE id = ?', [v.amount, cashBankAccount.id]);
-                }
-            }
-
             // Update linked invoice status to paid
             if (v.invoice_id) {
                 this.db.run("UPDATE invoices SET status = 'paid', paid = paid + ? WHERE id = ?", [v.amount, v.invoice_id]);
+            }
+
+            // Auto-create journal entry
+            const jeId = this._createVoucherJournalEntry(v, r.lastInsertRowid, num);
+            if (jeId) {
+                this.db.run('UPDATE vouchers SET journal_entry_id = ? WHERE id = ?', [jeId, r.lastInsertRowid]);
             }
 
             return { success: true, id: r.lastInsertRowid, voucher_number: num };
@@ -566,22 +663,9 @@ class VouchersRepo {
                     this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [voucher.amount, voucher.supplier_id]);
                 }
 
-                // Reverse cash/bank account balance
-                const paymentMethod = voucher.payment_method || 'cash';
-                let cashBankAccount = null;
-                if (paymentMethod === 'cash') {
-                    cashBankAccount = this.db.get("SELECT id FROM accounts WHERE code = '111'");
-                } else if (paymentMethod === 'bank') {
-                    cashBankAccount = this.db.get("SELECT id FROM accounts WHERE code = '112'");
-                }
-                if (cashBankAccount) {
-                    if (voucher.type === 'receipt') {
-                        // Reverse receipt: decrease cash/bank
-                        this.db.run('UPDATE accounts SET balance = balance - ? WHERE id = ?', [voucher.amount, cashBankAccount.id]);
-                    } else {
-                        // Reverse payment: increase cash/bank
-                        this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [voucher.amount, cashBankAccount.id]);
-                    }
+                // Delete linked journal entry (reverses account balances automatically)
+                if (voucher.journal_entry_id) {
+                    this._deleteJournalEntry(voucher.journal_entry_id);
                 }
 
                 // Revert invoice status if linked
@@ -602,9 +686,9 @@ class JournalRepo {
     create(e) {
         const n = (val) => val === undefined ? null : val;
         try {
-            const countResult = this.db.get('SELECT COUNT(*) as count FROM journal_entries');
-            const count = countResult ? countResult.count : 0;
-            const num = e.entry_number || `JE-${String(count + 1).padStart(6, '0')}`;
+            const maxNum = this.db.get("SELECT MAX(CAST(SUBSTR(entry_number, 4) AS INTEGER)) as maxNum FROM journal_entries");
+            const nextNum = (maxNum?.maxNum || 0) + 1;
+            const num = e.entry_number || `JE-${String(nextNum).padStart(6, '0')}`;
             const r = this.db.run("INSERT INTO journal_entries (entry_number, date, description, reference, created_by) VALUES (?, ?, ?, ?, ?)",
                 [num, e.date, n(e.description), n(e.reference), n(e.created_by)]);
             const entryId = r.lastInsertRowid;
@@ -617,7 +701,19 @@ class JournalRepo {
             return { success: true, id: entryId, entry_number: num };
         } catch (err) { return { success: false, error: err.message }; }
     }
-    delete(id) { try { this.db.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [id]); this.db.run('DELETE FROM journal_entries WHERE id = ?', [id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+    delete(id) {
+        try {
+            // Reverse account balances before deleting
+            const lines = this.db.all("SELECT * FROM journal_entry_lines WHERE entry_id = ?", [id]);
+            for (const line of lines) {
+                const change = (line.credit || 0) - (line.debit || 0);
+                this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [change, line.account_id]);
+            }
+            this.db.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [id]);
+            this.db.run('DELETE FROM journal_entries WHERE id = ?', [id]);
+            return { success: true };
+        } catch (e) { return { success: false, error: e.message }; }
+    }
 }
 
 
@@ -667,8 +763,68 @@ class ReportsRepo {
 class SettingsRepo {
     constructor(db) { this.db = db; }
     get(key) { const s = this.db.get('SELECT value FROM settings WHERE key = ?', [key]); return s ? s.value : null; }
-    getAll() { const settings = this.db.all('SELECT key, value, category FROM settings'); const result = {}; for (const s of settings) { if (!result[s.category]) result[s.category] = {}; result[s.category][s.key] = s.value; } return result; }
-    set(key, value) { try { this.db.run('UPDATE settings SET value = ? WHERE key = ?', [value, key]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+    getAll() { 
+        const settings = this.db.all('SELECT key, value, category FROM settings'); 
+        console.log('[SettingsRepo.getAll] Raw settings from DB:', settings);
+        const result = {}; 
+        for (const s of settings) { 
+            if (!result[s.category]) result[s.category] = {}; 
+            result[s.category][s.key] = s.value; 
+        } 
+        console.log('[SettingsRepo.getAll] Formatted result:', result);
+        return result; 
+    }
+    
+    set(key, value) { 
+        try { 
+            // Determine category based on key prefix
+            let category = 'general';
+            if (key.startsWith('company_')) category = 'company';
+            else if (key.startsWith('invoice_') || key.startsWith('show_') || key.startsWith('paper_') || key.startsWith('thank_')) category = 'invoice';
+            else if (key === 'tax_rate') category = 'tax';
+            
+            // Check if key exists
+            const existing = this.db.get('SELECT id FROM settings WHERE key = ?', [key]);
+            if (existing) {
+                // Update if exists
+                this.db.run('UPDATE settings SET value = ? WHERE key = ?', [value, key]);
+            } else {
+                // Insert if doesn't exist
+                this.db.run('INSERT INTO settings (key, value, category) VALUES (?, ?, ?)', [key, value, category]);
+            }
+            return { success: true }; 
+        } catch (e) { 
+            console.error('Settings save error:', e);
+            return { success: false, error: e.message }; 
+        } 
+    }
+}
+
+class PermissionsRepo {
+    constructor(db) { this.db = db; }
+    getByRole(role) {
+        const perms = this.db.all('SELECT * FROM permissions WHERE role = ?', [role]);
+        const result = {};
+        for (const p of perms) {
+            result[p.module] = { can_view: !!p.can_view, can_create: !!p.can_create, can_edit: !!p.can_edit, can_delete: !!p.can_delete };
+        }
+        return result;
+    }
+    savePermissions(role, permissions) {
+        try {
+            for (const [module, actions] of Object.entries(permissions)) {
+                const existing = this.db.get('SELECT id FROM permissions WHERE role = ? AND module = ?', [role, module]);
+                if (existing) {
+                    this.db.run('UPDATE permissions SET can_view=?, can_create=?, can_edit=?, can_delete=? WHERE role=? AND module=?',
+                        [actions.can_view ? 1 : 0, actions.can_create ? 1 : 0, actions.can_edit ? 1 : 0, actions.can_delete ? 1 : 0, role, module]);
+                } else {
+                    this.db.run('INSERT INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?)',
+                        [role, module, actions.can_view ? 1 : 0, actions.can_create ? 1 : 0, actions.can_edit ? 1 : 0, actions.can_delete ? 1 : 0]);
+                }
+            }
+            return { success: true };
+        } catch (e) { return { success: false, error: e.message }; }
+    }
 }
 
 module.exports = new AppDatabase();

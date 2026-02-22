@@ -3,7 +3,7 @@ import { useAuth } from '../App';
 import {
     Home, Users, Truck, ShoppingCart, ShoppingBag, FileText,
     CreditCard, BookOpen, BarChart3, Settings, LogOut,
-    Moon, Sun, Building2, Package
+    Moon, Sun, Building2, Package, Wallet
 } from 'lucide-react';
 
 function Layout({ children, currentPage, setCurrentPage }) {
@@ -11,23 +11,55 @@ function Layout({ children, currentPage, setCurrentPage }) {
     const [searchQuery, setSearchQuery] = useState('');
 
     const menuItems = [
-        { id: 'dashboard', labelKey: 'menu_dashboard', icon: Home },
+        { id: 'dashboard', labelKey: 'menu_dashboard', icon: Home, permModule: 'dashboard' },
         { type: 'section', labelKey: 'menu_section_clients' },
-        { id: 'customers', labelKey: 'menu_customers', icon: Users },
-        { id: 'suppliers', labelKey: 'menu_suppliers', icon: Truck },
-        { id: 'products', labelKey: 'menu_products', icon: Package },
+        { id: 'customers', labelKey: 'menu_customers', icon: Users, permModule: 'customers' },
+        { id: 'suppliers', labelKey: 'menu_suppliers', icon: Truck, permModule: 'suppliers' },
+        { id: 'products', labelKey: 'menu_products', icon: Package, permModule: 'products' },
         { type: 'section', labelKey: 'menu_section_accounts' },
-        { id: 'accounts', labelKey: 'menu_chartOfAccounts', icon: Building2 },
+        { id: 'accounts', labelKey: 'menu_chartOfAccounts', icon: Building2, permModule: 'chart_of_accounts' },
+        { id: 'cashbank', labelKey: 'menu_cashBank', icon: Wallet, permModule: 'cash_bank' },
         { type: 'section', labelKey: 'menu_section_invoices' },
-        { id: 'sales', labelKey: 'menu_sales', icon: ShoppingCart },
-        { id: 'purchases', labelKey: 'menu_purchases', icon: ShoppingBag },
+        { id: 'sales', labelKey: 'menu_sales', icon: ShoppingCart, permModule: 'sales_invoices' },
+        { id: 'purchases', labelKey: 'menu_purchases', icon: ShoppingBag, permModule: 'purchase_invoices' },
         { type: 'section', labelKey: 'menu_section_financial' },
-        { id: 'vouchers', labelKey: 'menu_vouchers', icon: CreditCard },
-        { id: 'journal', labelKey: 'menu_journal', icon: BookOpen },
+        { id: 'vouchers', labelKey: 'menu_vouchers', icon: CreditCard, permModule: 'receipt_vouchers' },
+        { id: 'journal', labelKey: 'menu_journal', icon: BookOpen, permModule: 'journal_entries' },
         { type: 'section', labelKey: 'menu_section_other' },
-        { id: 'reports', labelKey: 'menu_reports', icon: BarChart3 },
-        { id: 'settings', labelKey: 'menu_settings', icon: Settings },
+        { id: 'reports', labelKey: 'menu_reports', icon: BarChart3, permModule: 'reports' },
+        { id: 'settings', labelKey: 'menu_settings', icon: Settings, permModule: 'settings' },
     ];
+
+    // Filter menu items based on user permissions
+    const userPerms = user?.permissions || {};
+    const isAdmin = user?.role === 'admin';
+
+    const filteredMenuItems = (() => {
+        const visibleIds = new Set();
+        // First pass: collect visible item IDs
+        for (const item of menuItems) {
+            if (item.type === 'section') continue;
+            if (isAdmin || userPerms[item.permModule]?.can_view === true) {
+                visibleIds.add(item.id);
+            }
+        }
+        // Second pass: include sections only if next items are visible
+        const result = [];
+        for (let i = 0; i < menuItems.length; i++) {
+            const item = menuItems[i];
+            if (item.type === 'section') {
+                // Check if any items after this section (until next section) are visible
+                let hasVisible = false;
+                for (let j = i + 1; j < menuItems.length && menuItems[j].type !== 'section'; j++) {
+                    if (visibleIds.has(menuItems[j].id)) { hasVisible = true; break; }
+                }
+                if (hasVisible) result.push(item);
+            } else if (visibleIds.has(item.id)) {
+                result.push(item);
+            }
+        }
+        return result;
+    })();
 
     const getPageTitle = () => {
         const item = menuItems.find(m => m.id === currentPage);
@@ -50,7 +82,7 @@ function Layout({ children, currentPage, setCurrentPage }) {
                 </div>
 
                 <nav className="sidebar-nav">
-                    {menuItems.map((item, index) => {
+                    {filteredMenuItems.map((item, index) => {
                         if (item.type === 'section') {
                             return (
                                 <div key={index} className="nav-section">

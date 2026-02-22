@@ -96,6 +96,12 @@ contextBridge.exposeInMainWorld('api', {
         restore: (filePath) => ipcRenderer.invoke('settings:restore', filePath)
     },
 
+    // Permissions
+    permissions: {
+        getByRole: (role) => ipcRenderer.invoke('permissions:getByRole', role),
+        savePermissions: (role, permissions) => ipcRenderer.invoke('permissions:savePermissions', { role, permissions })
+    },
+
     // Dialog
     dialog: {
         openFile: (options) => ipcRenderer.invoke('dialog:openFile', options),
@@ -109,6 +115,7 @@ contextBridge.exposeInMainWorld('api', {
 
     // File utils
     file: {
-        readAsBase64: (filePath) => ipcRenderer.invoke('file:readAsBase64', filePath)
+        readAsBase64: (filePath) => ipcRenderer.invoke('file:readAsBase64', filePath),
+        copyLogo: (srcPath) => ipcRenderer.invoke('file:copyLogo', srcPath)
     }
 });

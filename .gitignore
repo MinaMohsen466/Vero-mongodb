@@ -15,6 +15,7 @@ dist/
 dist-ssr/
 build/
 release/
+dist-electron/
 
 # SQLite database files
 *.db

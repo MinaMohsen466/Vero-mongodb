@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Lock, User, Eye, EyeOff, LogIn } from 'lucide-react';
 
 function Login({ onLogin }) {
     const [username, setUsername] = useState('');
@@ -31,38 +32,51 @@ function Login({ onLogin }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%)',
-            padding: '20px'
+            background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #1e40af 100%)',
+            padding: '20px',
+            position: 'relative',
+            overflow: 'hidden'
         }}>
+            {/* Background Decoration */}
             <div style={{
-                background: 'white',
-                borderRadius: '12px',
-                padding: '50px 40px',
+                position: 'absolute', width: '400px', height: '400px', borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%)',
+                top: '-100px', right: '-100px', pointerEvents: 'none'
+            }} />
+            <div style={{
+                position: 'absolute', width: '300px', height: '300px', borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(99,102,241,0.1) 0%, transparent 70%)',
+                bottom: '-80px', left: '-80px', pointerEvents: 'none'
+            }} />
+
+            <div style={{
+                background: 'rgba(255, 255, 255, 0.95)',
+                backdropFilter: 'blur(20px)',
+                borderRadius: '20px',
+                padding: '48px 40px',
                 width: '100%',
-                maxWidth: '400px',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+                maxWidth: '420px',
+                boxShadow: '0 25px 60px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1)',
+                position: 'relative',
+                zIndex: 1
             }}>
                 {/* Header */}
-                <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+                <div style={{ textAlign: 'center', marginBottom: '36px' }}>
                     <div style={{
-                        width: '80px',
-                        height: '80px',
-                        background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%)',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        width: '72px', height: '72px',
+                        background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
+                        borderRadius: '18px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                         margin: '0 auto 20px',
-                        color: 'white',
-                        fontSize: '32px',
-                        fontWeight: 'bold'
+                        boxShadow: '0 8px 24px rgba(30,64,175,0.35)',
+                        transform: 'rotate(-5deg)'
                     }}>
-                        م
+                        <Lock size={30} color="white" />
                     </div>
-                    <h1 style={{ fontSize: '28px', color: '#1e3a5f', margin: '0 0 8px 0', fontWeight: 'bold' }}>
+                    <h1 style={{ fontSize: '26px', color: '#0f172a', margin: '0 0 6px 0', fontWeight: '800', letterSpacing: '-0.5px' }}>
                         نظام المحاسبة
                     </h1>
-                    <p style={{ fontSize: '14px', color: '#888', margin: 0 }}>
+                    <p style={{ fontSize: '14px', color: '#64748b', margin: 0, fontWeight: 400 }}>
                         قم بتسجيل الدخول للمتابعة
                     </p>
                 </div>
@@ -71,48 +85,66 @@ function Login({ onLogin }) {
                 <form onSubmit={handleSubmit}>
                     {error && (
                         <div style={{
-                            background: '#ffe5e5',
-                            color: '#c00',
-                            padding: '12px 15px',
-                            borderRadius: '8px',
+                            background: 'linear-gradient(135deg, #fef2f2, #fee2e2)',
+                            color: '#dc2626',
+                            padding: '12px 16px',
+                            borderRadius: '12px',
                             marginBottom: '20px',
-                            fontSize: '14px',
-                            textAlign: 'center'
+                            fontSize: '13px',
+                            textAlign: 'center',
+                            border: '1px solid #fecaca',
+                            fontWeight: 500
                         }}>
                             {error}
                         </div>
                     )}
 
-                    <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#333', fontWeight: '500' }}>
+                    <div style={{ marginBottom: '18px' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#374151', fontWeight: '600' }}>
                             اسم المستخدم
                         </label>
-                        <input
-                            type="text"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            placeholder="أدخل اسم المستخدم"
-                            autoFocus
-                            style={{
-                                width: '100%',
-                                padding: '14px 16px',
-                                border: '2px solid #e0e0e0',
-                                borderRadius: '8px',
-                                fontSize: '16px',
-                                outline: 'none',
-                                transition: 'border-color 0.2s',
-                                boxSizing: 'border-box'
-                            }}
-                            onFocus={(e) => e.target.style.borderColor = '#1e3a5f'}
-                            onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
-                        />
+                        <div style={{ position: 'relative' }}>
+                            <div style={{
+                                position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)',
+                                color: '#94a3b8', pointerEvents: 'none'
+                            }}>
+                                <User size={18} />
+                            </div>
+                            <input
+                                type="text"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                placeholder="أدخل اسم المستخدم"
+                                autoFocus
+                                style={{
+                                    width: '100%',
+                                    padding: '13px 44px 13px 16px',
+                                    border: '2px solid #e2e8f0',
+                                    borderRadius: '12px',
+                                    fontSize: '15px',
+                                    outline: 'none',
+                                    transition: 'all 0.2s',
+                                    boxSizing: 'border-box',
+                                    background: '#f8fafc',
+                                    color: '#0f172a'
+                                }}
+                                onFocus={(e) => { e.target.style.borderColor = '#3b82f6'; e.target.style.background = '#fff'; e.target.style.boxShadow = '0 0 0 4px rgba(59,130,246,0.1)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc'; e.target.style.boxShadow = 'none'; }}
+                            />
+                        </div>
                     </div>
 
-                    <div style={{ marginBottom: '25px' }}>
-                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#333', fontWeight: '500' }}>
+                    <div style={{ marginBottom: '24px' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#374151', fontWeight: '600' }}>
                             كلمة المرور
                         </label>
                         <div style={{ position: 'relative' }}>
+                            <div style={{
+                                position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)',
+                                color: '#94a3b8', pointerEvents: 'none'
+                            }}>
+                                <Lock size={18} />
+                            </div>
                             <input
                                 type={showPassword ? 'text' : 'password'}
                                 value={password}
@@ -120,17 +152,18 @@ function Login({ onLogin }) {
                                 placeholder="أدخل كلمة المرور"
                                 style={{
                                     width: '100%',
-                                    padding: '14px 16px',
-                                    paddingLeft: '45px',
-                                    border: '2px solid #e0e0e0',
-                                    borderRadius: '8px',
-                                    fontSize: '16px',
+                                    padding: '13px 44px 13px 44px',
+                                    border: '2px solid #e2e8f0',
+                                    borderRadius: '12px',
+                                    fontSize: '15px',
                                     outline: 'none',
-                                    transition: 'border-color 0.2s',
-                                    boxSizing: 'border-box'
+                                    transition: 'all 0.2s',
+                                    boxSizing: 'border-box',
+                                    background: '#f8fafc',
+                                    color: '#0f172a'
                                 }}
-                                onFocus={(e) => e.target.style.borderColor = '#1e3a5f'}
-                                onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
+                                onFocus={(e) => { e.target.style.borderColor = '#3b82f6'; e.target.style.background = '#fff'; e.target.style.boxShadow = '0 0 0 4px rgba(59,130,246,0.1)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc'; e.target.style.boxShadow = 'none'; }}
                             />
                             <button
                                 type="button"
@@ -143,12 +176,16 @@ function Login({ onLogin }) {
                                     background: 'none',
                                     border: 'none',
                                     cursor: 'pointer',
-                                    color: '#888',
-                                    fontSize: '14px',
-                                    padding: '5px'
+                                    color: '#94a3b8',
+                                    padding: '4px',
+                                    display: 'flex',
+                                    borderRadius: '6px',
+                                    transition: 'color 0.2s'
                                 }}
+                                onMouseEnter={(e) => e.currentTarget.style.color = '#3b82f6'}
+                                onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
                             >
-                                {showPassword ? 'إخفاء' : 'إظهار'}
+                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                             </button>
                         </div>
                     </div>
@@ -158,35 +195,58 @@ function Login({ onLogin }) {
                         disabled={loading}
                         style={{
                             width: '100%',
-                            padding: '16px',
-                            background: loading ? '#ccc' : 'linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%)',
+                            padding: '14px',
+                            background: loading ? '#94a3b8' : 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
                             color: 'white',
                             border: 'none',
-                            borderRadius: '8px',
-                            fontSize: '16px',
-                            fontWeight: 'bold',
+                            borderRadius: '12px',
+                            fontSize: '15px',
+                            fontWeight: '700',
                             cursor: loading ? 'not-allowed' : 'pointer',
-                            transition: 'transform 0.2s, box-shadow 0.2s'
+                            transition: 'all 0.3s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            boxShadow: loading ? 'none' : '0 4px 16px rgba(30,64,175,0.3)',
+                            letterSpacing: '0.3px'
                         }}
-                        onMouseEnter={(e) => { if (!loading) { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 5px 20px rgba(30,58,95,0.4)'; } }}
-                        onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = 'none'; }}
+                        onMouseEnter={(e) => { if (!loading) { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 8px 24px rgba(30,64,175,0.4)'; } }}
+                        onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = loading ? 'none' : '0 4px 16px rgba(30,64,175,0.3)'; }}
                     >
-                        {loading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
+                        {loading ? (
+                            <>
+                                <div style={{
+                                    width: '18px', height: '18px', border: '2px solid rgba(255,255,255,0.3)',
+                                    borderTop: '2px solid white', borderRadius: '50%',
+                                    animation: 'spin 0.8s linear infinite'
+                                }} />
+                                جاري تسجيل الدخول...
+                            </>
+                        ) : (
+                            <>
+                                <LogIn size={18} />
+                                تسجيل الدخول
+                            </>
+                        )}
                     </button>
                 </form>
 
                 {/* Footer */}
                 <div style={{
-                    marginTop: '30px',
+                    marginTop: '28px',
                     paddingTop: '20px',
-                    borderTop: '1px solid #eee',
+                    borderTop: '1px solid #e2e8f0',
                     textAlign: 'center'
                 }}>
-                    <p style={{ fontSize: '13px', color: '#999', margin: 0 }}>
-                        المستخدم الافتراضي: <strong style={{ color: '#1e3a5f' }}>admin</strong> / <strong style={{ color: '#1e3a5f' }}>admin123</strong>
+                    <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>
+                        المستخدم الافتراضي: <span style={{ color: '#1e40af', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px' }}>admin</span> / <span style={{ color: '#1e40af', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px' }}>admin123</span>
                     </p>
                 </div>
             </div>
+
+            {/* Spin animation */}
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
     );
 }

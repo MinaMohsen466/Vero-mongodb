@@ -679,6 +679,12 @@ tbody tr:hover {
   cursor: not-allowed;
 }
 
+/* Ensure inputs are always interactable */
+input, textarea, select {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .form-textarea {
   min-height: 100px;
   resize: vertical;

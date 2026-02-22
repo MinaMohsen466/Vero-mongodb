@@ -131,6 +131,10 @@ ipcMain.handle('settings:set', async (event, { key, value }) => db.settings.set(
 ipcMain.handle('settings:backup', async () => db.backup());
 ipcMain.handle('settings:restore', async (event, filePath) => db.restore(filePath));
 
+// --- Permissions ---
+ipcMain.handle('permissions:getByRole', async (event, role) => db.permissions.getByRole(role));
+ipcMain.handle('permissions:savePermissions', async (event, { role, permissions }) => db.permissions.savePermissions(role, permissions));
+
 // --- File Dialog ---
 ipcMain.handle('dialog:openFile', async (event, options) => {
     const result = await dialog.showOpenDialog(mainWindow, options);
@@ -163,14 +167,45 @@ ipcMain.handle('print:invoice', async (event, invoiceHtml) => {
 // --- File Read (for logo as base64) ---
 ipcMain.handle('file:readAsBase64', async (event, filePath) => {
     try {
-        if (!filePath || !fs.existsSync(filePath)) return null;
+        console.log('[file:readAsBase64] Reading file:', filePath);
+        if (!filePath) {
+            console.log('[file:readAsBase64] No filePath provided');
+            return null;
+        }
+        if (!fs.existsSync(filePath)) {
+            console.error('[file:readAsBase64] File does not exist:', filePath);
+            return null;
+        }
         const data = fs.readFileSync(filePath);
         const ext = path.extname(filePath).toLowerCase().slice(1);
         const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', bmp: 'image/bmp', svg: 'image/svg+xml' };
         const mime = mimeMap[ext] || 'image/png';
-        return `data:${mime};base64,${data.toString('base64')}`;
+        const base64 = `data:${mime};base64,${data.toString('base64')}`;
+        console.log('[file:readAsBase64] Successfully converted to base64, length:', base64.length);
+        return base64;
     } catch (e) {
-        console.error('Error reading file as base64:', e);
+        console.error('[file:readAsBase64] Error reading file as base64:', e);
+        return null;
+    }
+});
+
+// --- Copy logo to app data ---
+ipcMain.handle('file:copyLogo', async (event, srcPath) => {
+    try {
+        console.log('[file:copyLogo] Copying logo from:', srcPath);
+        if (!srcPath || !fs.existsSync(srcPath)) {
+            console.error('[file:copyLogo] Source file does not exist:', srcPath);
+            return null;
+        }
+        const ext = path.extname(srcPath);
+        const destDir = path.join(app.getPath('userData'));
+        const destPath = path.join(destDir, `company_logo${ext}`);
+        console.log('[file:copyLogo] Copying to:', destPath);
+        fs.copyFileSync(srcPath, destPath);
+        console.log('[file:copyLogo] Copy successful');
+        return destPath;
+    } catch (e) {
+        console.error('[file:copyLogo] Error copying logo:', e);
         return null;
     }
 });
