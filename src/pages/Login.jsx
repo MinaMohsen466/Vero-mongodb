@@ -240,7 +240,7 @@ function Login({ onLogin }) {
                     textAlign: 'center'
                 }}>
                     <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>
-                        المستخدم الافتراضي: <span style={{ color: '#1e40af', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px' }}>admin</span> / <span style={{ color: '#1e40af', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px' }}>admin123</span>
+                        المستخدم الافتراضي: <span style={{ color: '#1e40af', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px' }}>admin</span> / <span style={{ color: '#1e40af', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px' }}>password123</span>
                     </p>
                 </div>
             </div>

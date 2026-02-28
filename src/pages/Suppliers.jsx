@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, Truck, FileText } from 'lucide-react';
 import Modal from '../components/Modal';
+import { useAuth } from '../App';
 
 function Suppliers() {
+    const { user } = useAuth();
     const [suppliers, setSuppliers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -93,9 +95,11 @@ function Suppliers() {
                         <Search size={18} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     </div>
                 </div>
-                <button className="btn btn-primary" onClick={() => openModal()}>
-                    <Plus size={18} /> إضافة مورد
-                </button>
+                {user?.permissions?.suppliers?.can_create && (
+                    <button className="btn btn-primary" onClick={() => openModal()}>
+                        <Plus size={18} /> إضافة مورد
+                    </button>
+                )}
             </div>
 
             <div className="card">
@@ -123,8 +127,12 @@ function Suppliers() {
                                             <td><span className={`badge ${supplier.is_active ? 'badge-success' : 'badge-danger'}`}>{supplier.is_active ? 'نشط' : 'غير نشط'}</span></td>
                                             <td onClick={(e) => e.stopPropagation()}>
                                                 <div className="table-actions">
-                                                    <button className="btn btn-ghost btn-sm" onClick={() => openModal(supplier)} title="تعديل"><Edit2 size={16} /></button>
-                                                    <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(supplier.id)} title="حذف"><Trash2 size={16} /></button>
+                                                    {user?.permissions?.suppliers?.can_edit && (
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => openModal(supplier)} title="تعديل"><Edit2 size={16} /></button>
+                                                    )}
+                                                    {user?.permissions?.suppliers?.can_delete && (
+                                                        <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(supplier.id)} title="حذف"><Trash2 size={16} /></button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>

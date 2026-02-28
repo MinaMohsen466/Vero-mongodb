@@ -24,7 +24,10 @@ function Settings() {
         tax_rate: '0',
         decimal_places: '3',
         language: 'ar',
-        allow_negative_stock: 'no'
+        allow_negative_stock: 'no',
+        show_financial_summary: 'yes',
+        show_low_stock_products: 'yes',
+        show_customer_receivables: 'yes'
     });
 
     // Local state for company settings (NOT auto-saved)
@@ -78,7 +81,10 @@ function Settings() {
                     tax_rate: settingsData.tax?.tax_rate || '0',
                     decimal_places: settingsData.general.decimal_places || '3',
                     language: settingsData.general.language || 'ar',
-                    allow_negative_stock: settingsData.general.allow_negative_stock || 'no'
+                    allow_negative_stock: settingsData.general.allow_negative_stock || 'no',
+                    show_financial_summary: settingsData.general.show_financial_summary || 'yes',
+                    show_low_stock_products: settingsData.general.show_low_stock_products || 'yes',
+                    show_customer_receivables: settingsData.general.show_customer_receivables || 'yes'
                 });
             }
             if (settingsData?.invoice) {
@@ -104,10 +110,10 @@ function Settings() {
         setLoading(false);
     };
 
-    const saveSetting = async (key, value) => {
+    const saveSetting = async (category, key, value) => {
         try {
-            console.log('[saveSetting] Saving:', key, '=', value);
-            const result = await window.api.settings.set(key, value);
+            console.log('[saveSetting] Saving:', category, key, '=', value);
+            const result = await window.api.settings.set(category, key, value);
             console.log('[saveSetting] Result:', result);
             return result;
         } catch (e) {
@@ -125,12 +131,15 @@ function Settings() {
         setSaving(true);
         setSaveStatus(t('savingProgress'));
         try {
-            await saveSetting('currency', generalForm.currency);
-            await saveSetting('currency_symbol', generalForm.currency_symbol);
-            await saveSetting('tax_rate', generalForm.tax_rate);
-            await saveSetting('decimal_places', generalForm.decimal_places);
-            await saveSetting('language', generalForm.language);
-            await saveSetting('allow_negative_stock', generalForm.allow_negative_stock);
+            await saveSetting('general', 'currency', generalForm.currency);
+            await saveSetting('general', 'currency_symbol', generalForm.currency_symbol);
+            await saveSetting('general', 'tax_rate', generalForm.tax_rate);
+            await saveSetting('general', 'decimal_places', generalForm.decimal_places);
+            await saveSetting('general', 'language', generalForm.language);
+            await saveSetting('general', 'allow_negative_stock', generalForm.allow_negative_stock);
+            await saveSetting('general', 'show_financial_summary', generalForm.show_financial_summary);
+            await saveSetting('general', 'show_low_stock_products', generalForm.show_low_stock_products);
+            await saveSetting('general', 'show_customer_receivables', generalForm.show_customer_receivables);
 
             // Apply language change immediately
             if (generalForm.language !== language) {
@@ -138,6 +147,7 @@ function Settings() {
             }
 
             showSaveStatus(t('savedSuccess'));
+            window.dispatchEvent(new Event('settingsUpdated'));
         } catch (e) {
             console.error('Error saving general settings:', e);
             showSaveStatus(t('saveFailed'), false);
@@ -152,14 +162,14 @@ function Settings() {
             console.log('[saveCompanySettings] Company logo value:', companyForm.company_logo);
             console.log('[saveCompanySettings] Logo value type:', typeof companyForm.company_logo);
             
-            await saveSetting('company_name', companyForm.company_name);
-            await saveSetting('company_address', companyForm.company_address);
-            await saveSetting('company_phone', companyForm.company_phone);
-            await saveSetting('company_email', companyForm.company_email);
-            await saveSetting('company_tax_number', companyForm.company_tax_number);
+            await saveSetting('company', 'company_name', companyForm.company_name);
+            await saveSetting('company', 'company_address', companyForm.company_address);
+            await saveSetting('company', 'company_phone', companyForm.company_phone);
+            await saveSetting('company', 'company_email', companyForm.company_email);
+            await saveSetting('company', 'company_tax_number', companyForm.company_tax_number);
             if (companyForm.company_logo && typeof companyForm.company_logo === 'string' && companyForm.company_logo.length > 0) {
                 console.log('[saveCompanySettings] Saving logo path:', companyForm.company_logo);
-                await saveSetting('company_logo', companyForm.company_logo);
+                await saveSetting('company', 'company_logo', companyForm.company_logo);
             }
 
             // Reload settings to reflect changes immediately
@@ -176,15 +186,16 @@ function Settings() {
         setSaving(true);
         setSaveStatus(t('savingProgress'));
         try {
-            await saveSetting('invoice_title_sales', invoiceForm.invoice_title_sales);
-            await saveSetting('invoice_title_purchase', invoiceForm.invoice_title_purchase);
-            await saveSetting('invoice_footer', invoiceForm.invoice_footer);
-            await saveSetting('invoice_terms', invoiceForm.invoice_terms);
-            await saveSetting('show_logo', invoiceForm.show_logo);
-            await saveSetting('show_company_info', invoiceForm.show_company_info);
-            await saveSetting('paper_size', invoiceForm.paper_size);
-            await saveSetting('paper_orientation', invoiceForm.paper_orientation);
+            await saveSetting('invoice', 'invoice_title_sales', invoiceForm.invoice_title_sales);
+            await saveSetting('invoice', 'invoice_title_purchase', invoiceForm.invoice_title_purchase);
+            await saveSetting('invoice', 'invoice_footer', invoiceForm.invoice_footer);
+            await saveSetting('invoice', 'invoice_terms', invoiceForm.invoice_terms);
+            await saveSetting('invoice', 'show_logo', invoiceForm.show_logo);
+            await saveSetting('invoice', 'show_company_info', invoiceForm.show_company_info);
+            await saveSetting('invoice', 'paper_size', invoiceForm.paper_size);
+            await saveSetting('invoice', 'paper_orientation', invoiceForm.paper_orientation);
             showSaveStatus(t('savedSuccess'));
+            window.dispatchEvent(new Event('settingsUpdated'));
         } catch (e) {
             console.error('Error saving invoice settings:', e);
             showSaveStatus(t('saveFailed'), false);
@@ -598,6 +609,34 @@ function Settings() {
                                         <option value="no">{t('set_allowNegativeNo')}</option>
                                         <option value="yes">{t('set_allowNegativeYes')}</option>
                                     </select>
+                                </div>
+                            </div>
+                            <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
+                                <h4 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-primary)' }}>خيارات الصفحة الرئيسية</h4>
+                                <div className="form-row">
+                                    <div className="form-group">
+                                        <label className="form-label">إظهار الملخص المالي</label>
+                                        <select className="form-select" value={generalForm.show_financial_summary || 'yes'} onChange={e => setGeneralForm({ ...generalForm, show_financial_summary: e.target.value })}>
+                                            <option value="yes">نعم - إظهار</option>
+                                            <option value="no">لا - إخفاء</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">إظهار المنتجات منخفضة المخزون</label>
+                                        <select className="form-select" value={generalForm.show_low_stock_products || 'yes'} onChange={e => setGeneralForm({ ...generalForm, show_low_stock_products: e.target.value })}>
+                                            <option value="yes">نعم - إظهار</option>
+                                            <option value="no">لا - إخفاء</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="form-row">
+                                    <div className="form-group">
+                                        <label className="form-label">إظهار الذمم المدينة</label>
+                                        <select className="form-select" value={generalForm.show_customer_receivables || 'yes'} onChange={e => setGeneralForm({ ...generalForm, show_customer_receivables: e.target.value })}>
+                                            <option value="yes">نعم - إظهار</option>
+                                            <option value="no">لا - إخفاء</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid var(--border)' }}>

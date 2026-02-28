@@ -127,7 +127,7 @@ ipcMain.handle('reports:purchasesReport', async (event, { startDate, endDate }) 
 // --- Settings ---
 ipcMain.handle('settings:get', async (event, key) => db.settings.get(key));
 ipcMain.handle('settings:getAll', async () => db.settings.getAll());
-ipcMain.handle('settings:set', async (event, { key, value }) => db.settings.set(key, value));
+ipcMain.handle('settings:set', async (event, { category, key, value }) => db.settings.set(category, key, value));
 ipcMain.handle('settings:backup', async () => db.backup());
 ipcMain.handle('settings:restore', async (event, filePath) => db.restore(filePath));
 

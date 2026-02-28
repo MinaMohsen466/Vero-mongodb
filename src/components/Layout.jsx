@@ -3,12 +3,13 @@ import { useAuth } from '../App';
 import {
     Home, Users, Truck, ShoppingCart, ShoppingBag, FileText,
     CreditCard, BookOpen, BarChart3, Settings, LogOut,
-    Moon, Sun, Building2, Package, Wallet
+    Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 function Layout({ children, currentPage, setCurrentPage }) {
     const { user, logout, theme, toggleTheme, t } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
     const menuItems = [
         { id: 'dashboard', labelKey: 'menu_dashboard', icon: Home, permModule: 'dashboard' },
@@ -72,13 +73,39 @@ function Layout({ children, currentPage, setCurrentPage }) {
         return t('user');
     };
 
+    // Search functionality
+    const handleSearch = (query) => {
+        setSearchQuery(query);
+        if (query.trim()) {
+            // Search for matching menu items
+            const searchLower = query.toLowerCase();
+            const matchedItem = filteredMenuItems.find(item => {
+                if (item.type === 'section') return false;
+                const label = t(item.labelKey).toLowerCase();
+                return label.includes(searchLower);
+            });
+            
+            // If match found, navigate to it
+            if (matchedItem) {
+                setCurrentPage(matchedItem.id);
+            }
+        }
+    };
+
     return (
         <div className="app-layout">
             {/* Sidebar */}
-            <aside className="sidebar">
+            <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
                 <div className="sidebar-header">
                     <div className="sidebar-logo">م</div>
                     <span className="sidebar-title">{t('appName')}</span>
+                    <button 
+                        className="sidebar-collapse-btn"
+                        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                        title={sidebarCollapsed ? t('expand') : t('collapse')}
+                    >
+                        {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+                    </button>
                 </div>
 
                 <nav className="sidebar-nav">
@@ -120,7 +147,7 @@ function Layout({ children, currentPage, setCurrentPage }) {
                                 type="text"
                                 placeholder={t('search')}
                                 value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onChange={(e) => handleSearch(e.target.value)}
                             />
                         </div>
 

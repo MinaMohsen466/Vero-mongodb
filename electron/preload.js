@@ -91,7 +91,7 @@ contextBridge.exposeInMainWorld('api', {
     settings: {
         get: (key) => ipcRenderer.invoke('settings:get', key),
         getAll: () => ipcRenderer.invoke('settings:getAll'),
-        set: (key, value) => ipcRenderer.invoke('settings:set', { key, value }),
+        set: (category, key, value) => ipcRenderer.invoke('settings:set', { category, key, value }),
         backup: () => ipcRenderer.invoke('settings:backup'),
         restore: (filePath) => ipcRenderer.invoke('settings:restore', filePath)
     },

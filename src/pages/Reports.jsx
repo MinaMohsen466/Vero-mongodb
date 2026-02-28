@@ -226,18 +226,22 @@ function Reports() {
                             <table>
                                 <thead><tr><th>{t('code')}</th><th>{t('acc_name')}</th><th>{t('acc_debit')}</th><th>{t('acc_credit')}</th></tr></thead>
                                 <tbody>
-                                    {reportData.accounts?.filter(a => a.balance !== 0).map(a => (
+                                    {reportData.accounts?.filter(a => a.total_debit !== 0 || a.total_credit !== 0).map(a => (
                                         <tr key={a.id}>
                                             <td>{a.code}</td>
                                             <td>{a.name}</td>
-                                            <td>{a.balance > 0 ? formatCurrency(a.balance) : '-'}</td>
-                                            <td>{a.balance < 0 ? formatCurrency(Math.abs(a.balance)) : '-'}</td>
+                                            <td>{a.total_debit > 0 ? formatCurrency(a.total_debit) : '-'}</td>
+                                            <td>{a.total_credit > 0 ? formatCurrency(a.total_credit) : '-'}</td>
                                         </tr>
                                     ))}
                                     <tr style={{ background: 'var(--bg-secondary)', fontWeight: 'bold' }}>
                                         <td colSpan="2">{t('total')}</td>
                                         <td>{formatCurrency(reportData.totals?.debit)}</td>
                                         <td>{formatCurrency(reportData.totals?.credit)}</td>
+                                    </tr>
+                                    <tr style={{ background: reportData.totals?.debit === reportData.totals?.credit ? 'var(--success-light)' : 'var(--danger-light)', fontWeight: 'bold' }}>
+                                        <td colSpan="2">{t('balance')}</td>
+                                        <td colSpan="2">{formatCurrency(Math.abs(reportData.totals?.debit - reportData.totals?.credit))}</td>
                                     </tr>
                                 </tbody>
                             </table>

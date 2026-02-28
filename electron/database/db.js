@@ -126,7 +126,7 @@ class AppDatabase {
     seedDefaultData() {
         // Admin user
         const admin = this.get('SELECT id FROM users WHERE username = ?', ['admin']);
-        if (!admin) this.run("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)", ['admin', 'admin123', 'مدير النظام', 'admin']);
+        if (!admin) this.run("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)", ['admin', 'password123', 'مدير النظام', 'admin']);
 
         // Accounts
         const count = this.get('SELECT COUNT(*) as count FROM accounts');
@@ -737,7 +737,7 @@ class ReportsRepo {
         sql += ` GROUP BY a.id ORDER BY a.code`;
         const accounts = date ? this.db.all(sql, [date]) : this.db.all(sql);
         const result = accounts.map(a => ({ ...a, balance: a.total_debit - a.total_credit }));
-        const totals = { debit: result.reduce((s, a) => s + Math.max(0, a.balance), 0), credit: result.reduce((s, a) => s + Math.abs(Math.min(0, a.balance)), 0) };
+        const totals = { debit: result.reduce((s, a) => s + a.total_debit, 0), credit: result.reduce((s, a) => s + a.total_credit, 0) };
         return { accounts: result, totals };
     }
     salesReport(startDate, endDate) {
@@ -775,19 +775,13 @@ class SettingsRepo {
         return result; 
     }
     
-    set(key, value) { 
+    set(category, key, value) { 
         try { 
-            // Determine category based on key prefix
-            let category = 'general';
-            if (key.startsWith('company_')) category = 'company';
-            else if (key.startsWith('invoice_') || key.startsWith('show_') || key.startsWith('paper_') || key.startsWith('thank_')) category = 'invoice';
-            else if (key === 'tax_rate') category = 'tax';
-            
             // Check if key exists
             const existing = this.db.get('SELECT id FROM settings WHERE key = ?', [key]);
             if (existing) {
                 // Update if exists
-                this.db.run('UPDATE settings SET value = ? WHERE key = ?', [value, key]);
+                this.db.run('UPDATE settings SET value = ?, category = ? WHERE key = ?', [value, category, key]);
             } else {
                 // Insert if doesn't exist
                 this.db.run('INSERT INTO settings (key, value, category) VALUES (?, ?, ?)', [key, value, category]);

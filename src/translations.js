@@ -10,6 +10,8 @@ const translations = {
         user: 'مستخدم',
         accountant: 'محاسب',
         collapseMenu: 'طي القائمة',
+        collapse: 'طي',
+        expand: 'توسيع',
 
         // Menu
         menu_dashboard: 'الرئيسية',
@@ -346,6 +348,8 @@ const translations = {
         user: 'User',
         accountant: 'Accountant',
         collapseMenu: 'Collapse Menu',
+        collapse: 'Collapse',
+        expand: 'Expand',
 
         // Menu
         menu_dashboard: 'Dashboard',

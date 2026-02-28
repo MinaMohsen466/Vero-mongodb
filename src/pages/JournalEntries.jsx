@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Eye, Trash2, BookOpen, X } from 'lucide-react';
 import Modal from '../components/Modal';
+import { useAuth } from '../App';
 
 function JournalEntries() {
+    const { user } = useAuth();
     const [entries, setEntries] = useState([]);
     const [accounts, setAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -90,7 +92,9 @@ function JournalEntries() {
         <div>
             <div className="page-header">
                 <span style={{ color: 'var(--text-muted)' }}>إجمالي {entries.length} قيد</span>
-                <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> قيد جديد</button>
+                {user?.permissions?.journal_entries?.can_create && (
+                    <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> قيد جديد</button>
+                )}
             </div>
 
             <div className="card">
@@ -112,8 +116,12 @@ function JournalEntries() {
                                             <td>{formatCurrency(debit)}</td>
                                             <td>{formatCurrency(credit)}</td>
                                             <td><div className="table-actions">
-                                                <button className="btn btn-ghost btn-sm" onClick={() => viewEntry(entry)}><Eye size={16} /></button>
-                                                <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(entry.id)}><Trash2 size={16} /></button>
+                                                {user?.permissions?.journal_entries?.can_view && (
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => viewEntry(entry)}><Eye size={16} /></button>
+                                                )}
+                                                {user?.permissions?.journal_entries?.can_delete && (
+                                                    <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(entry.id)}><Trash2 size={16} /></button>
+                                                )}
                                             </div></td>
                                         </tr>
                                     );

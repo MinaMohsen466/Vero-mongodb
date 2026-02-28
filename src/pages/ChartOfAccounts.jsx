@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, ChevronRight, Building2, FolderTree } from 'lucide-react';
 import Modal from '../components/Modal';
+import { useAuth } from '../App';
 
 function ChartOfAccounts() {
+    const { user } = useAuth();
     const [accounts, setAccounts] = useState([]);
     const [accountsTree, setAccountsTree] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -148,10 +150,12 @@ function ChartOfAccounts() {
                     </span>
 
                     <div className="table-actions" style={{ opacity: 0.6 }}>
-                        <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); openModal(account); }}>
-                            <Edit2 size={14} />
-                        </button>
-                        {!hasChildren && (
+                        {user?.permissions?.chart_of_accounts?.can_edit && (
+                            <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); openModal(account); }}>
+                                <Edit2 size={14} />
+                            </button>
+                        )}
+                        {!hasChildren && user?.permissions?.chart_of_accounts?.can_delete && (
                             <button className="btn btn-ghost btn-sm text-danger" onClick={(e) => { e.stopPropagation(); handleDelete(account.id); }}>
                                 <Trash2 size={14} />
                             </button>
@@ -179,10 +183,12 @@ function ChartOfAccounts() {
                     <FolderTree size={24} style={{ color: 'var(--primary)' }} />
                     <span style={{ color: 'var(--text-muted)' }}>إجمالي {accounts.length} حساب</span>
                 </div>
-                <button className="btn btn-primary" onClick={() => openModal()}>
-                    <Plus size={18} />
-                    إضافة حساب
-                </button>
+                {user?.permissions?.chart_of_accounts?.can_create && (
+                    <button className="btn btn-primary" onClick={() => openModal()}>
+                        <Plus size={18} />
+                        إضافة حساب
+                    </button>
+                )}
             </div>
 
             <div className="card">

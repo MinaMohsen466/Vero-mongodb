@@ -4,7 +4,7 @@ import Modal from '../components/Modal';
 import { useAuth } from '../App';
 
 function Vouchers() {
-    const { t } = useAuth();
+    const { t, user } = useAuth();
     const [vouchers, setVouchers] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
@@ -197,9 +197,11 @@ function Vouchers() {
                         <input type="text" className="form-input" placeholder={t('search')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ width: '250px' }} />
                     </div>
                 </div>
-                <button className="btn btn-primary" onClick={() => openModal(activeTab)}>
-                    <Plus size={18} /> {activeTab === 'receipt' ? t('vouch_addReceipt') : t('vouch_addPayment')}
-                </button>
+                {user?.permissions?.[activeTab === 'receipt' ? 'receipt_vouchers' : 'payment_vouchers']?.can_create && (
+                    <button className="btn btn-primary" onClick={() => openModal(activeTab)}>
+                        <Plus size={18} /> {activeTab === 'receipt' ? t('vouch_addReceipt') : t('vouch_addPayment')}
+                    </button>
+                )}
             </div>
 
             <div className="card">
@@ -240,12 +242,16 @@ function Vouchers() {
                                             <td>{voucher.invoice_id ? `#${voucher.invoice_id}` : '-'}</td>
                                             <td>
                                                 <div className="table-actions">
-                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(voucher)} title={t('edit')}>
-                                                        <Edit size={16} />
-                                                    </button>
-                                                    <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(voucher.id)} title={t('delete')}>
-                                                        <Trash2 size={16} />
-                                                    </button>
+                                                    {user?.permissions?.[activeTab === 'receipt' ? 'receipt_vouchers' : 'payment_vouchers']?.can_edit && (
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(voucher)} title={t('edit')}>
+                                                            <Edit size={16} />
+                                                        </button>
+                                                    )}
+                                                    {user?.permissions?.[activeTab === 'receipt' ? 'receipt_vouchers' : 'payment_vouchers']?.can_delete && (
+                                                        <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(voucher.id)} title={t('delete')}>
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>

@@ -120,33 +120,24 @@ tbody td{border:1px solid #ddd;font-size:12px}
 </style></head><body>
 <div class="invoice-page">
 <div class="header">
-    <div style="display:flex;align-items:center;gap:12px">
-        ${logoHtml}
-        ${companyInfoHtml}
-    </div>
-    <div style="text-align:left">
-        <p style="font-size:12px;color:#444;margin:3px 0"><strong>رقم الفاتورة:</strong> ${invoice.invoice_number}</p>
-        <p style="font-size:12px;color:#444;margin:3px 0"><strong>التاريخ:</strong> ${new Date(invoice.date).toLocaleDateString('ar-KW')}</p>
-        ${invoice.due_date ? `<p style="font-size:12px;color:#444;margin:3px 0"><strong>الاستحقاق:</strong> ${new Date(invoice.due_date).toLocaleDateString('ar-KW')}</p>` : ''}
-        <p style="font-size:12px;margin:5px 0"><strong>الحالة:</strong> ${statusLabel}</p>
-    </div>
-</div>
-
-<div class="invoice-title">${invoiceTitle}</div>
-
-<div class="meta-grid">
-    <div class="meta-box">
-        <h4>${clientLabel}</h4>
-        <p class="value">${clientName}</p>
-    </div>
-    <div class="meta-box">
-        <h4>تفاصيل الدفع</h4>
-        <p><strong>الحالة:</strong> <span class="value">${statusLabel}</span></p>
-        <p><strong>طريقة الدفع:</strong> <span class="value">${invoice.payment_method === 'bank' ? 'تحويل بنكي' : invoice.payment_method === 'cash' ? 'نقداً' : 'آجل'}</span></p>
+    <div style="display:flex;flex-direction:row;justify-content:space-between;align-items:flex-start;width:100%">
+        <div style="flex:1;text-align:right;line-height:1.8">
+            ${companyInfoHtml}
+        </div>
+        <div style="flex:1;display:flex;justify-content:center;align-items:center;padding:0 20px">
+            ${logoHtml}
+        </div>
+        <div style="flex:1;text-align:left">
+            <p style="font-size:12px;color:#444;margin:3px 0"><strong>النوع:</strong> ${invoiceTitle}</p>
+            <p style="font-size:12px;color:#444;margin:3px 0"><strong>رقم الفاتورة:</strong> ${invoice.invoice_number}</p>
+            <p style="font-size:12px;color:#444;margin:3px 0"><strong>التاريخ:</strong> ${new Date(invoice.date).toLocaleDateString('ar-KW')}</p>
+            <p style="font-size:12px;color:#444;margin:3px 0"><strong>الحالة:</strong> ${statusLabel}</p>
+            <p style="font-size:12px;color:#444;margin:3px 0"><strong>الدفع:</strong> ${invoice.payment_method === 'bank' ? 'تحويل بنكي' : invoice.payment_method === 'cash' ? 'نقداً' : 'آجل'}</p>
+        </div>
     </div>
 </div>
 
-<table>
+<table style="width:100%;border-collapse:collapse;margin-bottom:15px;border:1px solid #000">
     <thead>
         <tr>
             <th style="width:40px;text-align:center">#</th>
@@ -193,7 +184,23 @@ ${showSignature ? `
 
     const handlePrint = async () => {
         const html = generatePrintHTML();
-        await window.api.print.invoice(html);
+        
+        // طريقة 1: استخدام API إذا كان متاحاً
+        if (window.api?.print?.invoice) {
+            await window.api.print.invoice(html);
+        } else {
+            // طريقة 2: طباعة مباشرة من المتصفح مع معاينة
+            const printWindow = window.open('', '_blank', 'width=900,height=700');
+            printWindow.document.write(html);
+            printWindow.document.close();
+            
+            // انتظر قليلاً ليتم تحميل المحتوى ثم افتح نافذة الطباعة
+            printWindow.onload = () => {
+                setTimeout(() => {
+                    printWindow.print();
+                }, 300);
+            };
+        }
     };
 
     if (!invoice) return null;
@@ -216,10 +223,7 @@ ${showSignature ? `
                     <div style={{ maxWidth: '760px', margin: '20px auto', background: 'white', padding: '25px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', borderRadius: '4px' }}>
                         {/* Header */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '15px', borderBottom: '2px solid #000', marginBottom: '15px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                {showLogo && (logoBase64 || logoSrc) && (
-                                    <img src={logoBase64 || logoSrc} alt="Logo" style={{ maxHeight: '60px', maxWidth: '140px', objectFit: 'contain' }} />
-                                )}
+                            <div style={{ flex: 1, textAlign: 'right' }}>
                                 {showCompanyInfo && (
                                     <div style={{ lineHeight: 1.8 }}>
                                         <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>{companyName}</h2>
@@ -230,29 +234,17 @@ ${showSignature ? `
                                     </div>
                                 )}
                             </div>
-                            <div style={{ textAlign: 'left' }}>
+                            <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', paddingX: '20px' }}>
+                                {showLogo && (logoBase64 || logoSrc) && (
+                                    <img src={logoBase64 || logoSrc} alt="Logo" style={{ maxHeight: '80px', maxWidth: '140px', objectFit: 'contain' }} />
+                                )}
+                            </div>
+                            <div style={{ flex: 1, textAlign: 'left' }}>
+                                <p style={{ fontSize: '12px', color: '#444', margin: '3px 0' }}><strong>النوع:</strong> {invoiceTitle}</p>
                                 <p style={{ fontSize: '12px', color: '#444', margin: '3px 0' }}><strong>رقم الفاتورة:</strong> {invoice.invoice_number}</p>
                                 <p style={{ fontSize: '12px', color: '#444', margin: '3px 0' }}><strong>التاريخ:</strong> {new Date(invoice.date).toLocaleDateString('ar-KW')}</p>
-                                {invoice.due_date && <p style={{ fontSize: '12px', color: '#444', margin: '3px 0' }}><strong>الاستحقاق:</strong> {new Date(invoice.due_date).toLocaleDateString('ar-KW')}</p>}
-                                <p style={{ fontSize: '12px', margin: '5px 0' }}><strong>الحالة:</strong> {getStatusLabel(invoice.status)}</p>
-                            </div>
-                        </div>
-
-                        {/* Invoice Title */}
-                        <div style={{ textAlign: 'center', fontSize: '16px', fontWeight: 700, padding: '10px 0', marginBottom: '15px', border: '2px solid #000', letterSpacing: '1px' }}>
-                            {invoiceTitle}
-                        </div>
-
-                        {/* Client + Payment */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '15px' }}>
-                            <div style={{ padding: '12px', border: '1px solid #ccc' }}>
-                                <h4 style={{ fontSize: '11px', color: '#666', marginBottom: '6px', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>{type === 'sales' ? 'العميل' : 'المورد'}</h4>
-                                <p style={{ fontWeight: 600 }}>{type === 'sales' ? (invoice.customer_name || '-') : (invoice.supplier_name || '-')}</p>
-                            </div>
-                            <div style={{ padding: '12px', border: '1px solid #ccc' }}>
-                                <h4 style={{ fontSize: '11px', color: '#666', marginBottom: '6px', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>تفاصيل الدفع</h4>
-                                <p><strong>الحالة:</strong> {getStatusLabel(invoice.status)}</p>
-                                <p><strong>طريقة الدفع:</strong> {invoice.payment_method === 'bank' ? 'تحويل بنكي' : invoice.payment_method === 'cash' ? 'نقداً' : 'آجل'}</p>
+                                <p style={{ fontSize: '12px', color: '#444', margin: '3px 0' }}><strong>الحالة:</strong> {getStatusLabel(invoice.status)}</p>
+                                <p style={{ fontSize: '12px', color: '#444', margin: '3px 0' }}><strong>الدفع:</strong> {invoice.payment_method === 'bank' ? 'تحويل بنكي' : invoice.payment_method === 'cash' ? 'نقداً' : 'آجل'}</p>
                             </div>
                         </div>
 
@@ -324,6 +316,17 @@ ${showSignature ? `
                             {thankYouMsg && <p style={{ fontSize: '13px', fontWeight: 600, marginBottom: '5px', color: '#000' }}>{thankYouMsg}</p>}
                             {invoiceFooter && <p>{invoiceFooter}</p>}
                             <p style={{ marginTop: '8px', fontSize: '10px', color: '#999' }}>{companyName} — {new Date().getFullYear()}</p>
+                        </div>
+
+                        {/* Print Button */}
+                        <div style={{ marginTop: '20px', textAlign: 'center', paddingTop: '15px', borderTop: '1px solid #ddd' }}>
+                            <button 
+                                className="btn btn-primary" 
+                                onClick={handlePrint}
+                                style={{ padding: '10px 30px', fontSize: '14px' }}
+                            >
+                                🖨️ طباعة الفاتورة
+                            </button>
                         </div>
                     </div>
                 </div>

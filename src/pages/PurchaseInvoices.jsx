@@ -5,7 +5,7 @@ import InvoicePrintPreview from '../components/InvoicePrintPreview';
 import { useAuth } from '../App';
 
 function PurchaseInvoices() {
-    const { t } = useAuth();
+    const { t, user } = useAuth();
     const [invoices, setInvoices] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [products, setProducts] = useState([]);
@@ -257,7 +257,9 @@ function PurchaseInvoices() {
                     <input type="text" className="form-input" placeholder={t('search')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ paddingRight: '40px', width: '300px' }} />
                     <Search size={18} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 </div>
-                <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> {t('pinv_add')}</button>
+                {user?.permissions?.purchase_invoices?.can_create && (
+                    <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> {t('pinv_add')}</button>
+                )}
             </div>
 
             <div className="card">
@@ -278,10 +280,18 @@ function PurchaseInvoices() {
                                             <td><span className={`badge ${inv.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{getStatusLabel(inv.status)}</span></td>
                                             <td>
                                                 <div className="table-actions">
-                                                    <button className="btn btn-ghost btn-sm" onClick={() => viewInvoice(inv.id)} title={t('inv_view')}><Eye size={16} /></button>
-                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(inv.id)} title={t('edit')}><Edit size={16} /></button>
-                                                    <button className="btn btn-ghost btn-sm" onClick={async () => { await viewInvoice(inv.id); setShowPrintPreview(true); }} title={t('inv_print')}><Printer size={16} /></button>
-                                                    <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(inv.id)} title={t('delete')}><Trash2 size={16} /></button>
+                                                    {user?.permissions?.purchase_invoices?.can_view && (
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => viewInvoice(inv.id)} title={t('inv_view')}><Eye size={16} /></button>
+                                                    )}
+                                                    {user?.permissions?.purchase_invoices?.can_edit && (
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(inv.id)} title={t('edit')}><Edit size={16} /></button>
+                                                    )}
+                                                    {user?.permissions?.purchase_invoices?.can_view && (
+                                                        <button className="btn btn-ghost btn-sm" onClick={async () => { await viewInvoice(inv.id); setShowPrintPreview(true); }} title={t('inv_print')}><Printer size={16} /></button>
+                                                    )}
+                                                    {user?.permissions?.purchase_invoices?.can_delete && (
+                                                        <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(inv.id)} title={t('delete')}><Trash2 size={16} /></button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -333,7 +343,7 @@ function PurchaseInvoices() {
                                             <td><select className="form-select" value={item.product_id} onChange={(e) => handleProductChange(index, e.target.value)} style={{ margin: 0 }}><option value="">{t('inv_selectProduct')}</option>{products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></td>
                                             <td><input type="text" className="form-input" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} style={{ margin: 0 }} /></td>
                                             <td><input type="number" className="form-input" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} min="1" step="1" style={{ margin: 0 }} /></td>
-                                            <td><input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.001" style={{ margin: 0 }} /></td>
+                                            <td><input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.25" style={{ margin: 0 }} /></td>
                                             <td className="font-bold">{formatCurrency(calculateItemTotal(item))}</td>
                                             <td><button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => removeItem(index)}><X size={16} /></button></td>
                                         </tr>
