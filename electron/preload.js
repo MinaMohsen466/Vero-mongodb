@@ -102,6 +102,41 @@ contextBridge.exposeInMainWorld('api', {
         savePermissions: (role, permissions) => ipcRenderer.invoke('permissions:savePermissions', { role, permissions })
     },
 
+    // HR: Employees
+    employees: {
+        getAll: () => ipcRenderer.invoke('employees:getAll'),
+        getById: (id) => ipcRenderer.invoke('employees:getById', id),
+        create: (emp) => ipcRenderer.invoke('employees:create', emp),
+        update: (emp) => ipcRenderer.invoke('employees:update', emp),
+        delete: (id) => ipcRenderer.invoke('employees:delete', id),
+        getSummary: (id) => ipcRenderer.invoke('employees:getSummary', id)
+    },
+
+    // HR: Salaries
+    salaries: {
+        getAll: () => ipcRenderer.invoke('salaries:getAll'),
+        getByEmployee: (id) => ipcRenderer.invoke('salaries:getByEmployee', id),
+        pay: (payment) => ipcRenderer.invoke('salaries:pay', payment),
+        delete: (id) => ipcRenderer.invoke('salaries:delete', id)
+    },
+
+    // HR: Leaves
+    leaves: {
+        getAll: () => ipcRenderer.invoke('leaves:getAll'),
+        getByEmployee: (id) => ipcRenderer.invoke('leaves:getByEmployee', id),
+        create: (leave) => ipcRenderer.invoke('leaves:create', leave),
+        updateStatus: (id, status, approvedBy) => ipcRenderer.invoke('leaves:updateStatus', { id, status, approvedBy }),
+        delete: (id) => ipcRenderer.invoke('leaves:delete', id)
+    },
+
+    // HR: Deductions
+    deductions: {
+        getAll: () => ipcRenderer.invoke('deductions:getAll'),
+        getByEmployee: (id) => ipcRenderer.invoke('deductions:getByEmployee', id),
+        create: (deduction) => ipcRenderer.invoke('deductions:create', deduction),
+        delete: (id) => ipcRenderer.invoke('deductions:delete', id)
+    },
+
     // Dialog
     dialog: {
         openFile: (options) => ipcRenderer.invoke('dialog:openFile', options),

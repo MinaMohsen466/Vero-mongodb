@@ -25,6 +25,7 @@ import JournalEntries from './pages/JournalEntries';
 import Reports from './pages/Reports';
 import SettingsPage from './pages/Settings';
 import CashBank from './pages/CashBank';
+import HR from './pages/HR';
 
 export { AuthContext, useAuth };
 
@@ -132,6 +133,7 @@ function App() {
             case 'reports': return <Reports />;
             case 'settings': return <SettingsPage />;
             case 'cashbank': return <CashBank />;
+            case 'hr': return <HR />;
             default: return <Dashboard />;
         }
     };

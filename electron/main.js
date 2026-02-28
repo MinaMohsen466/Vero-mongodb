@@ -135,6 +135,33 @@ ipcMain.handle('settings:restore', async (event, filePath) => db.restore(filePat
 ipcMain.handle('permissions:getByRole', async (event, role) => db.permissions.getByRole(role));
 ipcMain.handle('permissions:savePermissions', async (event, { role, permissions }) => db.permissions.savePermissions(role, permissions));
 
+// --- HR: Employees ---
+ipcMain.handle('employees:getAll', async () => db.employees.getAll());
+ipcMain.handle('employees:getById', async (event, id) => db.employees.getById(id));
+ipcMain.handle('employees:create', async (event, emp) => db.employees.create(emp));
+ipcMain.handle('employees:update', async (event, emp) => db.employees.update(emp));
+ipcMain.handle('employees:delete', async (event, id) => db.employees.delete(id));
+ipcMain.handle('employees:getSummary', async (event, id) => db.employees.getSummary(id));
+
+// --- HR: Salaries ---
+ipcMain.handle('salaries:getAll', async () => db.salaries.getAll());
+ipcMain.handle('salaries:getByEmployee', async (event, id) => db.salaries.getByEmployee(id));
+ipcMain.handle('salaries:pay', async (event, payment) => db.salaries.pay(payment));
+ipcMain.handle('salaries:delete', async (event, id) => db.salaries.delete(id));
+
+// --- HR: Leaves ---
+ipcMain.handle('leaves:getAll', async () => db.leaves.getAll());
+ipcMain.handle('leaves:getByEmployee', async (event, id) => db.leaves.getByEmployee(id));
+ipcMain.handle('leaves:create', async (event, leave) => db.leaves.create(leave));
+ipcMain.handle('leaves:updateStatus', async (event, { id, status, approvedBy }) => db.leaves.updateStatus(id, status, approvedBy));
+ipcMain.handle('leaves:delete', async (event, id) => db.leaves.delete(id));
+
+// --- HR: Deductions ---
+ipcMain.handle('deductions:getAll', async () => db.deductions.getAll());
+ipcMain.handle('deductions:getByEmployee', async (event, id) => db.deductions.getByEmployee(id));
+ipcMain.handle('deductions:create', async (event, ded) => db.deductions.create(ded));
+ipcMain.handle('deductions:delete', async (event, id) => db.deductions.delete(id));
+
 // --- File Dialog ---
 ipcMain.handle('dialog:openFile', async (event, options) => {
     const result = await dialog.showOpenDialog(mainWindow, options);

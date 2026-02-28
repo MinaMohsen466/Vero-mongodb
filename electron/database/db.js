@@ -84,6 +84,10 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS journal_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, entry_number TEXT UNIQUE NOT NULL, date TEXT NOT NULL, description TEXT, reference TEXT, is_posted INTEGER DEFAULT 0, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS journal_entry_lines (id INTEGER PRIMARY KEY AUTOINCREMENT, entry_id INTEGER NOT NULL, account_id INTEGER NOT NULL, debit REAL DEFAULT 0, credit REAL DEFAULT 0, description TEXT, FOREIGN KEY (entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE NOT NULL, value TEXT, category TEXT DEFAULT 'general');
+      CREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, job_title TEXT, department TEXT, hire_date TEXT, base_salary REAL DEFAULT 0, phone TEXT, email TEXT, national_id TEXT, address TEXT, account_id INTEGER, bank_account TEXT, notes TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (account_id) REFERENCES accounts(id));
+      CREATE TABLE IF NOT EXISTS employee_leaves (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL, leave_type TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, days INTEGER NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', approved_by INTEGER, notes TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
+      CREATE TABLE IF NOT EXISTS employee_deductions (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL, month TEXT NOT NULL, amount REAL NOT NULL, reason TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
+      CREATE TABLE IF NOT EXISTS salary_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_number TEXT UNIQUE NOT NULL, employee_id INTEGER NOT NULL, month TEXT NOT NULL, base_salary REAL DEFAULT 0, deductions REAL DEFAULT 0, net_salary REAL DEFAULT 0, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, journal_entry_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
     `);
 
         /// Migration for existing databases - add missing columns
@@ -121,6 +125,31 @@ class AppDatabase {
         } catch (e) {
             console.log('Migration check:', e.message);
         }
+
+        // HR migrations - fix incompatible employees table
+        try {
+            const empCols = this.all("PRAGMA table_info(employees)");
+            if (empCols.length > 0) {
+                // Check if it has the 'name' column - if not, table is old/incompatible
+                const hasName = empCols.some(c => c.name === 'name');
+                if (!hasName) {
+                    console.log('HR Migration: dropping incompatible employees table and recreating...');
+                    this.db.exec('DROP TABLE IF EXISTS employee_leaves');
+                    this.db.exec('DROP TABLE IF EXISTS employee_deductions');
+                    this.db.exec('DROP TABLE IF EXISTS salary_payments');
+                    this.db.exec('DROP TABLE IF EXISTS employees');
+                    this.db.exec(`
+                        CREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, job_title TEXT, department TEXT, hire_date TEXT, base_salary REAL DEFAULT 0, phone TEXT, email TEXT, national_id TEXT, address TEXT, account_id INTEGER, bank_account TEXT, notes TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (account_id) REFERENCES accounts(id));
+                        CREATE TABLE IF NOT EXISTS employee_leaves (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL, leave_type TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, days INTEGER NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', approved_by INTEGER, notes TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
+                        CREATE TABLE IF NOT EXISTS employee_deductions (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL, month TEXT NOT NULL, amount REAL NOT NULL, reason TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
+                        CREATE TABLE IF NOT EXISTS salary_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_number TEXT UNIQUE NOT NULL, employee_id INTEGER NOT NULL, month TEXT NOT NULL, base_salary REAL DEFAULT 0, deductions REAL DEFAULT 0, net_salary REAL DEFAULT 0, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, journal_entry_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
+                    `);
+                    this.save();
+                }
+            }
+        } catch (e) {
+            console.log('HR Migration:', e.message);
+        }
     }
 
     seedDefaultData() {
@@ -135,11 +164,30 @@ class AppDatabase {
                 ['1', 'الأصول', null, 'asset', 'debit'], ['2', 'الخصوم', null, 'liability', 'credit'], ['3', 'حقوق الملكية', null, 'equity', 'credit'], ['4', 'الإيرادات', null, 'revenue', 'credit'], ['5', 'المصروفات', null, 'expense', 'debit'],
                 ['11', 'الأصول المتداولة', '1', 'asset', 'debit'], ['111', 'الصندوق', '11', 'asset', 'debit'], ['112', 'البنك', '11', 'asset', 'debit'], ['113', 'العملاء', '11', 'asset', 'debit'],
                 ['21', 'الخصوم المتداولة', '2', 'liability', 'credit'], ['211', 'الموردون', '21', 'liability', 'credit'],
-                ['41', 'إيرادات المبيعات', '4', 'revenue', 'credit'], ['51', 'تكلفة المبيعات', '5', 'expense', 'debit']
+                ['41', 'إيرادات المبيعات', '4', 'revenue', 'credit'], ['51', 'تكلفة المبيعات', '5', 'expense', 'debit'],
+                ['52', 'مصروفات الرواتب', '5', 'expense', 'debit'],
+                ['521', 'رواتب الموظفين', '52', 'expense', 'debit']
             ];
             for (const [code, name, parent, type, nature] of accs) {
                 const parentId = parent ? this.get('SELECT id FROM accounts WHERE code = ?', [parent])?.id : null;
                 this.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)", [code, name, parentId, type, nature]);
+            }
+        } else {
+            // Ensure salaries accounts exist for existing databases
+            const salaryMain = this.get("SELECT id FROM accounts WHERE code = '52'");
+            if (!salaryMain) {
+                const expenseParent = this.get("SELECT id FROM accounts WHERE code = '5'");
+                const r = this.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
+                    ['52', 'مصروفات الرواتب', expenseParent?.id || null, 'expense', 'debit']);
+                const salaryMainId = r.lastInsertRowid;
+                this.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
+                    ['521', 'رواتب الموظفين', salaryMainId, 'expense', 'debit']);
+            } else {
+                const salaryChildren = this.get("SELECT id FROM accounts WHERE code = '521'");
+                if (!salaryChildren) {
+                    this.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
+                        ['521', 'رواتب الموظفين', salaryMain.id, 'expense', 'debit']);
+                }
             }
         }
 
@@ -159,7 +207,7 @@ class AppDatabase {
         // Default Permissions
         const permCount = this.get('SELECT COUNT(*) as count FROM permissions');
         if (permCount.count === 0) {
-            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions'];
+            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr'];
             for (const mod of modules) {
                 // Admin: full access to everything
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', mod]);
@@ -169,7 +217,7 @@ class AppDatabase {
                 dashboard: [1, 0, 0, 0], customers: [1, 1, 1, 0], suppliers: [1, 1, 1, 0], products: [1, 1, 1, 0],
                 sales_invoices: [1, 1, 1, 0], purchase_invoices: [1, 1, 1, 0], receipt_vouchers: [1, 1, 1, 0], payment_vouchers: [1, 1, 1, 0],
                 chart_of_accounts: [1, 0, 0, 0], cash_bank: [1, 0, 0, 0], journal_entries: [1, 1, 0, 0], reports: [1, 0, 0, 0],
-                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0]
+                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [1, 1, 1, 0]
             };
             for (const [mod, [v, c, e, d]] of Object.entries(accountantPerms)) {
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?)", ['accountant', mod, v, c, e, d]);
@@ -179,11 +227,21 @@ class AppDatabase {
                 dashboard: [1, 0, 0, 0], customers: [0, 0, 0, 0], suppliers: [0, 0, 0, 0], products: [0, 0, 0, 0],
                 sales_invoices: [1, 1, 0, 0], purchase_invoices: [0, 0, 0, 0], receipt_vouchers: [1, 1, 0, 0], payment_vouchers: [0, 0, 0, 0],
                 chart_of_accounts: [0, 0, 0, 0], cash_bank: [0, 0, 0, 0], journal_entries: [0, 0, 0, 0], reports: [0, 0, 0, 0],
-                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0]
+                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [0, 0, 0, 0]
             };
             for (const [mod, [v, c, e, d]] of Object.entries(userPerms)) {
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?)", ['user', mod, v, c, e, d]);
             }
+        } else {
+            // Migration: add hr permission for existing admins
+            try {
+                const adminHr = this.get("SELECT id FROM permissions WHERE role='admin' AND module='hr'");
+                if (!adminHr) {
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', 'hr']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 0)", ['accountant', 'hr']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'hr']);
+                }
+            } catch (e) { console.log('HR permission migration:', e.message); }
         }
     }
 
@@ -199,6 +257,10 @@ class AppDatabase {
         this.reports = new ReportsRepo(this);
         this.settings = new SettingsRepo(this);
         this.permissions = new PermissionsRepo(this);
+        this.employees = new EmployeesRepo(this);
+        this.salaries = new SalaryRepo(this);
+        this.leaves = new LeavesRepo(this);
+        this.deductions = new DeductionsRepo(this);
     }
 
     backup() {
@@ -763,20 +825,20 @@ class ReportsRepo {
 class SettingsRepo {
     constructor(db) { this.db = db; }
     get(key) { const s = this.db.get('SELECT value FROM settings WHERE key = ?', [key]); return s ? s.value : null; }
-    getAll() { 
-        const settings = this.db.all('SELECT key, value, category FROM settings'); 
+    getAll() {
+        const settings = this.db.all('SELECT key, value, category FROM settings');
         console.log('[SettingsRepo.getAll] Raw settings from DB:', settings);
-        const result = {}; 
-        for (const s of settings) { 
-            if (!result[s.category]) result[s.category] = {}; 
-            result[s.category][s.key] = s.value; 
-        } 
+        const result = {};
+        for (const s of settings) {
+            if (!result[s.category]) result[s.category] = {};
+            result[s.category][s.key] = s.value;
+        }
         console.log('[SettingsRepo.getAll] Formatted result:', result);
-        return result; 
+        return result;
     }
-    
-    set(category, key, value) { 
-        try { 
+
+    set(category, key, value) {
+        try {
             // Check if key exists
             const existing = this.db.get('SELECT id FROM settings WHERE key = ?', [key]);
             if (existing) {
@@ -786,11 +848,11 @@ class SettingsRepo {
                 // Insert if doesn't exist
                 this.db.run('INSERT INTO settings (key, value, category) VALUES (?, ?, ?)', [key, value, category]);
             }
-            return { success: true }; 
-        } catch (e) { 
+            return { success: true };
+        } catch (e) {
             console.error('Settings save error:', e);
-            return { success: false, error: e.message }; 
-        } 
+            return { success: false, error: e.message };
+        }
     }
 }
 
@@ -818,6 +880,355 @@ class PermissionsRepo {
             }
             return { success: true };
         } catch (e) { return { success: false, error: e.message }; }
+    }
+}
+
+// ==================== HR Repositories ====================
+
+class EmployeesRepo {
+    constructor(db) { this.db = db; }
+
+    getAll() {
+        return this.db.all(`
+            SELECT e.*, a.name as account_name, a.code as account_code
+            FROM employees e
+            LEFT JOIN accounts a ON e.account_id = a.id
+            ORDER BY e.name
+        `);
+    }
+
+    getById(id) {
+        return this.db.get(`
+            SELECT e.*, a.name as account_name, a.code as account_code
+            FROM employees e
+            LEFT JOIN accounts a ON e.account_id = a.id
+            WHERE e.id = ?
+        `, [id]);
+    }
+
+    create(emp) {
+        try {
+            const count = this.db.get('SELECT COUNT(*) as count FROM employees').count;
+
+            // Unique employee code
+            let empNum = count + 1;
+            let code = emp.code;
+            if (!code) {
+                do {
+                    code = `EMP${String(empNum).padStart(4, '0')}`;
+                    if (!this.db.get('SELECT id FROM employees WHERE code = ?', [code])) break;
+                    empNum++;
+                } while (empNum < count + 200);
+            }
+
+            // Ensure salary parent account exists - ALWAYS query after INSERT OR IGNORE
+            let mainSalary = this.db.get("SELECT id FROM accounts WHERE code = '52'");
+            if (!mainSalary) {
+                const expParent = this.db.get("SELECT id FROM accounts WHERE code = '5'");
+                this.db.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
+                    ['52', 'مصروفات الرواتب', expParent?.id || null, 'expense', 'debit']);
+                mainSalary = this.db.get("SELECT id FROM accounts WHERE code = '52'");
+            }
+
+            let salaryParent = this.db.get("SELECT id FROM accounts WHERE code = '521'");
+            if (!salaryParent) {
+                this.db.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
+                    ['521', 'رواتب الموظفين', mainSalary?.id || null, 'expense', 'debit']);
+                salaryParent = this.db.get("SELECT id FROM accounts WHERE code = '521'");
+            }
+
+            // Generate UNIQUE account code (avoid UNIQUE constraint failure)
+            let suffix = empNum;
+            let empAccountCode;
+            do {
+                empAccountCode = `521${String(suffix).padStart(4, '0')}`;
+                if (!this.db.get('SELECT id FROM accounts WHERE code = ?', [empAccountCode])) break;
+                suffix++;
+            } while (suffix < empNum + 500);
+
+            const empAccountName = `راتب ${emp.name}`;
+            const accResult = this.db.run(
+                "INSERT INTO accounts (code, name, parent_id, account_type, nature, can_post) VALUES (?, ?, ?, ?, ?, ?)",
+                [empAccountCode, empAccountName, salaryParent?.id || null, 'expense', 'debit', 1]
+            );
+            const accountId = accResult.lastInsertRowid;
+
+            const r = this.db.run(
+                "INSERT INTO employees (code, name, job_title, department, hire_date, base_salary, phone, email, national_id, address, account_id, bank_account, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [code, emp.name, emp.job_title || '', emp.department || '', emp.hire_date || '', emp.base_salary || 0,
+                    emp.phone || '', emp.email || '', emp.national_id || '', emp.address || '',
+                    accountId, emp.bank_account || '', emp.notes || '']
+            );
+            return { success: true, id: r.lastInsertRowid, account_id: accountId };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    update(emp) {
+        try {
+            this.db.run(
+                "UPDATE employees SET name=?, job_title=?, department=?, hire_date=?, base_salary=?, phone=?, email=?, national_id=?, address=?, bank_account=?, notes=?, is_active=? WHERE id=?",
+                [emp.name, emp.job_title || '', emp.department || '', emp.hire_date || '', emp.base_salary || 0, emp.phone || '', emp.email || '', emp.national_id || '', emp.address || '', emp.bank_account || '', emp.notes || '', emp.is_active ? 1 : 0, emp.id]
+            );
+            // Update linked account name
+            if (emp.account_id) {
+                this.db.run("UPDATE accounts SET name=? WHERE id=?", [`راتب ${emp.name}`, emp.account_id]);
+            }
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    delete(id) {
+        try {
+            const emp = this.getById(id);
+            if (!emp) return { success: false, error: 'الموظف غير موجود' };
+            // Check if has salary payments
+            const salaries = this.db.get('SELECT COUNT(*) as count FROM salary_payments WHERE employee_id = ?', [id]);
+            if (salaries.count > 0) return { success: false, error: 'لا يمكن حذف موظف لديه مدفوعات رواتب' };
+            this.db.run('DELETE FROM employees WHERE id = ?', [id]);
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    getSummary(id) {
+        const emp = this.getById(id);
+        if (!emp) return null;
+        const leaves = this.db.all("SELECT * FROM employee_leaves WHERE employee_id = ? ORDER BY start_date DESC", [id]);
+        const deductions = this.db.all("SELECT * FROM employee_deductions WHERE employee_id = ? ORDER BY created_at DESC", [id]);
+        const salaries = this.db.all("SELECT * FROM salary_payments WHERE employee_id = ? ORDER BY month DESC", [id]);
+        return { employee: emp, leaves, deductions, salaries };
+    }
+}
+
+class SalaryRepo {
+    constructor(db) { this.db = db; }
+
+    getAll() {
+        return this.db.all(`
+            SELECT sp.*, e.name as employee_name, e.job_title, e.department,
+                   a.name as payment_account_name
+            FROM salary_payments sp
+            LEFT JOIN employees e ON sp.employee_id = e.id
+            LEFT JOIN accounts a ON sp.payment_account_id = a.id
+            ORDER BY sp.created_at DESC
+        `);
+    }
+
+    getByEmployee(employeeId) {
+        return this.db.all(
+            "SELECT * FROM salary_payments WHERE employee_id = ? ORDER BY month DESC",
+            [employeeId]
+        );
+    }
+
+    pay(payment) {
+        const n = (v) => v === undefined ? null : v;
+        try {
+            const count = this.db.get('SELECT COUNT(*) as count FROM salary_payments').count;
+            const payNum = `SAL-${String(count + 1).padStart(6, '0')}`;
+
+            const emp = this.db.get('SELECT * FROM employees WHERE id = ?', [payment.employee_id]);
+            if (!emp) return { success: false, error: 'الموظف غير موجود' };
+
+            // Check if already paid for this month
+            const existing = this.db.get(
+                "SELECT id FROM salary_payments WHERE employee_id = ? AND month = ?",
+                [payment.employee_id, payment.month]
+            );
+            if (existing) return { success: false, error: 'تم صرف راتب هذا الشهر مسبقاً' };
+
+            // Get deductions for this month
+            const monthDeductions = this.db.get(
+                "SELECT COALESCE(SUM(amount), 0) as total FROM employee_deductions WHERE employee_id = ? AND month = ?",
+                [payment.employee_id, payment.month]
+            );
+            const totalDeductions = n(payment.deductions) || monthDeductions?.total || 0;
+            const baseSalary = n(payment.base_salary) || emp.base_salary || 0;
+            const netSalary = parseFloat(baseSalary) - parseFloat(totalDeductions);
+
+            // Get payment accounts
+            const cashAccount = this.db.get("SELECT id FROM accounts WHERE code = '111'");
+            const bankAccount = this.db.get("SELECT id FROM accounts WHERE code = '112'");
+            let paymentAccountId = n(payment.payment_account_id);
+            if (!paymentAccountId) {
+                paymentAccountId = payment.payment_method === 'bank' ? bankAccount?.id : cashAccount?.id;
+            }
+
+            // Employee salary account
+            const empAccount = emp.account_id;
+
+            // Create journal entry: Debit salary expense, Credit cash/bank
+            // Use MAX id+1 to avoid UNIQUE constraint conflicts with existing/deleted entries
+            let jeNum;
+            let jeAttempt = 0;
+            do {
+                const maxJe = this.db.get("SELECT COALESCE(MAX(CAST(REPLACE(entry_number,'JE-','') AS INTEGER)),0) as mx FROM journal_entries");
+                const nextNum = (maxJe?.mx || 0) + 1 + jeAttempt;
+                jeNum = `JE-${String(nextNum).padStart(6, '0')}`;
+                const jeExists = this.db.get('SELECT id FROM journal_entries WHERE entry_number = ?', [jeNum]);
+                if (!jeExists) break;
+                jeAttempt++;
+            } while (jeAttempt < 100);
+
+            const jeDesc = `قيد راتب ${emp.name} - ${payment.month}`;
+            const jeR = this.db.run(
+                "INSERT INTO journal_entries (entry_number, date, description, reference, created_by) VALUES (?, ?, ?, ?, ?)",
+                [jeNum, payment.date || new Date().toISOString().split('T')[0], jeDesc, payNum, n(payment.created_by)]
+            );
+            const jeId = jeR.lastInsertRowid;
+
+            // Line 1: Debit employee salary account (expense)
+            if (empAccount) {
+                this.db.run(
+                    "INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?, ?, ?, ?, ?)",
+                    [jeId, empAccount, netSalary, 0, `راتب ${emp.name} - ${payment.month}`]
+                );
+                this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [netSalary, empAccount]);
+            }
+
+            // Line 2: Credit cash/bank account
+            if (paymentAccountId) {
+                this.db.run(
+                    "INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?, ?, ?, ?, ?)",
+                    [jeId, paymentAccountId, 0, netSalary, `صرف راتب ${emp.name} - ${payment.month}`]
+                );
+                this.db.run('UPDATE accounts SET balance = balance - ? WHERE id = ?', [netSalary, paymentAccountId]);
+            }
+
+            // Save salary payment record
+            const r = this.db.run(
+                "INSERT INTO salary_payments (payment_number, employee_id, month, base_salary, deductions, net_salary, payment_method, payment_account_id, journal_entry_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [payNum, payment.employee_id, payment.month, baseSalary, totalDeductions, netSalary,
+                    n(payment.payment_method) || 'cash', n(paymentAccountId), jeId, n(payment.notes), n(payment.created_by)]
+            );
+
+            return { success: true, id: r.lastInsertRowid, payment_number: payNum, net_salary: netSalary };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    delete(id) {
+        try {
+            const payment = this.db.get('SELECT * FROM salary_payments WHERE id = ?', [id]);
+            if (!payment) return { success: false, error: 'السجل غير موجود' };
+
+            // Reverse journal entry
+            if (payment.journal_entry_id) {
+                const lines = this.db.all('SELECT * FROM journal_entry_lines WHERE entry_id = ?', [payment.journal_entry_id]);
+                for (const line of lines) {
+                    const change = (line.credit || 0) - (line.debit || 0);
+                    this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [change, line.account_id]);
+                }
+                this.db.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [payment.journal_entry_id]);
+                this.db.run('DELETE FROM journal_entries WHERE id = ?', [payment.journal_entry_id]);
+            }
+
+            this.db.run('DELETE FROM salary_payments WHERE id = ?', [id]);
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+}
+
+class LeavesRepo {
+    constructor(db) { this.db = db; }
+
+    getAll() {
+        return this.db.all(`
+            SELECT el.*, e.name as employee_name, e.department
+            FROM employee_leaves el
+            LEFT JOIN employees e ON el.employee_id = e.id
+            ORDER BY el.start_date DESC
+        `);
+    }
+
+    getByEmployee(employeeId) {
+        return this.db.all(
+            "SELECT * FROM employee_leaves WHERE employee_id = ? ORDER BY start_date DESC",
+            [employeeId]
+        );
+    }
+
+    create(leave) {
+        try {
+            const r = this.db.run(
+                "INSERT INTO employee_leaves (employee_id, leave_type, start_date, end_date, days, reason, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [leave.employee_id, leave.leave_type, leave.start_date, leave.end_date,
+                leave.days || 1, leave.reason || '', leave.status || 'pending', leave.notes || '']
+            );
+            return { success: true, id: r.lastInsertRowid };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    updateStatus(id, status, approvedBy) {
+        try {
+            this.db.run(
+                "UPDATE employee_leaves SET status=?, approved_by=? WHERE id=?",
+                [status, approvedBy || null, id]
+            );
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    delete(id) {
+        try {
+            this.db.run('DELETE FROM employee_leaves WHERE id = ?', [id]);
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+}
+
+class DeductionsRepo {
+    constructor(db) { this.db = db; }
+
+    getAll() {
+        return this.db.all(`
+            SELECT ed.*, e.name as employee_name, e.department
+            FROM employee_deductions ed
+            LEFT JOIN employees e ON ed.employee_id = e.id
+            ORDER BY ed.created_at DESC
+        `);
+    }
+
+    getByEmployee(employeeId) {
+        return this.db.all(
+            "SELECT * FROM employee_deductions WHERE employee_id = ? ORDER BY created_at DESC",
+            [employeeId]
+        );
+    }
+
+    create(deduction) {
+        try {
+            const r = this.db.run(
+                "INSERT INTO employee_deductions (employee_id, month, amount, reason) VALUES (?, ?, ?, ?)",
+                [deduction.employee_id, deduction.month, deduction.amount, deduction.reason || '']
+            );
+            return { success: true, id: r.lastInsertRowid };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    delete(id) {
+        try {
+            this.db.run('DELETE FROM employee_deductions WHERE id = ?', [id]);
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
     }
 }
 

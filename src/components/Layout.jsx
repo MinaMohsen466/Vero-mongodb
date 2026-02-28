@@ -3,7 +3,7 @@ import { useAuth } from '../App';
 import {
     Home, Users, Truck, ShoppingCart, ShoppingBag, FileText,
     CreditCard, BookOpen, BarChart3, Settings, LogOut,
-    Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight
+    Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight, UserCheck
 } from 'lucide-react';
 
 function Layout({ children, currentPage, setCurrentPage }) {
@@ -27,6 +27,7 @@ function Layout({ children, currentPage, setCurrentPage }) {
         { id: 'vouchers', labelKey: 'menu_vouchers', icon: CreditCard, permModule: 'receipt_vouchers' },
         { id: 'journal', labelKey: 'menu_journal', icon: BookOpen, permModule: 'journal_entries' },
         { type: 'section', labelKey: 'menu_section_other' },
+        { id: 'hr', labelKey: 'menu_hr', icon: UserCheck, permModule: 'hr' },
         { id: 'reports', labelKey: 'menu_reports', icon: BarChart3, permModule: 'reports' },
         { id: 'settings', labelKey: 'menu_settings', icon: Settings, permModule: 'settings' },
     ];
@@ -84,7 +85,7 @@ function Layout({ children, currentPage, setCurrentPage }) {
                 const label = t(item.labelKey).toLowerCase();
                 return label.includes(searchLower);
             });
-            
+
             // If match found, navigate to it
             if (matchedItem) {
                 setCurrentPage(matchedItem.id);
@@ -99,7 +100,7 @@ function Layout({ children, currentPage, setCurrentPage }) {
                 <div className="sidebar-header">
                     <div className="sidebar-logo">م</div>
                     <span className="sidebar-title">{t('appName')}</span>
-                    <button 
+                    <button
                         className="sidebar-collapse-btn"
                         onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
                         title={sidebarCollapsed ? t('expand') : t('collapse')}

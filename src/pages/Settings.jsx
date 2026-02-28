@@ -161,7 +161,7 @@ function Settings() {
         try {
             console.log('[saveCompanySettings] Company logo value:', companyForm.company_logo);
             console.log('[saveCompanySettings] Logo value type:', typeof companyForm.company_logo);
-            
+
             await saveSetting('company', 'company_name', companyForm.company_name);
             await saveSetting('company', 'company_address', companyForm.company_address);
             await saveSetting('company', 'company_phone', companyForm.company_phone);
@@ -323,6 +323,7 @@ function Settings() {
         { module: 'receipt_vouchers', labelKey: 'menu_receiptVoucher', actions: ['view', 'create', 'edit', 'delete'] },
         { module: 'payment_vouchers', labelKey: 'menu_paymentVoucher', actions: ['view', 'create', 'edit', 'delete'] },
         { module: 'journal_entries', labelKey: 'menu_journal', actions: ['view', 'create', 'delete'] },
+        { module: 'hr', labelKey: 'menu_hr', actions: ['view', 'create', 'edit', 'delete'] },
         { module: 'reports', labelKey: 'menu_reports', actions: ['view'] },
         { module: 'settings', labelKey: 'menu_settings', actions: ['view', 'edit'] },
         { module: 'users', labelKey: 'set_users', actions: ['view', 'create', 'edit', 'delete'] },
