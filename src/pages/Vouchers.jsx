@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Search, CreditCard, ArrowDownCircle, ArrowUpCircle, Edit } from 'lucide-react';
 import Modal from '../components/Modal';
+import SearchableSelect from '../components/SearchableSelect';
 import { useAuth } from '../App';
 
 function Vouchers() {
@@ -90,8 +91,7 @@ function Vouchers() {
                 customer_id: formData.customer_id ? parseInt(formData.customer_id) : null,
                 supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
                 invoice_id: formData.invoice_id ? parseInt(formData.invoice_id) : null,
-                amount: parseFloat(formData.amount) || 0,
-                account_id: null
+                amount: parseFloat(formData.amount) || 0
             };
 
             if (editMode) {
@@ -290,15 +290,23 @@ function Vouchers() {
                         <div className="form-group">
                             <label className="form-label">{formData.type === 'receipt' ? t('dash_customer') : t('dash_supplier')}</label>
                             {formData.type === 'receipt' ? (
-                                <select className="form-select" value={formData.customer_id} onChange={handleCustomerChange} disabled={editMode}>
-                                    <option value="">{t('vouch_selectCustomer')}</option>
-                                    {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({formatCurrency(c.balance)})</option>)}
-                                </select>
+                                <SearchableSelect
+                                    options={customers.map(c => ({ value: String(c.id), label: `${c.name} (${formatCurrency(c.balance)})` }))}
+                                    value={formData.customer_id ? String(formData.customer_id) : ''}
+                                    onChange={(val) => handleCustomerChange({ target: { value: val } })}
+                                    placeholder={t('vouch_selectCustomer')}
+                                    emptyLabel={t('vouch_selectCustomer')}
+                                    disabled={editMode}
+                                />
                             ) : (
-                                <select className="form-select" value={formData.supplier_id} onChange={handleSupplierChange} disabled={editMode}>
-                                    <option value="">{t('vouch_selectSupplier')}</option>
-                                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name} ({formatCurrency(s.balance)})</option>)}
-                                </select>
+                                <SearchableSelect
+                                    options={suppliers.map(s => ({ value: String(s.id), label: `${s.name} (${formatCurrency(s.balance)})` }))}
+                                    value={formData.supplier_id ? String(formData.supplier_id) : ''}
+                                    onChange={(val) => handleSupplierChange({ target: { value: val } })}
+                                    placeholder={t('vouch_selectSupplier')}
+                                    emptyLabel={t('vouch_selectSupplier')}
+                                    disabled={editMode}
+                                />
                             )}
                         </div>
                         <div className="form-group">
@@ -306,7 +314,6 @@ function Vouchers() {
                             <select className="form-select" value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}>
                                 <option value="cash">{t('inv_cash')}</option>
                                 <option value="bank">{t('inv_bank')}</option>
-                                <option value="check">{t('vouch_check')}</option>
                             </select>
                         </div>
                     </div>

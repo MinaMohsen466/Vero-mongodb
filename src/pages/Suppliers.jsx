@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, Truck, FileText } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Truck, FileText, ToggleLeft, ToggleRight, Filter } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
 
@@ -8,13 +8,14 @@ function Suppliers() {
     const [suppliers, setSuppliers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
     const [showModal, setShowModal] = useState(false);
     const [showInvoicesModal, setShowInvoicesModal] = useState(false);
     const [selectedSupplier, setSelectedSupplier] = useState(null);
     const [supplierInvoices, setSupplierInvoices] = useState([]);
     const [editingSupplier, setEditingSupplier] = useState(null);
     const [formData, setFormData] = useState({
-        name: '', phone: '', email: '', address: '', tax_number: '', notes: ''
+        name: '', phone: '', email: '', address: '', tax_number: '', notes: '', is_active: 1
     });
 
     useEffect(() => { loadSuppliers(); }, []);
@@ -49,23 +50,31 @@ function Suppliers() {
         }
     };
 
+    const handleToggleActive = async (supplier) => {
+        try {
+            const newStatus = supplier.is_active ? 0 : 1;
+            await window.api.suppliers.update({ ...supplier, is_active: newStatus });
+            loadSuppliers();
+        } catch (error) { console.error('Error toggling supplier status:', error); }
+    };
+
     const openModal = (supplier = null) => {
         if (supplier) {
             setEditingSupplier(supplier);
             setFormData({
                 name: supplier.name || '', phone: supplier.phone || '', email: supplier.email || '',
-                address: supplier.address || '', tax_number: supplier.tax_number || '', notes: supplier.notes || ''
+                address: supplier.address || '', tax_number: supplier.tax_number || '',
+                notes: supplier.notes || '', is_active: supplier.is_active !== undefined ? supplier.is_active : 1
             });
         } else {
             setEditingSupplier(null);
-            setFormData({ name: '', phone: '', email: '', address: '', tax_number: '', notes: '' });
+            setFormData({ name: '', phone: '', email: '', address: '', tax_number: '', notes: '', is_active: 1 });
         }
         setShowModal(true);
     };
 
     const closeModal = () => { setShowModal(false); setEditingSupplier(null); };
 
-    // Show supplier invoices in modal
     const showSupplierInvoices = async (supplier) => {
         setSelectedSupplier(supplier);
         try {
@@ -75,10 +84,14 @@ function Suppliers() {
         setShowInvoicesModal(true);
     };
 
-    const filteredSuppliers = suppliers.filter(s =>
-        s.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.phone?.includes(searchQuery) || s.code?.includes(searchQuery)
-    );
+    const filteredSuppliers = suppliers.filter(s => {
+        const matchesSearch = s.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            s.phone?.includes(searchQuery) || s.code?.includes(searchQuery);
+        const matchesStatus = statusFilter === 'all' ||
+            (statusFilter === 'active' && s.is_active) ||
+            (statusFilter === 'inactive' && !s.is_active);
+        return matchesSearch && matchesStatus;
+    });
 
     const formatCurrency = (amount) => new Intl.NumberFormat('ar-KW', { minimumFractionDigits: 3 }).format(amount || 0) + ' د.ك';
 
@@ -87,13 +100,27 @@ function Suppliers() {
     return (
         <div>
             <div className="page-header">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4" style={{ flexWrap: 'wrap', gap: '10px' }}>
+                    {/* Search */}
                     <div style={{ position: 'relative' }}>
                         <input type="text" className="form-input" placeholder="بحث عن مورد..."
                             value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                            style={{ paddingRight: '40px', width: '300px' }} />
+                            style={{ paddingRight: '40px', width: '260px' }} />
                         <Search size={18} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     </div>
+                    {/* Status Filter */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Filter size={16} style={{ color: 'var(--text-muted)' }} />
+                        <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+                            style={{ width: '140px' }}>
+                            <option value="all">الكل</option>
+                            <option value="active">النشطون فقط</option>
+                            <option value="inactive">غير النشطين</option>
+                        </select>
+                    </div>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        {filteredSuppliers.length} مورد
+                    </span>
                 </div>
                 {user?.permissions?.suppliers?.can_create && (
                     <button className="btn btn-primary" onClick={() => openModal()}>
@@ -111,12 +138,15 @@ function Suppliers() {
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>الكود</th><th>الاسم</th><th>الهاتف</th><th>البريد</th><th>الرصيد</th><th>الحالة</th><th>الإجراءات</th>
+                                        <th>الكود</th><th>الاسم</th><th>الهاتف</th><th>البريد</th>
+                                        <th>الرصيد</th><th>الحالة</th><th>الإجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {filteredSuppliers.map(supplier => (
-                                        <tr key={supplier.id} style={{ cursor: 'pointer' }} onClick={() => showSupplierInvoices(supplier)}>
+                                        <tr key={supplier.id}
+                                            style={{ cursor: 'pointer', opacity: supplier.is_active ? 1 : 0.6 }}
+                                            onClick={() => showSupplierInvoices(supplier)}>
                                             <td>{supplier.code}</td>
                                             <td className="font-bold">{supplier.name}</td>
                                             <td>{supplier.phone || '-'}</td>
@@ -128,7 +158,15 @@ function Suppliers() {
                                             <td onClick={(e) => e.stopPropagation()}>
                                                 <div className="table-actions">
                                                     {user?.permissions?.suppliers?.can_edit && (
-                                                        <button className="btn btn-ghost btn-sm" onClick={() => openModal(supplier)} title="تعديل"><Edit2 size={16} /></button>
+                                                        <>
+                                                            <button className="btn btn-ghost btn-sm" onClick={() => openModal(supplier)} title="تعديل"><Edit2 size={16} /></button>
+                                                            <button
+                                                                className={`btn btn-ghost btn-sm ${supplier.is_active ? 'text-warning' : 'text-success'}`}
+                                                                onClick={() => handleToggleActive(supplier)}
+                                                                title={supplier.is_active ? 'تعطيل' : 'تفعيل'}>
+                                                                {supplier.is_active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                                                            </button>
+                                                        </>
                                                     )}
                                                     {user?.permissions?.suppliers?.can_delete && (
                                                         <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(supplier.id)} title="حذف"><Trash2 size={16} /></button>
@@ -157,7 +195,17 @@ function Suppliers() {
                         <div className="form-group"><label className="form-label">الرقم الضريبي</label><input type="text" className="form-input" value={formData.tax_number} onChange={(e) => setFormData({ ...formData, tax_number: e.target.value })} /></div>
                     </div>
                     <div className="form-group"><label className="form-label">العنوان</label><input type="text" className="form-input" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} /></div>
-                    <div className="form-group"><label className="form-label">ملاحظات</label><textarea className="form-textarea" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} /></div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">الحالة</label>
+                            <select className="form-select" value={formData.is_active}
+                                onChange={(e) => setFormData({ ...formData, is_active: parseInt(e.target.value) })}>
+                                <option value={1}>نشط</option>
+                                <option value={0}>غير نشط</option>
+                            </select>
+                        </div>
+                        <div className="form-group"><label className="form-label">ملاحظات</label><textarea className="form-textarea" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} /></div>
+                    </div>
                 </form>
             </Modal>
 

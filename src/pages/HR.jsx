@@ -480,6 +480,16 @@ function LeavesTab() {
         setLeaves(lvs || []);
     };
 
+    // Calculate daily rate from monthly salary (assume 30 days/month)
+    const dailyRate = (empId) => {
+        const emp = employees.find(e => e.id == empId);
+        return emp ? (parseFloat(emp.base_salary || 0) / 30) : 0;
+    };
+
+    const unpaidCost = (empId, days) => {
+        return dailyRate(empId) * (days || 0);
+    };
+
     useEffect(() => { load(); }, []);
 
     const calcDays = (start, end) => {
@@ -504,6 +514,27 @@ function LeavesTab() {
 
     const updateStatus = async (id, status) => {
         await window.api.leaves.updateStatus(id, status, user?.id);
+
+        // If approving an unpaid leave, auto-create a deduction
+        if (status === 'approved') {
+            const leave = leaves.find(l => l.id === id);
+            if (leave && leave.leave_type === 'بدون راتب' && leave.days > 0) {
+                const emp = employees.find(e => e.id == leave.employee_id);
+                if (emp) {
+                    const dailyCost = parseFloat(emp.base_salary || 0) / 30;
+                    const deductionAmount = dailyCost * leave.days;
+                    if (deductionAmount > 0) {
+                        const month = leave.start_date?.substring(0, 7);
+                        await window.api.deductions.create({
+                            employee_id: leave.employee_id,
+                            month,
+                            amount: parseFloat(deductionAmount.toFixed(3)),
+                            reason: `إجازة بدون راتب - ${leave.days} يوم (${leave.start_date} إلى ${leave.end_date})`
+                        });
+                    }
+                }
+            }
+        }
         load();
     };
 
@@ -603,6 +634,21 @@ function LeavesTab() {
                         <input type="date" className="form-input" value={form.end_date} onChange={e => onDates('end_date', e.target.value)} />
                     </div>
                 </div>
+
+                {/* Unpaid leave cost warning */}
+                {form.leave_type === 'بدون راتب' && form.employee_id && form.days > 0 && (
+                    <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '12px 14px', marginBottom: '12px' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--danger, #ef4444)', marginBottom: 4 }}>⚠️ تكلفة الإجازة بدون راتب</div>
+                        <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+                            المعدل اليومي: <strong>{(dailyRate(form.employee_id)).toFixed(3)}</strong> د.ك &nbsp;×&nbsp; {form.days} يوم
+                        </div>
+                        <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--danger, #ef4444)', marginTop: 4 }}>
+                            الخصم المتوقع: {unpaidCost(form.employee_id, form.days).toFixed(3)} د.ك
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4 }}>سيتم إضافة خصم تلقائياً عند اعتماد الإجازة</div>
+                    </div>
+                )}
+
                 <div className="form-group">
                     <label className="form-label">السبب</label>
                     <input type="text" className="form-input" value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} placeholder="سبب الإجازة" />

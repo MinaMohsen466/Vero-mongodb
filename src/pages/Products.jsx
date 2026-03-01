@@ -11,11 +11,12 @@ function Products() {
     const [showModal, setShowModal] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
     const [showCustomUnit, setShowCustomUnit] = useState(false);
+    const [categoryFilter, setCategoryFilter] = useState('');
     const [formData, setFormData] = useState({
         name: '', description: '', unit: 'قطعة', category: '', purchase_price: '', sale_price: '', min_stock: ''
     });
 
-    const units = ['قطعة', 'كيلو', 'جرام', 'متر', 'لتر', 'علبة', 'كرتونة', 'طن', 'حبة', 'عبوة', 'ربطة', 'كيس'];
+    const units = ['درام', 'جالون', 'لتر', 'كيلو', 'جرام', 'قطعة', 'علبة', 'كرتونة'];
 
     useEffect(() => { loadProducts(); }, []);
 
@@ -77,16 +78,31 @@ function Products() {
 
     const formatCurrency = (amount) => new Intl.NumberFormat('ar-KW', { minimumFractionDigits: 3 }).format(amount || 0) + ' د.ك';
 
-    const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.code?.includes(searchQuery));
+    const categories = [...new Set(products.map(p => p.category).filter(Boolean))];
+    const filteredProducts = products.filter(p =>
+        (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.code?.includes(searchQuery)) &&
+        (!categoryFilter || p.category === categoryFilter)
+    );
 
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
 
     return (
         <div>
             <div className="page-header">
-                <div style={{ position: 'relative' }}>
-                    <input type="text" className="form-input" placeholder="بحث..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ paddingRight: '40px', width: '300px' }} />
-                    <Search size={18} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ position: 'relative' }}>
+                        <input type="text" className="form-input" placeholder="بحث..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ paddingRight: '40px', width: '260px' }} />
+                        <Search size={18} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    </div>
+                    {categories.length > 0 && (
+                        <select className="form-select" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={{ width: '160px', margin: 0 }}>
+                            <option value="">كل التصنيفات</option>
+                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    )}
+                    {(searchQuery || categoryFilter) && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => { setSearchQuery(''); setCategoryFilter(''); }} style={{ color: 'var(--text-muted)' }}>✕ مسح</button>
+                    )}
                 </div>
                 {user?.permissions?.products?.can_create && (
                     <button className="btn btn-primary" onClick={() => openModal()}><Plus size={18} /> منتج جديد</button>
@@ -101,13 +117,14 @@ function Products() {
                         <div className="table-container">
                             <table>
                                 <thead>
-                                    <tr><th>الكود</th><th>الاسم</th><th>الوحدة</th><th>سعر الشراء</th><th>سعر البيع</th><th>الكمية</th><th>الإجراءات</th></tr>
+                                    <tr><th>الكود</th><th>الاسم</th><th>التصنيف</th><th>الوحدة</th><th>سعر الشراء</th><th>سعر البيع</th><th>الكمية</th><th>الإجراءات</th></tr>
                                 </thead>
                                 <tbody>
                                     {filteredProducts.map(p => (
                                         <tr key={p.id}>
                                             <td>{p.code}</td>
                                             <td className="font-bold">{p.name}</td>
+                                            <td><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{p.category || '—'}</span></td>
                                             <td>{p.unit}</td>
                                             <td>{formatCurrency(p.purchase_price)}</td>
                                             <td>{formatCurrency(p.sale_price)}</td>

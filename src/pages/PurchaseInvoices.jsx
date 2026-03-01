@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Eye, Trash2, Search, ShoppingBag, Printer, X, Edit } from 'lucide-react';
 import Modal from '../components/Modal';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
+import SearchableSelect from '../components/SearchableSelect';
 import { useAuth } from '../App';
 
 function PurchaseInvoices() {
@@ -12,6 +13,10 @@ function PurchaseInvoices() {
     const [bankAccounts, setBankAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [supplierFilter, setSupplierFilter] = useState('');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [showViewModal, setShowViewModal] = useState(false);
     const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -239,7 +244,14 @@ function PurchaseInvoices() {
 
     const formatCurrency = (amount) => new Intl.NumberFormat('ar-KW', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (settings.general?.currency_symbol || 'د.ك');
 
-    const filteredInvoices = invoices.filter(inv => inv.invoice_number?.includes(searchQuery) || inv.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filteredInvoices = invoices.filter(inv => {
+        const matchesSearch = inv.invoice_number?.includes(searchQuery) || inv.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
+        const matchesSupplier = !supplierFilter || String(inv.supplier_id) === supplierFilter;
+        const matchesDateFrom = !dateFrom || inv.date >= dateFrom;
+        const matchesDateTo = !dateTo || inv.date <= dateTo;
+        return matchesSearch && matchesStatus && matchesSupplier && matchesDateFrom && matchesDateTo;
+    });
 
     const getStatusLabel = (status) => {
         if (status === 'paid') return t('inv_paid');
@@ -252,11 +264,38 @@ function PurchaseInvoices() {
 
     return (
         <div>
-            <div className="page-header">
+            {/* Filter Bar */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '16px', padding: '14px 16px', background: 'var(--bg-secondary)', borderRadius: '10px', border: '1px solid var(--border)' }}>
                 <div style={{ position: 'relative' }}>
-                    <input type="text" className="form-input" placeholder={t('search')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ paddingRight: '40px', width: '300px' }} />
-                    <Search size={18} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input type="text" className="form-input" placeholder={t('search')} value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        style={{ paddingRight: '40px', width: '220px', margin: 0 }} />
+                    <Search size={16} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 </div>
+                <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+                    style={{ width: '130px', margin: 0 }}>
+                    <option value="all">كل الحالات</option>
+                    <option value="paid">مدفوعة</option>
+                    <option value="pending">آجلة</option>
+                </select>
+                <div style={{ width: '200px' }}>
+                    <SearchableSelect
+                        options={suppliers.map(s => ({ value: String(s.id), label: s.name }))}
+                        value={supplierFilter}
+                        onChange={setSupplierFilter}
+                        placeholder="كل الموردين"
+                        emptyLabel="كل الموردين"
+                    />
+                </div>
+                <input type="date" className="form-input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                    style={{ width: '150px', margin: 0 }} title="من تاريخ" />
+                <input type="date" className="form-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                    style={{ width: '150px', margin: 0 }} title="إلى تاريخ" />
+                {(searchQuery || statusFilter !== 'all' || supplierFilter || dateFrom || dateTo) && (
+                    <button className="btn btn-ghost btn-sm" onClick={() => { setSearchQuery(''); setStatusFilter('all'); setSupplierFilter(''); setDateFrom(''); setDateTo(''); }}
+                        style={{ color: 'var(--text-muted)' }}>✕ مسح</button>
+                )}
+                <span style={{ marginRight: 'auto', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{filteredInvoices.length} فاتورة</span>
                 {user?.permissions?.purchase_invoices?.can_create && (
                     <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> {t('pinv_add')}</button>
                 )}
@@ -308,7 +347,16 @@ function PurchaseInvoices() {
                 {error && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{error}</div>}
                 <form onSubmit={handleSubmit}>
                     <div className="form-row">
-                        <div className="form-group"><label className="form-label">{t('pinv_supplier')}</label><select className="form-select" value={formData.supplier_id} onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}><option value="">{t('pinv_selectSupplier')}</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                        <div className="form-group">
+                            <label className="form-label">{t('pinv_supplier')}</label>
+                            <SearchableSelect
+                                options={suppliers.map(s => ({ value: String(s.id), label: s.name }))}
+                                value={formData.supplier_id ? String(formData.supplier_id) : ''}
+                                onChange={(val) => setFormData({ ...formData, supplier_id: val })}
+                                placeholder={t('pinv_selectSupplier')}
+                                emptyLabel={t('pinv_selectSupplier')}
+                            />
+                        </div>
                         <div className="form-group"><label className="form-label">{t('inv_date')}</label><input type="date" className="form-input" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} /></div>
                         <div className="form-group"><label className="form-label">{t('inv_dueDate')}</label><input type="date" className="form-input" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} /></div>
                     </div>

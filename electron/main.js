@@ -7,6 +7,7 @@ let mainWindow;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
+        title: 'Vero',
         width: 1400,
         height: 900,
         minWidth: 1200,
@@ -129,6 +130,15 @@ ipcMain.handle('settings:get', async (event, key) => db.settings.get(key));
 ipcMain.handle('settings:getAll', async () => db.settings.getAll());
 ipcMain.handle('settings:set', async (event, { category, key, value }) => db.settings.set(category, key, value));
 ipcMain.handle('settings:backup', async () => db.backup());
+ipcMain.handle('settings:backupToPath', async (event, destPath) => db.backupToPath(destPath));
+ipcMain.handle('settings:getDbPath', async () => db.getDbPath());
+ipcMain.handle('settings:changeDbPath', async (event, newFolderPath) => {
+    const result = db.changeDbPath(newFolderPath);
+    if (result.success) {
+        setTimeout(() => { app.relaunch(); app.exit(0); }, 500);
+    }
+    return result;
+});
 ipcMain.handle('settings:restore', async (event, filePath) => db.restore(filePath));
 
 // --- Permissions ---

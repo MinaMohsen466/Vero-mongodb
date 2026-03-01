@@ -12,7 +12,21 @@ class AppDatabase {
     async init(app) {
         this.app = app;
         const userDataPath = app.getPath('userData');
-        this.dbPath = path.join(userDataPath, 'accapp.db');
+        const configPath = path.join(userDataPath, 'vero-config.json');
+
+        // Read custom db path from config if it exists
+        let customDbPath = null;
+        try {
+            if (fs.existsSync(configPath)) {
+                const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                if (config.dbPath && fs.existsSync(config.dbPath)) {
+                    customDbPath = config.dbPath;
+                }
+            }
+        } catch (e) { /* ignore config errors */ }
+
+        this.dbPath = customDbPath || path.join(userDataPath, 'accapp.db');
+        this.configPath = configPath;
 
         const SQL = await initSqlJs();
 
@@ -268,6 +282,34 @@ class AppDatabase {
         const data = this.db.export();
         fs.writeFileSync(backupPath, Buffer.from(data));
         return { success: true, path: backupPath };
+    }
+
+    backupToPath(destPath) {
+        try {
+            const data = this.db.export();
+            fs.writeFileSync(destPath, Buffer.from(data));
+            return { success: true, path: destPath };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    getDbPath() {
+        return this.dbPath;
+    }
+
+    changeDbPath(newFolderPath) {
+        try {
+            const newDbPath = path.join(newFolderPath, 'accapp.db');
+            // Save current db to new location
+            const data = this.db.export();
+            fs.writeFileSync(newDbPath, Buffer.from(data));
+            // Write config to persist the new path
+            fs.writeFileSync(this.configPath, JSON.stringify({ dbPath: newDbPath }, null, 2));
+            return { success: true, path: newDbPath };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
     }
 }
 
@@ -709,8 +751,59 @@ class VouchersRepo {
     update(v) {
         const n = (val) => val === undefined ? null : val;
         try {
-            this.db.run("UPDATE vouchers SET date=?, amount=?, account_id=?, payment_method=?, reference=?, description=? WHERE id=?",
-                [v.date, n(v.amount) || 0, n(v.account_id), n(v.payment_method), n(v.reference), n(v.description), v.id]);
+            // Get old voucher to reverse effects
+            const old = this.getById(v.id);
+            if (!old) return { success: false, error: 'Voucher not found' };
+
+            // 1. Reverse old customer/supplier balance
+            if (old.type === 'receipt' && old.customer_id) {
+                this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [old.amount, old.customer_id]);
+            } else if (old.type === 'payment' && old.supplier_id) {
+                this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [old.amount, old.supplier_id]);
+            }
+
+            // 2. Reverse old invoice paid amount if linked
+            if (old.invoice_id) {
+                this.db.run("UPDATE invoices SET status = 'pending', paid = CASE WHEN paid - ? < 0 THEN 0 ELSE paid - ? END WHERE id = ?",
+                    [old.amount, old.amount, old.invoice_id]);
+            }
+
+            // 3. Delete old journal entry (also reverses account balances)
+            if (old.journal_entry_id) {
+                this._deleteJournalEntry(old.journal_entry_id);
+            }
+
+            // 4. Update the voucher record
+            this.db.run("UPDATE vouchers SET date=?, amount=?, payment_method=?, reference=?, description=?, journal_entry_id=NULL WHERE id=?",
+                [v.date, n(v.amount) || 0, n(v.payment_method) || 'cash', n(v.reference), n(v.description), v.id]);
+
+            // Re-read the voucher with updated values to build journal entry
+            const amount = parseFloat(v.amount) || 0;
+
+            // 5. Apply new customer/supplier balance
+            if (old.type === 'receipt' && old.customer_id) {
+                this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [amount, old.customer_id]);
+            } else if (old.type === 'payment' && old.supplier_id) {
+                this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [amount, old.supplier_id]);
+            }
+
+            // 6. Re-apply linked invoice paid amount if linked
+            if (old.invoice_id) {
+                this.db.run("UPDATE invoices SET paid = paid + ? WHERE id = ?", [amount, old.invoice_id]);
+                // Check if now fully paid
+                const inv = this.db.get("SELECT total, paid FROM invoices WHERE id = ?", [old.invoice_id]);
+                if (inv && inv.paid >= inv.total) {
+                    this.db.run("UPDATE invoices SET status = 'paid' WHERE id = ?", [old.invoice_id]);
+                }
+            }
+
+            // 7. Create new journal entry
+            const newVoucher = { ...old, amount, payment_method: v.payment_method || 'cash', date: v.date };
+            const jeId = this._createVoucherJournalEntry(newVoucher, v.id, old.voucher_number);
+            if (jeId) {
+                this.db.run('UPDATE vouchers SET journal_entry_id = ? WHERE id = ?', [jeId, v.id]);
+            }
+
             return { success: true };
         } catch (e) { return { success: false, error: e.message }; }
     }

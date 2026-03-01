@@ -93,6 +93,9 @@ contextBridge.exposeInMainWorld('api', {
         getAll: () => ipcRenderer.invoke('settings:getAll'),
         set: (category, key, value) => ipcRenderer.invoke('settings:set', { category, key, value }),
         backup: () => ipcRenderer.invoke('settings:backup'),
+        backupToPath: (destPath) => ipcRenderer.invoke('settings:backupToPath', destPath),
+        getDbPath: () => ipcRenderer.invoke('settings:getDbPath'),
+        changeDbPath: (newFolderPath) => ipcRenderer.invoke('settings:changeDbPath', newFolderPath),
         restore: (filePath) => ipcRenderer.invoke('settings:restore', filePath)
     },
 

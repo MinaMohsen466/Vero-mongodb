@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Eye, Trash2, Search, ShoppingCart, Printer, X, Edit } from 'lucide-react';
 import Modal from '../components/Modal';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
+import SearchableSelect from '../components/SearchableSelect';
 import { useAuth } from '../App';
 
 function SalesInvoices() {
@@ -12,6 +13,10 @@ function SalesInvoices() {
     const [bankAccounts, setBankAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [customerFilter, setCustomerFilter] = useState('');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [showViewModal, setShowViewModal] = useState(false);
     const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -113,6 +118,20 @@ function SalesInvoices() {
         // Stock validation for sales
         if (!editMode && !validateStock()) {
             return;
+        }
+
+        // Credit limit validation for pending (credit) invoices
+        if (formData.status === 'pending' && formData.customer_id) {
+            const customer = customers.find(c => c.id === parseInt(formData.customer_id));
+            if (customer && customer.credit_limit > 0) {
+                const totals = calculateTotals();
+                const newBalance = (customer.balance || 0) + totals.total;
+                if (newBalance > customer.credit_limit) {
+                    const formatCurr = (a) => new Intl.NumberFormat('ar-KW', { minimumFractionDigits: 3 }).format(a || 0) + ' د.ك';
+                    setError(`تجاوز الحد الائتماني للعميل "${customer.name}"\nالحد الائتماني: ${formatCurr(customer.credit_limit)}\nالرصيد الحالي: ${formatCurr(customer.balance)}\nقيمة الفاتورة: ${formatCurr(totals.total)}\nالإجمالي بعد الفاتورة: ${formatCurr(newBalance)}`);
+                    return;
+                }
+            }
         }
 
         setSaving(true);
@@ -229,7 +248,7 @@ function SalesInvoices() {
             setSettings(freshSettings || {});
             console.log('[SalesInvoices.viewInvoice] Fresh settings reloaded:', freshSettings);
             console.log('[SalesInvoices.viewInvoice] Logo path:', freshSettings?.company?.company_logo);
-            
+
             const invoice = await window.api.invoices.getById(id);
             setSelectedInvoice(invoice);
             setShowViewModal(true);
@@ -285,7 +304,14 @@ function SalesInvoices() {
 
     const formatCurrency = (amount) => new Intl.NumberFormat('ar-KW', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (settings.general?.currency_symbol || 'د.ك');
 
-    const filteredInvoices = invoices.filter(inv => inv.invoice_number?.includes(searchQuery) || inv.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filteredInvoices = invoices.filter(inv => {
+        const matchesSearch = inv.invoice_number?.includes(searchQuery) || inv.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
+        const matchesCustomer = !customerFilter || String(inv.customer_id) === customerFilter;
+        const matchesDateFrom = !dateFrom || inv.date >= dateFrom;
+        const matchesDateTo = !dateTo || inv.date <= dateTo;
+        return matchesSearch && matchesStatus && matchesCustomer && matchesDateFrom && matchesDateTo;
+    });
 
     const getStatusLabel = (status) => {
         if (status === 'paid') return t('inv_paid');
@@ -298,11 +324,44 @@ function SalesInvoices() {
 
     return (
         <div>
-            <div className="page-header">
+            {/* Filter Bar */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '16px', padding: '14px 16px', background: 'var(--bg-secondary)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                {/* Search */}
                 <div style={{ position: 'relative' }}>
-                    <input type="text" className="form-input" placeholder={t('search')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ paddingRight: '40px', width: '300px' }} />
-                    <Search size={18} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input type="text" className="form-input" placeholder={t('search')} value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        style={{ paddingRight: '40px', width: '220px', margin: 0 }} />
+                    <Search size={16} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 </div>
+                {/* Status Filter */}
+                <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+                    style={{ width: '130px', margin: 0 }}>
+                    <option value="all">كل الحالات</option>
+                    <option value="paid">مدفوعة</option>
+                    <option value="pending">آجلة</option>
+                </select>
+                {/* Customer Filter */}
+                <div style={{ width: '200px' }}>
+                    <SearchableSelect
+                        options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+                        value={customerFilter}
+                        onChange={setCustomerFilter}
+                        placeholder="كل العملاء"
+                        emptyLabel="كل العملاء"
+                    />
+                </div>
+                {/* Date From */}
+                <input type="date" className="form-input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                    style={{ width: '150px', margin: 0 }} title="من تاريخ" />
+                {/* Date To */}
+                <input type="date" className="form-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                    style={{ width: '150px', margin: 0 }} title="إلى تاريخ" />
+                {/* Clear */}
+                {(searchQuery || statusFilter !== 'all' || customerFilter || dateFrom || dateTo) && (
+                    <button className="btn btn-ghost btn-sm" onClick={() => { setSearchQuery(''); setStatusFilter('all'); setCustomerFilter(''); setDateFrom(''); setDateTo(''); }}
+                        style={{ color: 'var(--text-muted)' }}>✕ مسح</button>
+                )}
+                <span style={{ marginRight: 'auto', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{filteredInvoices.length} فاتورة</span>
                 {user?.permissions?.sales_invoices?.can_create && (
                     <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> {t('sinv_add')}</button>
                 )}
@@ -354,7 +413,16 @@ function SalesInvoices() {
                 {error && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{error}</div>}
                 <form onSubmit={handleSubmit}>
                     <div className="form-row">
-                        <div className="form-group"><label className="form-label">{t('sinv_customer')}</label><select className="form-select" value={formData.customer_id} onChange={(e) => setFormData({ ...formData, customer_id: e.target.value })}><option value="">{t('sinv_selectCustomer')}</option>{customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                        <div className="form-group">
+                            <label className="form-label">{t('sinv_customer')}</label>
+                            <SearchableSelect
+                                options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+                                value={formData.customer_id ? String(formData.customer_id) : ''}
+                                onChange={(val) => setFormData({ ...formData, customer_id: val })}
+                                placeholder={t('sinv_selectCustomer')}
+                                emptyLabel={t('sinv_selectCustomer')}
+                            />
+                        </div>
                         <div className="form-group"><label className="form-label">{t('inv_date')}</label><input type="date" className="form-input" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} /></div>
                         <div className="form-group"><label className="form-label">{t('inv_dueDate')}</label><input type="date" className="form-input" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} /></div>
                     </div>

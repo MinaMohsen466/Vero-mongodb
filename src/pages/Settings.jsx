@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Users, Building2, Database, Plus, Edit2, Trash2, Printer, Shield, Image, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Settings as SettingsIcon, Users, Building2, Database, Plus, Edit2, Trash2, Printer, Shield, Image, ToggleLeft, ToggleRight, FolderOpen, Copy, HardDrive } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
 
@@ -16,6 +16,7 @@ function Settings() {
     const [saveStatus, setSaveStatus] = useState('');
     const [logoPreview, setLogoPreview] = useState('');
     const [logoPath, setLogoPath] = useState(''); // Store logo path for company settings
+    const [dbPath, setDbPath] = useState('');
 
     // Local state for general settings (NOT auto-saved)
     const [generalForm, setGeneralForm] = useState({
@@ -105,6 +106,11 @@ function Settings() {
                 const b64 = await window.api.file.readAsBase64(settingsData.company.company_logo);
                 console.log('[Settings.loadData] Logo preview loaded, b64 length:', b64?.length);
                 if (b64) setLogoPreview(b64);
+            }
+            // Load db path
+            if (window.api?.settings?.getDbPath) {
+                const dp = await window.api.settings.getDbPath();
+                if (dp) setDbPath(dp);
             }
         } catch (e) { console.error('[Settings.loadData] Error:', e); }
         setLoading(false);
@@ -260,16 +266,33 @@ function Settings() {
     };
 
     const backup = async () => {
+        // Let user choose where to save the backup
         const result = await window.api.dialog.saveFile({
-            defaultPath: `backup-${new Date().toISOString().split('T')[0]}.db`,
-            filters: [{ name: 'Database', extensions: ['db'] }]
+            defaultPath: `vero_backup_${new Date().toISOString().split('T')[0]}.db`,
+            filters: [{ name: 'Database Backup', extensions: ['db'] }]
         });
         if (!result.canceled && result.filePath) {
-            const backupResult = await window.api.settings.backup();
+            const backupResult = await window.api.settings.backupToPath(result.filePath);
             if (backupResult?.success) {
-                alert(t('set_backupSuccess') + backupResult.path);
+                alert('✅ تم حفظ النسخة الاحتياطية في:\n' + backupResult.path);
             } else {
-                alert(t('set_backupFailed'));
+                alert('❌ فشل حفظ النسخة: ' + (backupResult?.error || ''));
+            }
+        }
+    };
+
+    const changeDbLocation = async () => {
+        const result = await window.api.dialog.openFile({
+            properties: ['openDirectory', 'createDirectory'],
+        });
+        if (!result.canceled && result.filePaths?.length > 0) {
+            const folder = result.filePaths[0];
+            if (confirm(`هل تريد تغيير موقع تخزين قاعدة البيانات إلى:\n${folder}\n\nسيتم نسخ ملف قاعدة البيانات هناك وإعادة تشغيل التطبيق تلقائياً.`)) {
+                const changeResult = await window.api.settings.changeDbPath(folder);
+                if (!changeResult?.success) {
+                    alert('❌ فشل تغيير المسار: ' + (changeResult?.error || ''));
+                }
+                // App will relaunch automatically on success
             }
         }
     };
@@ -722,13 +745,64 @@ function Settings() {
                     )}
 
                     {activeTab === 'backup' && (
-                        <div style={{ textAlign: 'center', padding: '40px' }}>
-                            <Database size={64} style={{ color: 'var(--primary)', marginBottom: '20px' }} />
-                            <h3 style={{ marginBottom: '16px' }}>{t('set_backupTitle')}</h3>
-                            <p style={{ color: 'var(--text-muted)', marginBottom: '24px', maxWidth: '500px', margin: '0 auto 24px' }}>{t('set_backupDesc')}</p>
-                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                                <button className="btn btn-primary" onClick={backup}><Database size={18} /> {t('set_backupNow')}</button>
-                                <button className="btn btn-secondary" onClick={restore}><Database size={18} /> {t('set_restoreFile')}</button>
+                        <div>
+                            {/* Database location card */}
+                            <div style={{ background: 'var(--bg-secondary)', borderRadius: '10px', padding: '20px', marginBottom: '20px', border: '1px solid var(--border)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                                    <HardDrive size={20} style={{ color: 'var(--primary)' }} />
+                                    <h4 style={{ margin: 0, fontWeight: 600 }}>موقع تخزين قاعدة البيانات</h4>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <input
+                                        type="text"
+                                        readOnly
+                                        value={dbPath || 'جاري تحميل المسار...'}
+                                        style={{ flex: 1, fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--text-muted)', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 12px', direction: 'ltr', textAlign: 'left' }}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        title="نسخ"
+                                        onClick={() => { if (dbPath) { navigator.clipboard.writeText(dbPath); } }}
+                                    >
+                                        <Copy size={15} />
+                                    </button>
+                                </div>
+                                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '8px 0 8px' }}>
+                                    ℹ️ هذا المسار هو مكان تخزين بيانات التطبيق تلقائياً. لا تقم بحذف هذا الملف.
+                                </p>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={changeDbLocation}
+                                    style={{ marginTop: '4px' }}
+                                >
+                                    <FolderOpen size={14} /> تغيير موقع التخزين
+                                </button>
+                            </div>
+
+                            {/* Backup & Restore cards */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                <div style={{ background: 'var(--bg-secondary)', borderRadius: '10px', padding: '20px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                                    <Database size={40} style={{ color: 'var(--primary)', marginBottom: '12px' }} />
+                                    <h4 style={{ margin: '0 0 8px' }}>{t('set_backupNow')}</h4>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 16px' }}>
+                                        حفظ نسخة احتياطية من قاعدة البيانات. ستختار مكان حفظ الملف.
+                                    </p>
+                                    <button className="btn btn-primary" onClick={backup} style={{ width: '100%' }}>
+                                        <FolderOpen size={16} /> {t('set_backupNow')}
+                                    </button>
+                                </div>
+                                <div style={{ background: 'var(--bg-secondary)', borderRadius: '10px', padding: '20px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                                    <Database size={40} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
+                                    <h4 style={{ margin: '0 0 8px' }}>{t('set_restoreFile')}</h4>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 16px' }}>
+                                        استعادة بيانات من نسخة احتياطية سابقة. سيتم إعادة تشغيل التطبيق.
+                                    </p>
+                                    <button className="btn btn-secondary" onClick={restore} style={{ width: '100%' }}>
+                                        {t('set_restoreFile')}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}

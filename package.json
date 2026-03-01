@@ -1,7 +1,7 @@
 {
-  "name": "accapp",
+  "name": "vero",
   "version": "1.0.0",
-  "description": "تطبيق محاسبي متكامل",
+  "description": "Vero - نظام المحاسبة المتكامل",
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
@@ -28,8 +28,8 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.accapp.accounting",
-    "productName": "AccApp",
+    "appId": "com.vero.accounting",
+    "productName": "Vero",
     "directories": {
       "output": "dist-electron"
     },

@@ -62,19 +62,20 @@ function Login({ onLogin }) {
             }}>
                 {/* Header */}
                 <div style={{ textAlign: 'center', marginBottom: '36px' }}>
-                    <div style={{
-                        width: '72px', height: '72px',
-                        background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
-                        borderRadius: '18px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        margin: '0 auto 20px',
-                        boxShadow: '0 8px 24px rgba(30,64,175,0.35)',
-                        transform: 'rotate(-5deg)'
-                    }}>
-                        <Lock size={30} color="white" />
-                    </div>
-                    <h1 style={{ fontSize: '26px', color: '#0f172a', margin: '0 0 6px 0', fontWeight: '800', letterSpacing: '-0.5px' }}>
-                        نظام المحاسبة
+                    <img
+                        src="/icon.png"
+                        alt="Vero"
+                        style={{
+                            width: '90px',
+                            height: '90px',
+                            objectFit: 'contain',
+                            margin: '0 auto 16px',
+                            display: 'block',
+                            filter: 'drop-shadow(0 8px 24px rgba(30,64,175,0.3))'
+                        }}
+                    />
+                    <h1 style={{ fontSize: '32px', color: '#1e40af', margin: '0 0 6px 0', fontWeight: '800', letterSpacing: '-1px' }}>
+                        Vero
                     </h1>
                     <p style={{ fontSize: '14px', color: '#64748b', margin: 0, fontWeight: 400 }}>
                         قم بتسجيل الدخول للمتابعة

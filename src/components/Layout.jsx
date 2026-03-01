@@ -98,8 +98,8 @@ function Layout({ children, currentPage, setCurrentPage }) {
             {/* Sidebar */}
             <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
                 <div className="sidebar-header">
-                    <div className="sidebar-logo">م</div>
-                    <span className="sidebar-title">{t('appName')}</span>
+                    <img src="/icon.png" alt="Vero" className="sidebar-logo" style={{ width: '36px', height: '36px', objectFit: 'contain', borderRadius: '8px', background: 'transparent' }} />
+                    <span className="sidebar-title">Vero</span>
                     <button
                         className="sidebar-collapse-btn"
                         onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -132,7 +132,10 @@ function Layout({ children, currentPage, setCurrentPage }) {
                         );
                     })}
                 </nav>
+
             </aside>
+
+
 
             {/* Main Content */}
             <main className="main-content">
