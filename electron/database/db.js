@@ -88,10 +88,11 @@ class AppDatabase {
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, full_name TEXT, role TEXT DEFAULT 'user', is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS permissions (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, module TEXT NOT NULL, can_view INTEGER DEFAULT 1, can_create INTEGER DEFAULT 0, can_edit INTEGER DEFAULT 0, can_delete INTEGER DEFAULT 0, UNIQUE(role, module));
+      CREATE TABLE IF NOT EXISTS user_permissions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, module TEXT NOT NULL, can_view INTEGER DEFAULT 1, can_create INTEGER DEFAULT 0, can_edit INTEGER DEFAULT 0, can_delete INTEGER DEFAULT 0, UNIQUE(user_id, module), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, phone TEXT, email TEXT, address TEXT, tax_number TEXT, balance REAL DEFAULT 0, credit_limit REAL DEFAULT 0, notes TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS suppliers (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, phone TEXT, email TEXT, address TEXT, tax_number TEXT, balance REAL DEFAULT 0, notes TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, parent_id INTEGER, account_type TEXT NOT NULL, nature TEXT NOT NULL, balance REAL DEFAULT 0, is_active INTEGER DEFAULT 1, can_post INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (parent_id) REFERENCES accounts(id));
-      CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, description TEXT, unit TEXT DEFAULT 'قطعة', category TEXT, purchase_price REAL DEFAULT 0, sale_price REAL DEFAULT 0, stock_quantity REAL DEFAULT 0, min_stock REAL DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, description TEXT, unit TEXT DEFAULT 'قطعة', category TEXT, purchase_price REAL DEFAULT 0, sale_price REAL DEFAULT 0, stock_quantity REAL DEFAULT 0, min_stock REAL DEFAULT 0, image TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_number TEXT UNIQUE NOT NULL, type TEXT NOT NULL, customer_id INTEGER, supplier_id INTEGER, date TEXT NOT NULL, due_date TEXT, subtotal REAL DEFAULT 0, discount REAL DEFAULT 0, tax REAL DEFAULT 0, total REAL DEFAULT 0, paid REAL DEFAULT 0, status TEXT DEFAULT 'pending', payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS invoice_items (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id INTEGER NOT NULL, product_id INTEGER, description TEXT, quantity REAL NOT NULL, unit_price REAL NOT NULL, discount REAL DEFAULT 0, tax REAL DEFAULT 0, total REAL NOT NULL, FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS vouchers (id INTEGER PRIMARY KEY AUTOINCREMENT, voucher_number TEXT UNIQUE NOT NULL, type TEXT NOT NULL, date TEXT NOT NULL, amount REAL NOT NULL, account_id INTEGER, customer_id INTEGER, supplier_id INTEGER, payment_method TEXT DEFAULT 'cash', invoice_id INTEGER, reference TEXT, description TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -136,9 +137,24 @@ class AppDatabase {
             if (!hasVchJournal) {
                 this.exec("ALTER TABLE vouchers ADD COLUMN journal_entry_id INTEGER");
             }
+
+            // Check products for image
+            const productCols = this.all("PRAGMA table_info(products)");
+            const hasImage = productCols.some(col => col.name === 'image');
+            if (!hasImage) {
+                this.exec("ALTER TABLE products ADD COLUMN image TEXT");
+            }
         } catch (e) {
             console.log('Migration check:', e.message);
         }
+
+        // Migration: add user_permissions table for per-user individual permissions
+        try {
+            const upCols = this.all("PRAGMA table_info(user_permissions)");
+            if (upCols.length === 0) {
+                this.exec(`CREATE TABLE IF NOT EXISTS user_permissions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, module TEXT NOT NULL, can_view INTEGER DEFAULT 1, can_create INTEGER DEFAULT 0, can_edit INTEGER DEFAULT 0, can_delete INTEGER DEFAULT 0, UNIQUE(user_id, module), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)`);
+            }
+        } catch (e) { console.log('user_permissions migration:', e.message); }
 
         // HR migrations - fix incompatible employees table
         try {
@@ -221,7 +237,7 @@ class AppDatabase {
         // Default Permissions
         const permCount = this.get('SELECT COUNT(*) as count FROM permissions');
         if (permCount.count === 0) {
-            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr'];
+            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'pos', 'database'];
             for (const mod of modules) {
                 // Admin: full access to everything
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', mod]);
@@ -231,7 +247,7 @@ class AppDatabase {
                 dashboard: [1, 0, 0, 0], customers: [1, 1, 1, 0], suppliers: [1, 1, 1, 0], products: [1, 1, 1, 0],
                 sales_invoices: [1, 1, 1, 0], purchase_invoices: [1, 1, 1, 0], receipt_vouchers: [1, 1, 1, 0], payment_vouchers: [1, 1, 1, 0],
                 chart_of_accounts: [1, 0, 0, 0], cash_bank: [1, 0, 0, 0], journal_entries: [1, 1, 0, 0], reports: [1, 0, 0, 0],
-                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [1, 1, 1, 0]
+                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [1, 1, 1, 0], pos: [1, 1, 1, 0]
             };
             for (const [mod, [v, c, e, d]] of Object.entries(accountantPerms)) {
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?)", ['accountant', mod, v, c, e, d]);
@@ -241,7 +257,7 @@ class AppDatabase {
                 dashboard: [1, 0, 0, 0], customers: [0, 0, 0, 0], suppliers: [0, 0, 0, 0], products: [0, 0, 0, 0],
                 sales_invoices: [1, 1, 0, 0], purchase_invoices: [0, 0, 0, 0], receipt_vouchers: [1, 1, 0, 0], payment_vouchers: [0, 0, 0, 0],
                 chart_of_accounts: [0, 0, 0, 0], cash_bank: [0, 0, 0, 0], journal_entries: [0, 0, 0, 0], reports: [0, 0, 0, 0],
-                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [0, 0, 0, 0]
+                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [0, 0, 0, 0], pos: [1, 1, 1, 0], database: [0, 0, 0, 0]
             };
             for (const [mod, [v, c, e, d]] of Object.entries(userPerms)) {
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?)", ['user', mod, v, c, e, d]);
@@ -255,7 +271,24 @@ class AppDatabase {
                     this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 0)", ['accountant', 'hr']);
                     this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'hr']);
                 }
+                // Ensure pos permission exists for existing databases
+                const adminPos = this.get("SELECT id FROM permissions WHERE role='admin' AND module='pos'");
+                if (!adminPos) {
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', 'pos']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 0)", ['accountant', 'pos']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 0)", ['user', 'pos']);
+                }
             } catch (e) { console.log('HR permission migration:', e.message); }
+
+            // Migration: add database permission for existing users
+            try {
+                const adminDb = this.get("SELECT id FROM permissions WHERE role='admin' AND module='database'");
+                if (!adminDb) {
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', 'database']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['accountant', 'database']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'database']);
+                }
+            } catch (e) { console.log('Database permission migration:', e.message); }
         }
     }
 
@@ -275,6 +308,7 @@ class AppDatabase {
         this.salaries = new SalaryRepo(this);
         this.leaves = new LeavesRepo(this);
         this.deductions = new DeductionsRepo(this);
+        this.system = new SystemRepo(this);
     }
 
     backup() {
@@ -311,6 +345,16 @@ class AppDatabase {
             return { success: false, error: e.message };
         }
     }
+
+    vacuum() {
+        try {
+            this.db.exec("VACUUM");
+            this.save();
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
 }
 
 class UsersRepo {
@@ -319,11 +363,29 @@ class UsersRepo {
         const user = this.db.get('SELECT * FROM users WHERE username = ? AND password_hash = ? AND is_active = 1', [username, password]);
         if (user) {
             delete user.password_hash;
-            // Attach permissions
-            const perms = this.db.all('SELECT * FROM permissions WHERE role = ?', [user.role]);
+            // Admins always have full permissions
+            if (user.role === 'admin') {
+                const permMap = {};
+                const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'pos'];
+                for (const mod of modules) permMap[mod] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                user.permissions = permMap;
+                return { success: true, user };
+            }
+            // Start with role-based permissions
+            const rolePerms = this.db.all('SELECT * FROM permissions WHERE role = ?', [user.role]);
             const permMap = {};
-            for (const p of perms) {
+            for (const p of rolePerms) {
                 permMap[p.module] = { can_view: !!p.can_view, can_create: !!p.can_create, can_edit: !!p.can_edit, can_delete: !!p.can_delete };
+            }
+            // Check if user has individual permissions override
+            const hasIndividual = this.db.get('SELECT COUNT(*) as count FROM user_permissions WHERE user_id = ?', [user.id]);
+            if (hasIndividual && hasIndividual.count > 0) {
+                // Override role permissions with individual ones
+                const userPerms = this.db.all('SELECT * FROM user_permissions WHERE user_id = ?', [user.id]);
+                for (const p of userPerms) {
+                    permMap[p.module] = { can_view: !!p.can_view, can_create: !!p.can_create, can_edit: !!p.can_edit, can_delete: !!p.can_delete };
+                }
+                user.has_individual_permissions = true;
             }
             user.permissions = permMap;
             return { success: true, user };
@@ -376,8 +438,8 @@ class AccountsRepo {
 class ProductsRepo {
     constructor(db) { this.db = db; }
     getAll() { return this.db.all('SELECT * FROM products ORDER BY name'); }
-    create(p) { try { const count = this.db.get('SELECT COUNT(*) as count FROM products').count; const code = p.code || `P${String(count + 1).padStart(4, '0')}`; const r = this.db.run("INSERT INTO products (code, name, description, unit, category, purchase_price, sale_price, stock_quantity, min_stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [code, p.name, p.description, p.unit, p.category, p.purchase_price || 0, p.sale_price || 0, p.stock_quantity || 0, p.min_stock || 0]); return { success: true, id: r.lastInsertRowid }; } catch (e) { return { success: false, error: e.message }; } }
-    update(p) { try { this.db.run("UPDATE products SET name=?, description=?, unit=?, category=?, purchase_price=?, sale_price=?, stock_quantity=?, min_stock=?, is_active=? WHERE id=?", [p.name, p.description, p.unit, p.category, p.purchase_price, p.sale_price, p.stock_quantity, p.min_stock, p.is_active ? 1 : 0, p.id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+    create(p) { try { const count = this.db.get('SELECT COUNT(*) as count FROM products').count; const code = p.code || `P${String(count + 1).padStart(4, '0')}`; const r = this.db.run("INSERT INTO products (code, name, description, unit, category, purchase_price, sale_price, stock_quantity, min_stock, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [code, p.name, p.description, p.unit, p.category, p.purchase_price || 0, p.sale_price || 0, p.stock_quantity || 0, p.min_stock || 0, p.image || null]); return { success: true, id: r.lastInsertRowid }; } catch (e) { return { success: false, error: e.message }; } }
+    update(p) { try { this.db.run("UPDATE products SET name=?, description=?, unit=?, category=?, purchase_price=?, sale_price=?, stock_quantity=?, min_stock=?, image=?, is_active=? WHERE id=?", [p.name, p.description, p.unit, p.category, p.purchase_price, p.sale_price, p.stock_quantity, p.min_stock, p.image || null, p.is_active ? 1 : 0, p.id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
     delete(id) { try { this.db.run('DELETE FROM products WHERE id = ?', [id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
 }
 
@@ -951,6 +1013,8 @@ class SettingsRepo {
 
 class PermissionsRepo {
     constructor(db) { this.db = db; }
+
+    // --- Role-based permissions ---
     getByRole(role) {
         const perms = this.db.all('SELECT * FROM permissions WHERE role = ?', [role]);
         const result = {};
@@ -971,6 +1035,43 @@ class PermissionsRepo {
                         [role, module, actions.can_view ? 1 : 0, actions.can_create ? 1 : 0, actions.can_edit ? 1 : 0, actions.can_delete ? 1 : 0]);
                 }
             }
+            return { success: true };
+        } catch (e) { return { success: false, error: e.message }; }
+    }
+
+    // --- Per-user individual permissions ---
+    getUserPermissions(userId) {
+        const userPerms = this.db.all('SELECT * FROM user_permissions WHERE user_id = ?', [userId]);
+        if (userPerms.length === 0) {
+            // No individual perms set — return empty object (will use role defaults)
+            return { hasIndividual: false, permissions: {} };
+        }
+        const result = {};
+        for (const p of userPerms) {
+            result[p.module] = { can_view: !!p.can_view, can_create: !!p.can_create, can_edit: !!p.can_edit, can_delete: !!p.can_delete };
+        }
+        return { hasIndividual: true, permissions: result };
+    }
+
+    saveUserPermissions(userId, permissions) {
+        try {
+            for (const [module, actions] of Object.entries(permissions)) {
+                const existing = this.db.get('SELECT id FROM user_permissions WHERE user_id = ? AND module = ?', [userId, module]);
+                if (existing) {
+                    this.db.run('UPDATE user_permissions SET can_view=?, can_create=?, can_edit=?, can_delete=? WHERE user_id=? AND module=?',
+                        [actions.can_view ? 1 : 0, actions.can_create ? 1 : 0, actions.can_edit ? 1 : 0, actions.can_delete ? 1 : 0, userId, module]);
+                } else {
+                    this.db.run('INSERT INTO user_permissions (user_id, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?)',
+                        [userId, module, actions.can_view ? 1 : 0, actions.can_create ? 1 : 0, actions.can_edit ? 1 : 0, actions.can_delete ? 1 : 0]);
+                }
+            }
+            return { success: true };
+        } catch (e) { return { success: false, error: e.message }; }
+    }
+
+    clearUserPermissions(userId) {
+        try {
+            this.db.run('DELETE FROM user_permissions WHERE user_id = ?', [userId]);
             return { success: true };
         } catch (e) { return { success: false, error: e.message }; }
     }
@@ -1318,6 +1419,75 @@ class DeductionsRepo {
     delete(id) {
         try {
             this.db.run('DELETE FROM employee_deductions WHERE id = ?', [id]);
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+}
+
+class SystemRepo {
+    constructor(db) { this.db = db; }
+
+    isFirstRun() {
+        const setupComplete = this.db.get("SELECT value FROM settings WHERE key = 'setup_complete'");
+        if (setupComplete) {
+            return setupComplete.value === '0';
+        }
+
+        // For backward compatibility: check if it's an existing configured DB
+        const admin = this.db.get("SELECT password_hash FROM users WHERE role = 'admin'");
+        const companyName = this.db.get("SELECT value FROM settings WHERE key = 'company_name'");
+
+        let isDefault = true;
+        if (admin && admin.password_hash !== 'password123') isDefault = false;
+        if (companyName && companyName.value !== 'شركتي') isDefault = false;
+
+        const invoicesDb = this.db.get("SELECT COUNT(*) as c FROM invoices");
+        if (invoicesDb && invoicesDb.c > 0) isDefault = false;
+
+        // Auto-fix existing configured databases
+        if (!isDefault) {
+            this.db.run("INSERT OR REPLACE INTO settings (key, value, category) VALUES ('setup_complete', '1', 'system')");
+            return false;
+        }
+
+        return true;
+    }
+
+    runSetup(data) {
+        try {
+            // Update company settings
+            if (data.company_name) this.db.run("UPDATE settings SET value=? WHERE key='company_name'", [data.company_name]);
+            this.db.run("UPDATE settings SET value=? WHERE key='company_phone'", [data.company_phone || '']);
+            this.db.run("UPDATE settings SET value=? WHERE key='company_address'", [data.company_address || '']);
+            this.db.run("UPDATE settings SET value=? WHERE key='company_tax_number'", [data.company_tax_number || '']);
+            this.db.run("UPDATE settings SET value=? WHERE key='currency'", [data.currency || 'دينار كويتي']);
+
+            if (data.company_logo) {
+                this.db.run("UPDATE settings SET value=? WHERE key='company_logo'", [data.company_logo]);
+            }
+            if (data.invoice_template) {
+                this.db.run("INSERT OR REPLACE INTO settings (key, value, category) VALUES ('invoice_template', ?, 'invoice')", [data.invoice_template]);
+            }
+
+            // Negative stock setting
+            const allowNegative = data.allow_negative_stock ? '1' : '0';
+            this.db.run("INSERT OR REPLACE INTO settings (key, value, category) VALUES ('allow_negative_stock', ?, 'general')", [allowNegative]);
+
+            // Create secondary admin user (Company Manager)
+            if (data.admin_username && data.admin_password) {
+                if (data.admin_username.toLowerCase() === 'admin') {
+                    throw new Error("لا يمكن استخدام اسم المستخدم 'admin' لأنه محجوز للنظام الأساسي. الرجاء اختيار اسم آخر.");
+                }
+
+                // Allow creation of a new admin role user, but keep the original admin untouched
+                this.db.run("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, 'admin')",
+                    [data.admin_username, data.admin_password, data.admin_name || 'مدير الشركة']);
+            }
+
+            // Mark setup as complete
+            this.db.run("INSERT OR REPLACE INTO settings (key, value, category) VALUES ('setup_complete', '1', 'system')");
             return { success: true };
         } catch (e) {
             return { success: false, error: e.message };

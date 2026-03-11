@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { Lock, User, Eye, EyeOff, LogIn } from 'lucide-react';
+import appIcon from '../assets/icon.png';
+import { useAuth } from '../App';
 
 function Login({ onLogin }) {
+    const { t } = useAuth();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -13,7 +16,7 @@ function Login({ onLogin }) {
         setError('');
 
         if (!username || !password) {
-            setError('يرجى إدخال اسم المستخدم وكلمة المرور');
+            setError(t('login_enter_credentials') || 'Please enter username and password');
             return;
         }
 
@@ -63,7 +66,7 @@ function Login({ onLogin }) {
                 {/* Header */}
                 <div style={{ textAlign: 'center', marginBottom: '36px' }}>
                     <img
-                        src="/icon.png"
+                        src={appIcon}
                         alt="Vero"
                         style={{
                             width: '90px',
@@ -78,7 +81,7 @@ function Login({ onLogin }) {
                         Vero
                     </h1>
                     <p style={{ fontSize: '14px', color: '#64748b', margin: 0, fontWeight: 400 }}>
-                        قم بتسجيل الدخول للمتابعة
+                        {t('login_continue') || 'Sign in to continue'}
                     </p>
                 </div>
 
@@ -102,7 +105,7 @@ function Login({ onLogin }) {
 
                     <div style={{ marginBottom: '18px' }}>
                         <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#374151', fontWeight: '600' }}>
-                            اسم المستخدم
+                            {t('username') || 'Username'}
                         </label>
                         <div style={{ position: 'relative' }}>
                             <div style={{
@@ -115,7 +118,7 @@ function Login({ onLogin }) {
                                 type="text"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                placeholder="أدخل اسم المستخدم"
+                                placeholder={t('enter_username') || 'Enter username'}
                                 autoFocus
                                 style={{
                                     width: '100%',
@@ -137,7 +140,7 @@ function Login({ onLogin }) {
 
                     <div style={{ marginBottom: '24px' }}>
                         <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#374151', fontWeight: '600' }}>
-                            كلمة المرور
+                            {t('password') || 'Password'}
                         </label>
                         <div style={{ position: 'relative' }}>
                             <div style={{
@@ -150,7 +153,7 @@ function Login({ onLogin }) {
                                 type={showPassword ? 'text' : 'password'}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="أدخل كلمة المرور"
+                                placeholder={t('enter_password') || 'Enter password'}
                                 style={{
                                     width: '100%',
                                     padding: '13px 44px 13px 44px',
@@ -222,12 +225,12 @@ function Login({ onLogin }) {
                                     borderTop: '2px solid white', borderRadius: '50%',
                                     animation: 'spin 0.8s linear infinite'
                                 }} />
-                                جاري تسجيل الدخول...
+                                {t('signing_in') || 'Signing in...'}
                             </>
                         ) : (
                             <>
                                 <LogIn size={18} />
-                                تسجيل الدخول
+                                {t('sign_in') || 'Sign In'}
                             </>
                         )}
                     </button>
@@ -241,7 +244,7 @@ function Login({ onLogin }) {
                     textAlign: 'center'
                 }}>
                     <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>
-                        المستخدم الافتراضي: <span style={{ color: '#1e40af', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px' }}>admin</span> / <span style={{ color: '#1e40af', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px' }}>password123</span>
+                        {t('default_user_info') || 'Default user'}: <span style={{ color: '#1e40af', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px' }}>admin</span> / <span style={{ color: '#1e40af', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px' }}>password123</span>
                     </p>
                 </div>
             </div>

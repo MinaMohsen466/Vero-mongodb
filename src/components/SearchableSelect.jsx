@@ -1,19 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, ChevronDown, X } from 'lucide-react';
+import { useAuth } from '../App';
 
-/**
- * SearchableSelect - A combobox that allows typing to filter options.
- * Props:
- *   options: Array of { value, label } objects
- *   value: current selected value
- *   onChange: (value) => void
- *   placeholder: string
- *   emptyLabel: string (label for empty/no-selection option)
- *   disabled: bool
- */
-function SearchableSelect({ options = [], value, onChange, placeholder = 'اختر...', emptyLabel = 'الكل', disabled = false }) {
+function SearchableSelect({ options = [], value, onChange, placeholder, emptyLabel, disabled = false }) {
+    const { t } = useAuth();
+
+    const displayPlaceholder = placeholder || t('select') || 'Select...';
+    const displayEmptyLabel = emptyLabel || t('all') || 'All';
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState('');
+    const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
     const containerRef = useRef(null);
     const inputRef = useRef(null);
 
@@ -43,11 +39,16 @@ function SearchableSelect({ options = [], value, onChange, placeholder = 'اخت
 
     const handleTriggerClick = () => {
         if (disabled) return;
+        if (!open && containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            setDropdownPos({
+                top: rect.bottom + window.scrollY + 4,
+                left: rect.left + window.scrollX,
+                width: rect.width
+            });
+        }
         setOpen(prev => {
-            if (!prev) {
-                // Opening — focus input after render
-                setTimeout(() => inputRef.current?.focus(), 30);
-            }
+            if (!prev) setTimeout(() => inputRef.current?.focus(), 30);
             return !prev;
         });
     };
@@ -81,7 +82,7 @@ function SearchableSelect({ options = [], value, onChange, placeholder = 'اخت
                 }}
             >
                 <span style={{ flex: 1, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {selectedOption ? selectedOption.label : placeholder}
+                    {selectedOption ? selectedOption.label : displayPlaceholder}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginRight: '4px' }}>
                     {value && !disabled && (
@@ -98,14 +99,18 @@ function SearchableSelect({ options = [], value, onChange, placeholder = 'اخت
                 </div>
             </div>
 
-            {/* Dropdown */}
+            {/* Dropdown — rendered via fixed position to escape overflow:hidden parents */}
             {open && (
                 <div
                     onMouseDown={handleDropdownMouseDown}
                     style={{
-                        position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 99999,
+                        position: 'fixed',
+                        top: dropdownPos.top,
+                        left: dropdownPos.left,
+                        width: dropdownPos.width,
+                        zIndex: 99999,
                         background: 'var(--bg-primary)', border: '1px solid var(--border)',
-                        borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                        borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.22)',
                         overflow: 'hidden', maxHeight: '280px', display: 'flex', flexDirection: 'column'
                     }}
                 >
@@ -117,7 +122,7 @@ function SearchableSelect({ options = [], value, onChange, placeholder = 'اخت
                             type="text"
                             value={search}
                             onChange={e => setSearch(e.target.value)}
-                            placeholder="ابحث..."
+                            placeholder={t('search') || 'Search...'}
                             onClick={e => e.stopPropagation()}
                             onMouseDown={e => e.stopPropagation()}
                             style={{
@@ -143,12 +148,12 @@ function SearchableSelect({ options = [], value, onChange, placeholder = 'اخت
                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
                             onMouseLeave={e => e.currentTarget.style.background = !value ? 'rgba(59,130,246,0.08)' : 'transparent'}
                         >
-                            {emptyLabel}
+                            {displayEmptyLabel}
                         </div>
 
                         {filtered.length === 0 ? (
                             <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                                لا توجد نتائج
+                                {t('noData') || 'No results found'}
                             </div>
                         ) : (
                             filtered.map(opt => {

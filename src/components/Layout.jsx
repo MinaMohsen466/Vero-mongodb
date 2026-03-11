@@ -1,15 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../App';
+import appIcon from '../assets/icon.png';
 import {
     Home, Users, Truck, ShoppingCart, ShoppingBag, FileText,
     CreditCard, BookOpen, BarChart3, Settings, LogOut,
-    Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight, UserCheck
+    Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight, UserCheck, Menu, Monitor
 } from 'lucide-react';
 
 function Layout({ children, currentPage, setCurrentPage }) {
     const { user, logout, theme, toggleTheme, t } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+    useEffect(() => {
+        if (currentPage === 'pos') {
+            setSidebarCollapsed(true);
+        } else {
+            setSidebarCollapsed(false);
+        }
+    }, [currentPage]);
 
     const menuItems = [
         { id: 'dashboard', labelKey: 'menu_dashboard', icon: Home, permModule: 'dashboard' },
@@ -21,6 +30,7 @@ function Layout({ children, currentPage, setCurrentPage }) {
         { id: 'accounts', labelKey: 'menu_chartOfAccounts', icon: Building2, permModule: 'chart_of_accounts' },
         { id: 'cashbank', labelKey: 'menu_cashBank', icon: Wallet, permModule: 'cash_bank' },
         { type: 'section', labelKey: 'menu_section_invoices' },
+        { id: 'pos', labelKey: 'menu_pos', icon: Monitor, permModule: 'pos' },
         { id: 'sales', labelKey: 'menu_sales', icon: ShoppingCart, permModule: 'sales_invoices' },
         { id: 'purchases', labelKey: 'menu_purchases', icon: ShoppingBag, permModule: 'purchase_invoices' },
         { type: 'section', labelKey: 'menu_section_financial' },
@@ -98,15 +108,8 @@ function Layout({ children, currentPage, setCurrentPage }) {
             {/* Sidebar */}
             <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
                 <div className="sidebar-header">
-                    <img src="/icon.png" alt="Vero" className="sidebar-logo" style={{ width: '36px', height: '36px', objectFit: 'contain', borderRadius: '8px', background: 'transparent' }} />
+                    <img src={appIcon} alt="Vero" className="sidebar-logo" style={{ width: '36px', height: '36px', objectFit: 'contain', borderRadius: '8px' }} />
                     <span className="sidebar-title">Vero</span>
-                    <button
-                        className="sidebar-collapse-btn"
-                        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                        title={sidebarCollapsed ? t('expand') : t('collapse')}
-                    >
-                        {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-                    </button>
                 </div>
 
                 <nav className="sidebar-nav">
@@ -118,7 +121,6 @@ function Layout({ children, currentPage, setCurrentPage }) {
                                 </div>
                             );
                         }
-
                         const Icon = item.icon;
                         return (
                             <div
@@ -132,16 +134,21 @@ function Layout({ children, currentPage, setCurrentPage }) {
                         );
                     })}
                 </nav>
-
             </aside>
-
-
 
             {/* Main Content */}
             <main className="main-content">
                 {/* Header */}
                 <header className="header">
-                    <div className="header-right">
+                    <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <button
+                            className="btn btn-ghost btn-icon"
+                            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                            title={sidebarCollapsed ? t('expand') : t('collapse')}
+                            style={{ color: 'var(--text-muted)' }}
+                        >
+                            <Menu size={20} />
+                        </button>
                         <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>{getPageTitle()}</h2>
                     </div>
 
@@ -161,7 +168,7 @@ function Layout({ children, currentPage, setCurrentPage }) {
 
                         <div className="user-menu">
                             <div className="user-avatar">
-                                {user?.full_name?.charAt(0) || user?.username?.charAt(0) || 'م'}
+                                {user?.full_name?.charAt(0) || user?.username?.charAt(0) || 'U'}
                             </div>
                             <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{user?.full_name || user?.username}</div>

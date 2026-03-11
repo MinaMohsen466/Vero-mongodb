@@ -1,572 +1,718 @@
-import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Users, Building2, Database, Plus, Edit2, Trash2, Printer, Shield, Image, ToggleLeft, ToggleRight, FolderOpen, Copy, HardDrive } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+    Settings as Ico, Users, Building2, Database, Plus, Edit2, Trash2, Printer, Shield,
+    Image, FolderOpen, HardDrive, FileText, Palette, Globe, AlertTriangle, Save,
+    RefreshCw, Download, Upload, Eye, EyeOff, ChevronRight, X, Check
+} from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
+import { toast } from 'react-hot-toast';
 
-function Settings() {
-    const { t, language, setLanguage, user } = useAuth();
-    const [activeTab, setActiveTab] = useState('company');
-    const [settings, setSettings] = useState({});
-    const [users, setUsers] = useState([]);
+// ── Compact Toggle ────────────────────────────────────────────────────────────
+const Tog = ({ on, onChange, small }) => {
+    const sz = small ? { w: 36, h: 20, ball: 14, on: 18, off: 3 } : { w: 44, h: 24, ball: 18, on: 23, off: 3 };
+    return (
+        <div onClick={onChange} style={{
+            width: sz.w, height: sz.h, borderRadius: sz.h, position: 'relative',
+            background: on ? 'var(--primary)' : 'var(--border)', transition: 'background .2s', cursor: 'pointer', flexShrink: 0
+        }}>
+            <div style={{
+                position: 'absolute', top: sz.off, width: sz.ball, height: sz.ball,
+                borderRadius: '50%', background: '#fff', transition: 'left .2s',
+                left: on ? sz.on - sz.ball + sz.off : sz.off, boxShadow: '0 1px 3px rgba(0,0,0,.2)'
+            }} />
+        </div>
+    );
+};
+
+// ── Section Card ──────────────────────────────────────────────────────────────
+const Card = ({ title, icon: Icon, action, children }) => (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, marginBottom: 16, overflow: 'hidden' }}>
+        <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 20px',
+            borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)'
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: '.9rem' }}>
+                {Icon && <Icon size={16} style={{ color: 'var(--primary)' }} />} {title}
+            </div>
+            {action}
+        </div>
+        <div style={{ padding: 20 }}>{children}</div>
+    </div>
+);
+
+// ── Toggle Row ────────────────────────────────────────────────────────────────
+const TRow = ({ label, desc, value, onChange }) => (
+    <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 0', borderBottom: '1px solid var(--border-light)'
+    }}>
+        <div>
+            <div style={{ fontSize: '.875rem', fontWeight: 500 }}>{label}</div>
+            {desc && <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>{desc}</div>}
+        </div>
+        <Tog on={value === 'yes' || value === true} onChange={() => onChange(value === 'yes' || value === true ? 'no' : 'yes')} />
+    </div>
+);
+
+// ── Field ─────────────────────────────────────────────────────────────────────
+const Fld = ({ label, children }) => (
+    <div style={{ marginBottom: 14 }}>
+        <label style={{ display: 'block', marginBottom: 5, fontWeight: 500, fontSize: '.875rem', color: 'var(--text-secondary)' }}>{label}</label>
+        {children}
+    </div>
+);
+
+const inp = {
+    width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8,
+    fontSize: '.875rem', fontFamily: 'inherit', background: 'var(--surface)', color: 'var(--text-primary)',
+    outline: 'none', transition: 'border-color .15s'
+};
+
+// ── Color Preset Swatch ───────────────────────────────────────────────────────
+const COLORS = ['#2563eb', '#10b981', '#ef4444', '#8b5cf6', '#f59e0b', '#06b6d4', '#ec4899', '#000000'];
+const roleColor = r => r === 'admin' ? '#ef4444' : r === 'accountant' ? '#6366f1' : '#10b981';
+
+// ─────────────────────────────────────────────────────────────────────────────
+export default function Settings() {
+    const { user, t } = useAuth();
+
+    const roleName = r => r === 'admin' ? (t('admin_role') || 'Admin') : r === 'accountant' ? (t('accountant_role') || 'Accountant') : (t('user_role') || 'User');
+
+    const PERM_MODS = [
+        { m: 'dashboard', l: t('dashboard') || 'Dashboard', a: ['view'] },
+        { m: 'customers', l: t('customers') || 'Customers', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'suppliers', l: t('suppliers') || 'Suppliers', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'products', l: t('products') || 'Products', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'sales_invoices', l: t('sales_invoices') || 'Sales Invoices', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'purchase_invoices', l: t('purchase_invoices') || 'Purchase Invoices', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'receipt_vouchers', l: t('receipt_vouchers') || 'Receipt Vouchers', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'payment_vouchers', l: t('payment_vouchers') || 'Payment Vouchers', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'chart_of_accounts', l: t('chart_of_accounts') || 'Chart of Accounts', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'cash_bank', l: t('cash_bank') || 'Cash & Bank', a: ['view', 'create'] },
+        { m: 'journal_entries', l: t('journal_entries') || 'Journal Entries', a: ['view', 'create', 'delete'] },
+        { m: 'hr', l: t('hr') || 'HR', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'pos', l: t('pos') || 'POS', a: ['view', 'create'] },
+        { m: 'reports', l: t('reports') || 'Reports', a: ['view'] },
+        { m: 'settings', l: t('settings') || 'Settings', a: ['view', 'edit'] },
+        { m: 'users', l: t('users') || 'Users', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'permissions', l: t('permissions') || 'Permissions', a: ['view', 'edit'] },
+        { m: 'database', l: t('database_management') || 'Database', a: ['view'] },
+    ];
+
+    const PERM_KEYS = [
+        { key: 'can_view', label: t('view') || 'View', act: 'view' },
+        { key: 'can_create', label: t('create') || 'Create', act: 'create' },
+        { key: 'can_edit', label: t('edit') || 'Edit', act: 'edit' },
+        { key: 'can_delete', label: t('delete') || 'Delete', act: 'delete' },
+    ];
+    const isAdmin = user?.role === 'admin';
+    const [sec, setSec] = useState('company');
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [users, setUsers] = useState([]);
+    const [dbPath, setDbPath] = useState('');
+    const [dbSize, setDbSize] = useState('');
+    const [logoPreview, setLogoPreview] = useState('');
+    const [showPw, setShowPw] = useState(false);
     const [showUserModal, setShowUserModal] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
     const [userForm, setUserForm] = useState({ username: '', password: '', full_name: '', role: 'user' });
-    const [saving, setSaving] = useState(false);
-    const [saveStatus, setSaveStatus] = useState('');
-    const [logoPreview, setLogoPreview] = useState('');
-    const [logoPath, setLogoPath] = useState(''); // Store logo path for company settings
-    const [dbPath, setDbPath] = useState('');
+    const [permState, setPermState] = useState({ accountant: {}, user: {} });
+    const [permLoaded, setPermLoaded] = useState(false);
+    const [selUser, setSelUser] = useState(null);
+    const [upState, setUpState] = useState({});
+    const [upHasInd, setUpHasInd] = useState(false);
+    const [upLoading, setUpLoading] = useState(false);
+    const upUserIdRef = useRef(null); // tracks which user we're loading for (prevents race conditions)
+    const dropRef = useRef(null);
 
-    // Local state for general settings (NOT auto-saved)
-    const [generalForm, setGeneralForm] = useState({
-        currency: 'دينار كويتي',
-        currency_symbol: 'د.ك',
-        tax_rate: '0',
-        decimal_places: '3',
-        language: 'ar',
-        allow_negative_stock: 'no',
-        show_financial_summary: 'yes',
-        show_low_stock_products: 'yes',
-        show_customer_receivables: 'yes'
+    const [co, setCo] = useState({ company_name: '', company_address: '', company_phone: '', company_email: '', company_tax_number: '', company_logo: '' });
+    const [gen, setGen] = useState({
+        currency: t('default_currency') || 'Kuwaiti Dinar', currency_symbol: t('currency_kd') || 'KD', tax_rate: '0', decimal_places: '3',
+        allow_negative_stock: 'no', show_financial_summary: 'yes', show_low_stock_products: 'yes', show_customer_receivables: 'yes',
+        show_sales_purchases_charts: 'yes', language: 'en'
+    });
+    const [inv, setInv] = useState({
+        invoice_title_sales: t('sales_invoice') || 'Sales Invoice', invoice_title_purchase: t('purchase_invoice') || 'Purchase Invoice',
+        thank_you_message: t('thank_you_business') || 'Thank you for your business', invoice_footer: '', invoice_terms: '',
+        show_logo: 'yes', show_company_info: 'yes', show_notes: 'yes', show_signature: 'no',
+        show_discount_column: 'yes', show_tax_column: 'no',
+        logo_position: 'center', logo_size: 'medium', print_color: '#2563eb',
+        paper_size: 'A4', paper_orientation: 'portrait', invoice_template: 'modern',
+        voucher_title_receipt: t('receipt_voucher') || 'Receipt Voucher', voucher_title_payment: t('payment_voucher') || 'Payment Voucher', voucher_footer: ''
     });
 
-    // Local state for company settings (NOT auto-saved)
-    const [companyForm, setCompanyForm] = useState({
-        company_name: '',
-        company_address: '',
-        company_phone: '',
-        company_email: '',
-        company_tax_number: '',
-        company_logo: ''
-    });
+    const SECTIONS = [
+        { id: 'company', l: t('company_details') || 'Company Details', icon: Building2 },
+        { id: 'general', l: t('general_settings') || 'General Settings', icon: Ico },
+        { id: 'print_invoice', l: t('invoice_settings') || 'Invoice Settings', icon: FileText },
+        { id: 'print_identity', l: t('visual_identity') || 'Visual Identity', icon: Palette },
+        ...(isAdmin ? [
+            { id: 'users', l: t('users') || 'Users', icon: Users },
+            { id: 'permissions', l: t('role_permissions') || 'Role Permissions', icon: Shield },
+            { id: 'user_permissions', l: t('individual_permissions') || 'Individual Permissions', icon: Users },
+        ] : []),
+        { id: 'database', l: t('database') || 'Database', icon: Database },
+    ];
 
-    // Local state for invoice settings (NOT auto-saved)
-    const [invoiceForm, setInvoiceForm] = useState({
-        invoice_title_sales: 'فاتورة مبيعات',
-        invoice_title_purchase: 'فاتورة مشتريات',
-        invoice_footer: '',
-        invoice_terms: '',
-        show_logo: 'yes',
-        show_company_info: 'yes',
-        paper_size: 'A4',
-        paper_orientation: 'portrait'
-    });
-
+    // ── Load data ──────────────────────────────────────────────────────────────
     useEffect(() => { loadData(); }, []);
+    useEffect(() => { if (sec === 'permissions' && !permLoaded) loadPerms(); }, [sec]);
 
     const loadData = async () => {
         try {
-            const [settingsData, usersData] = await Promise.all([window.api.settings.getAll(), window.api.users.getAll()]);
-            console.log('[Settings.loadData] Settings loaded:', settingsData);
-            console.log('[Settings.loadData] Company logo path:', settingsData?.company?.company_logo);
-            setSettings(settingsData || {});
-            setUsers(usersData || []);
-
-            // Initialize company form from settings
-            if (settingsData?.company) {
-                setCompanyForm({
-                    company_name: settingsData.company.company_name || '',
-                    company_address: settingsData.company.company_address || '',
-                    company_phone: settingsData.company.company_phone || '',
-                    company_email: settingsData.company.company_email || '',
-                    company_tax_number: settingsData.company.company_tax_number || '',
-                    company_logo: settingsData.company.company_logo || ''
-                });
-                setLogoPath(settingsData.company.company_logo || '');
-            }
-            if (settingsData?.general) {
-                setGeneralForm({
-                    currency: settingsData.general.currency || 'دينار كويتي',
-                    currency_symbol: settingsData.general.currency_symbol || 'د.ك',
-                    tax_rate: settingsData.tax?.tax_rate || '0',
-                    decimal_places: settingsData.general.decimal_places || '3',
-                    language: settingsData.general.language || 'ar',
-                    allow_negative_stock: settingsData.general.allow_negative_stock || 'no',
-                    show_financial_summary: settingsData.general.show_financial_summary || 'yes',
-                    show_low_stock_products: settingsData.general.show_low_stock_products || 'yes',
-                    show_customer_receivables: settingsData.general.show_customer_receivables || 'yes'
-                });
-            }
-            if (settingsData?.invoice) {
-                setInvoiceForm({
-                    invoice_title_sales: settingsData.invoice.invoice_title_sales || 'فاتورة مبيعات',
-                    invoice_title_purchase: settingsData.invoice.invoice_title_purchase || 'فاتورة مشتريات',
-                    invoice_footer: settingsData.invoice.invoice_footer || '',
-                    invoice_terms: settingsData.invoice.invoice_terms || '',
-                    show_logo: settingsData.invoice.show_logo || 'yes',
-                    show_company_info: settingsData.invoice.show_company_info || 'yes',
-                    paper_size: settingsData.invoice.paper_size || 'A4',
-                    paper_orientation: settingsData.invoice.paper_orientation || 'portrait'
-                });
-            }
-            // Load logo preview
-            if (settingsData?.company?.company_logo && window.api?.file?.readAsBase64) {
-                console.log('[Settings.loadData] Loading logo preview from:', settingsData.company.company_logo);
-                const b64 = await window.api.file.readAsBase64(settingsData.company.company_logo);
-                console.log('[Settings.loadData] Logo preview loaded, b64 length:', b64?.length);
+            const [sd, ud] = await Promise.all([window.api.settings.getAll(), window.api.users.getAll()]);
+            setUsers(ud || []);
+            if (sd?.company) setCo(prev => ({ ...prev, ...sd.company }));
+            if (sd?.general) setGen(prev => ({ ...prev, ...sd.general, tax_rate: sd.tax?.tax_rate || prev.tax_rate }));
+            if (sd?.invoice) setInv(prev => ({ ...prev, ...sd.invoice }));
+            if (sd?.company?.company_logo && window.api?.file?.readAsBase64) {
+                const b64 = await window.api.file.readAsBase64(sd.company.company_logo);
                 if (b64) setLogoPreview(b64);
             }
-            // Load db path
-            if (window.api?.settings?.getDbPath) {
-                const dp = await window.api.settings.getDbPath();
-                if (dp) setDbPath(dp);
-            }
-        } catch (e) { console.error('[Settings.loadData] Error:', e); }
+            const [path, size] = await Promise.all([
+                window.api.settings?.getDbPath?.() || '',
+                window.api.settings?.getDbSize?.() || ''
+            ]);
+            setDbPath(path || ''); setDbSize(size || '');
+        } catch (e) { console.error(e); }
         setLoading(false);
     };
 
-    const saveSetting = async (category, key, value) => {
-        try {
-            console.log('[saveSetting] Saving:', category, key, '=', value);
-            const result = await window.api.settings.set(category, key, value);
-            console.log('[saveSetting] Result:', result);
-            return result;
-        } catch (e) {
-            console.error('Error saving setting', key, e);
-            return { success: false, error: e?.message };
-        }
-    };
+    const saveSetting = (cat, key, val) => window.api.settings.set(cat, key, val);
 
-    const showSaveStatus = (msg, isSuccess = true) => {
-        setSaveStatus(msg);
-        setTimeout(() => setSaveStatus(''), 2000);
-    };
-
-    const saveGeneralSettings = async () => {
+    const saveSection = async (cat, form, msg) => {
         setSaving(true);
-        setSaveStatus(t('savingProgress'));
         try {
-            await saveSetting('general', 'currency', generalForm.currency);
-            await saveSetting('general', 'currency_symbol', generalForm.currency_symbol);
-            await saveSetting('general', 'tax_rate', generalForm.tax_rate);
-            await saveSetting('general', 'decimal_places', generalForm.decimal_places);
-            await saveSetting('general', 'language', generalForm.language);
-            await saveSetting('general', 'allow_negative_stock', generalForm.allow_negative_stock);
-            await saveSetting('general', 'show_financial_summary', generalForm.show_financial_summary);
-            await saveSetting('general', 'show_low_stock_products', generalForm.show_low_stock_products);
-            await saveSetting('general', 'show_customer_receivables', generalForm.show_customer_receivables);
-
-            // Apply language change immediately
-            if (generalForm.language !== language) {
-                setLanguage(generalForm.language);
-            }
-
-            showSaveStatus(t('savedSuccess'));
-            window.dispatchEvent(new Event('settingsUpdated'));
-        } catch (e) {
-            console.error('Error saving general settings:', e);
-            showSaveStatus(t('saveFailed'), false);
-        }
+            await Promise.all(Object.entries(form).map(([k, v]) => saveSetting(cat, k, v)));
+            toast.success(msg || (t('savedSuccess') || 'Saved successfully')); window.dispatchEvent(new Event('settingsUpdated'));
+        } catch { toast.error(t('errorOccurred') || 'An error occurred'); }
         setSaving(false);
     };
 
-    const saveCompanySettings = async () => {
-        setSaving(true);
-        setSaveStatus(t('savingProgress'));
+    const handleLogo = async () => {
         try {
-            console.log('[saveCompanySettings] Company logo value:', companyForm.company_logo);
-            console.log('[saveCompanySettings] Logo value type:', typeof companyForm.company_logo);
-
-            await saveSetting('company', 'company_name', companyForm.company_name);
-            await saveSetting('company', 'company_address', companyForm.company_address);
-            await saveSetting('company', 'company_phone', companyForm.company_phone);
-            await saveSetting('company', 'company_email', companyForm.company_email);
-            await saveSetting('company', 'company_tax_number', companyForm.company_tax_number);
-            if (companyForm.company_logo && typeof companyForm.company_logo === 'string' && companyForm.company_logo.length > 0) {
-                console.log('[saveCompanySettings] Saving logo path:', companyForm.company_logo);
-                await saveSetting('company', 'company_logo', companyForm.company_logo);
+            const r = await window.api.dialog.openFile({ properties: ['openFile'], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg'] }] });
+            if (!r.canceled && r.filePaths[0]) {
+                const src = r.filePaths[0];
+                const final = window.api?.file?.copyLogo ? (await window.api.file.copyLogo(src)) || src : src;
+                setCo(f => ({ ...f, company_logo: final }));
+                const b64 = await window.api.file?.readAsBase64?.(final);
+                if (b64) setLogoPreview(b64);
             }
+        } catch (e) { console.error(e); }
+    };
 
-            // Reload settings to reflect changes immediately
-            await loadData();
-            showSaveStatus(t('savedSuccess'));
-        } catch (e) {
-            console.error('Error saving company settings:', e);
-            showSaveStatus(t('saveFailed'), false);
-        }
+    const loadPerms = async () => {
+        try {
+            const [a, u] = await Promise.all([window.api.permissions.getByRole('accountant'), window.api.permissions.getByRole('user')]);
+            setPermState({ accountant: a || {}, user: u || {} }); setPermLoaded(true);
+        } catch (e) { console.error(e); }
+    };
+
+    const togglePerm = (role, mod, key) => setPermState(p => ({
+        ...p, [role]: { ...p[role], [mod]: { ...p[role]?.[mod], [key]: !p[role]?.[mod]?.[key] } }
+    }));
+
+    const savePerms = async () => {
+        setSaving(true);
+        try {
+            await Promise.all([
+                window.api.permissions.savePermissions('accountant', permState.accountant),
+                window.api.permissions.savePermissions('user', permState.user)
+            ]);
+            toast.success(t('savedSuccess') || 'Permissions saved successfully');
+        } catch { toast.error(t('errorOccurred') || 'An error occurred'); }
         setSaving(false);
     };
 
-    const saveInvoiceSettings = async () => {
-        setSaving(true);
-        setSaveStatus(t('savingProgress'));
+    const loadUserPerms = async (u) => {
+        // Clear state immediately to avoid showing previous user's permissions
+        setUpState({});
+        setUpHasInd(false);
+        setUpLoading(true);
+        upUserIdRef.current = u.id; // track which user we started loading for
         try {
-            await saveSetting('invoice', 'invoice_title_sales', invoiceForm.invoice_title_sales);
-            await saveSetting('invoice', 'invoice_title_purchase', invoiceForm.invoice_title_purchase);
-            await saveSetting('invoice', 'invoice_footer', invoiceForm.invoice_footer);
-            await saveSetting('invoice', 'invoice_terms', invoiceForm.invoice_terms);
-            await saveSetting('invoice', 'show_logo', invoiceForm.show_logo);
-            await saveSetting('invoice', 'show_company_info', invoiceForm.show_company_info);
-            await saveSetting('invoice', 'paper_size', invoiceForm.paper_size);
-            await saveSetting('invoice', 'paper_orientation', invoiceForm.paper_orientation);
-            showSaveStatus(t('savedSuccess'));
-            window.dispatchEvent(new Event('settingsUpdated'));
-        } catch (e) {
-            console.error('Error saving invoice settings:', e);
-            showSaveStatus(t('saveFailed'), false);
-        }
-        setSaving(false);
-    };
-
-    const handleUserSubmit = async () => {
-        if (editingUser) await window.api.users.update({ ...userForm, id: editingUser.id });
-        else await window.api.users.create(userForm);
-        loadData();
-        setShowUserModal(false);
-    };
-
-    const deleteUser = async (id) => {
-        if (id === 1) { alert(t('set_cantDeleteAdmin')); return; }
-        if (confirm(t('set_deleteUserConfirm'))) { await window.api.users.delete(id); loadData(); }
-    };
-
-    const toggleActive = async (user) => {
-        if (user.id === 1) return; // Can't deactivate admin
-        await window.api.users.update({ ...user, is_active: user.is_active ? 0 : 1 });
-        loadData();
-    };
-
-    const openUserModal = (user = null) => {
-        setEditingUser(user);
-        setUserForm(user ? { username: user.username, password: '', full_name: user.full_name, role: user.role, is_active: user.is_active } : { username: '', password: '', full_name: '', role: 'user', is_active: 1 });
-        setShowUserModal(true);
-    };
-
-    const handleLogoUpload = async () => {
-        try {
-            const result = await window.api.dialog.openFile({
-                properties: ['openFile'],
-                filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg'] }]
-            });
-            if (!result.canceled && result.filePaths.length > 0) {
-                const srcPath = result.filePaths[0];
-                console.log('[handleLogoUpload] Selected file:', srcPath);
-                // Copy logo to app data directory for persistence
-                let finalLogoPath = srcPath;
-                if (window.api?.file?.copyLogo) {
-                    const copiedPath = await window.api.file.copyLogo(srcPath);
-                    console.log('[handleLogoUpload] Copied path:', copiedPath);
-                    if (copiedPath) finalLogoPath = copiedPath;
-                }
-                console.log('[handleLogoUpload] Final logo path:', finalLogoPath);
-                // Update local state only - NOT saved yet
-                setLogoPath(finalLogoPath);
-                setCompanyForm({ ...companyForm, company_logo: finalLogoPath });
-                // Load base64 preview
-                if (window.api?.file?.readAsBase64) {
-                    const b64 = await window.api.file.readAsBase64(finalLogoPath);
-                    console.log('[handleLogoUpload] Preview b64 length:', b64?.length);
-                    if (b64) setLogoPreview(b64);
-                }
+            const r = await window.api.permissions.getUserPermissions(u.id);
+            // Only update state if this user is still selected (race condition guard)
+            if (upUserIdRef.current !== u.id) return;
+            setUpHasInd(r.hasIndividual);
+            if (r.hasIndividual) {
+                setUpState(r.permissions);
+            } else {
+                const rolePerms = await window.api.permissions.getByRole(u.role);
+                if (upUserIdRef.current !== u.id) return; // check again after second await
+                setUpState(rolePerms || {});
             }
-        } catch (e) {
-            console.error('Logo upload error:', e);
-        }
+        } catch (e) { console.error(e); }
+        setUpLoading(false);
+    };
+
+    const saveUserPerms = async () => {
+        if (!selUser) return; setSaving(true);
+        try { await window.api.permissions.saveUserPermissions(selUser.id, upState); setUpHasInd(true); toast.success(t('savedSuccess') || 'Individual permissions saved'); }
+        catch { toast.error(t('errorOccurred') || 'An error occurred'); } setSaving(false);
+    };
+
+    const clearUserPerms = async () => {
+        if (!selUser || !confirm(`${t('reset_perms_confirm') || 'Reset permissions to default for'} ${selUser.full_name}?`)) return;
+        setSaving(true);
+        try {
+            await window.api.permissions.clearUserPermissions(selUser.id); setUpHasInd(false);
+            setUpState(await window.api.permissions.getByRole(selUser.role) || {}); toast.success(t('reset_success') || 'Reset successfully');
+        } catch { toast.error(t('errorOccurred') || 'An error occurred'); } setSaving(false);
+    };
+
+    const saveUser = async () => {
+        try {
+            if (editingUser) await window.api.users.update({ ...userForm, id: editingUser.id });
+            else await window.api.users.create(userForm);
+            toast.success(editingUser ? (t('updated_success') || 'Updated successfully') : (t('added_success') || 'Added successfully'));
+            window.api.users.getAll().then(setUsers); setShowUserModal(false);
+        } catch { toast.error(t('errorOccurred') || 'An error occurred'); }
     };
 
     const backup = async () => {
-        // Let user choose where to save the backup
-        const result = await window.api.dialog.saveFile({
-            defaultPath: `vero_backup_${new Date().toISOString().split('T')[0]}.db`,
-            filters: [{ name: 'Database Backup', extensions: ['db'] }]
-        });
-        if (!result.canceled && result.filePath) {
-            const backupResult = await window.api.settings.backupToPath(result.filePath);
-            if (backupResult?.success) {
-                alert('✅ تم حفظ النسخة الاحتياطية في:\n' + backupResult.path);
-            } else {
-                alert('❌ فشل حفظ النسخة: ' + (backupResult?.error || ''));
-            }
+        const r = await window.api.dialog.saveFile({ defaultPath: `vero_backup_${new Date().toISOString().slice(0, 10)}.db`, filters: [{ name: 'DB', extensions: ['db'] }] });
+        if (!r.canceled && r.filePath) {
+            const res = await window.api.settings.backupToPath(r.filePath);
+            res?.success ? toast.success(t('savedSuccess') || 'Saved successfully') : toast.error((t('failed') || 'Failed') + ': ' + (res?.error || ''));
         }
     };
-
-    const changeDbLocation = async () => {
-        const result = await window.api.dialog.openFile({
-            properties: ['openDirectory', 'createDirectory'],
-        });
-        if (!result.canceled && result.filePaths?.length > 0) {
-            const folder = result.filePaths[0];
-            if (confirm(`هل تريد تغيير موقع تخزين قاعدة البيانات إلى:\n${folder}\n\nسيتم نسخ ملف قاعدة البيانات هناك وإعادة تشغيل التطبيق تلقائياً.`)) {
-                const changeResult = await window.api.settings.changeDbPath(folder);
-                if (!changeResult?.success) {
-                    alert('❌ فشل تغيير المسار: ' + (changeResult?.error || ''));
-                }
-                // App will relaunch automatically on success
-            }
-        }
-    };
-
     const restore = async () => {
-        const result = await window.api.dialog.openFile({
-            properties: ['openFile'],
-            filters: [{ name: 'Database', extensions: ['db'] }]
-        });
-        if (!result.canceled && result.filePaths.length > 0) {
-            if (confirm(t('set_restoreConfirm'))) {
-                const restoreResult = await window.api.settings.restore(result.filePaths[0]);
-                if (restoreResult?.success) {
-                    alert(t('set_restoreSuccess'));
-                    window.location.reload();
-                } else {
-                    alert(t('set_restoreFailed'));
-                }
+        const r = await window.api.dialog.openFile({ properties: ['openFile'], filters: [{ name: 'DB', extensions: ['db'] }] });
+        if (!r.canceled && r.filePaths[0]) {
+            if (confirm(t('restore_confirm') || 'Current data will be replaced. Are you sure?')) {
+                const res = await window.api.settings.restore(r.filePaths[0]);
+                if (res?.success) { toast.success(t('restored_success') || 'Restored successfully'); window.location.reload(); }
+                else toast.error(t('failed') || 'Failed');
             }
         }
     };
-
-    const isAdmin = user?.role === 'admin';
-    const userPerms = user?.permissions || {};
-
-    const allTabs = [
-        { id: 'company', labelKey: 'set_companyInfo', icon: Building2 },
-        { id: 'users', labelKey: 'set_users', icon: Users, permModule: 'users' },
-        { id: 'permissions', labelKey: 'set_permissions', icon: Shield, permModule: 'permissions' },
-        { id: 'general', labelKey: 'set_general', icon: SettingsIcon },
-        { id: 'invoice', labelKey: 'set_invoice', icon: Printer },
-        { id: 'backup', labelKey: 'set_backup', icon: Database },
-    ];
-
-    // Filter tabs based on user permissions
-    const tabs = allTabs.filter(tab => {
-        if (!tab.permModule) return true; // No restriction
-        if (isAdmin) return true;
-        return userPerms[tab.permModule]?.can_view === true;
-    });
-
-    const permModules = [
-        { module: 'dashboard', labelKey: 'menu_dashboard', actions: ['view'] },
-        { module: 'customers', labelKey: 'menu_customers', actions: ['view', 'create', 'edit', 'delete'] },
-        { module: 'suppliers', labelKey: 'menu_suppliers', actions: ['view', 'create', 'edit', 'delete'] },
-        { module: 'products', labelKey: 'menu_products', actions: ['view', 'create', 'edit', 'delete'] },
-        { module: 'sales_invoices', labelKey: 'menu_sales', actions: ['view', 'create', 'edit', 'delete'] },
-        { module: 'purchase_invoices', labelKey: 'menu_purchases', actions: ['view', 'create', 'edit', 'delete'] },
-        { module: 'chart_of_accounts', labelKey: 'menu_chartOfAccounts', actions: ['view', 'create', 'edit', 'delete'] },
-        { module: 'cash_bank', labelKey: 'menu_cashBank', actions: ['view', 'create'] },
-        { module: 'receipt_vouchers', labelKey: 'menu_receiptVoucher', actions: ['view', 'create', 'edit', 'delete'] },
-        { module: 'payment_vouchers', labelKey: 'menu_paymentVoucher', actions: ['view', 'create', 'edit', 'delete'] },
-        { module: 'journal_entries', labelKey: 'menu_journal', actions: ['view', 'create', 'delete'] },
-        { module: 'hr', labelKey: 'menu_hr', actions: ['view', 'create', 'edit', 'delete'] },
-        { module: 'reports', labelKey: 'menu_reports', actions: ['view'] },
-        { module: 'settings', labelKey: 'menu_settings', actions: ['view', 'edit'] },
-        { module: 'users', labelKey: 'set_users', actions: ['view', 'create', 'edit', 'delete'] },
-        { module: 'permissions', labelKey: 'set_permissions', actions: ['view', 'edit'] }
-    ];
-
-    const actionLabels = {
-        view: t('perm_view') || 'عرض',
-        create: t('perm_create') || 'إنشاء',
-        edit: t('perm_edit') || 'تعديل',
-        delete: t('perm_delete') || 'حذف'
-    };
-
-    // Permissions state: { accountant: { customers: { can_view: true, ... } }, user: { ... } }
-    const [permState, setPermState] = useState({ accountant: {}, user: {} });
-    const [permLoaded, setPermLoaded] = useState(false);
-
-    useEffect(() => {
-        if (activeTab === 'permissions' && !permLoaded) {
-            loadPermissions();
-        }
-    }, [activeTab]);
-
-    const loadPermissions = async () => {
-        try {
-            const [accPerms, userPerms] = await Promise.all([
-                window.api.permissions.getByRole('accountant'),
-                window.api.permissions.getByRole('user')
-            ]);
-            setPermState({ accountant: accPerms || {}, user: userPerms || {} });
-            setPermLoaded(true);
-        } catch (e) { console.error('Error loading permissions:', e); }
-    };
-
-    const togglePerm = (role, module, action) => {
-        setPermState(prev => ({
-            ...prev,
-            [role]: {
-                ...prev[role],
-                [module]: {
-                    ...prev[role]?.[module],
-                    [action]: !prev[role]?.[module]?.[action]
-                }
-            }
-        }));
-    };
-
-    const savePermissions = async () => {
-        setSaving(true);
-        try {
-            await window.api.permissions.savePermissions('accountant', permState.accountant);
-            await window.api.permissions.savePermissions('user', permState.user);
-            showSaveStatus(t('savedSuccess'));
-        } catch (e) {
-            showSaveStatus(t('saveFailed'), false);
-        }
-        setSaving(false);
+    const resetApp = async () => {
+        if (confirm(t('reset_app_warning') || '⚠️ Delete all data permanently?') && confirm(t('reset_app_confirm') || 'Second confirmation: Cannot be undone!'))
+            await window.api.settings?.resetApp?.();
     };
 
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
 
+    const btnStyle = {
+        display: 'flex', alignItems: 'center', gap: 8, padding: '9px 18px',
+        border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '.875rem', fontWeight: 500, fontFamily: 'inherit'
+    };
+    const gridTwo = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 };
+    const thStyle = (w) => ({
+        padding: '9px 12px', textAlign: 'center', fontWeight: 600, fontSize: '.78rem',
+        color: 'var(--text-secondary)', background: 'var(--bg-secondary)', width: w
+    });
+
+    // ── Perm Toggle Cell ───────────────────────────────────────────────────────
+    const PermCell = ({ has, enabled, onToggle }) => enabled ? (
+        <div onClick={onToggle} style={{
+            display: 'inline-flex', width: 34, height: 18, borderRadius: 9, position: 'relative',
+            cursor: 'pointer', background: has ? 'var(--primary)' : 'var(--border)', transition: 'background .15s'
+        }}>
+            <div style={{
+                position: 'absolute', top: 2, width: 14, height: 14, borderRadius: '50%', background: '#fff',
+                left: has ? 18 : 2, transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.2)'
+            }} />
+        </div>
+    ) : <span style={{ color: 'var(--border)', fontSize: 12 }}>—</span>;
+
     return (
-        <div>
-            <div className="tabs" style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border)', marginBottom: '20px' }}>
-                {tabs.map(t2 => (
-                    <button key={t2.id} className={`tab ${activeTab === t2.id ? 'active' : ''}`} onClick={() => setActiveTab(t2.id)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <t2.icon size={16} /> {t(t2.labelKey)}
-                    </button>
-                ))}
+        <div style={{ display: 'flex', height: 'calc(100vh - 64px)', overflow: 'hidden', direction: 'rtl' }}>
+
+            {/* ── Sidebar ── */}
+            <div style={{
+                width: 215, flexShrink: 0, background: 'var(--bg-primary)', borderLeft: '1px solid var(--border)',
+                display: 'flex', flexDirection: 'column', overflowY: 'auto'
+            }}>
+                <div style={{ padding: '14px 12px 6px', fontSize: '.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                    {t('settings') || 'Settings'}
+                </div>
+                {SECTIONS.map(s => {
+                    const active = sec === s.id;
+                    return (
+                        <button key={s.id} onClick={() => setSec(s.id)} style={{
+                            display: 'flex', alignItems: 'center', gap: 9, padding: '9px 13px', margin: '2px 6px',
+                            borderRadius: 9, border: 'none', cursor: 'pointer', textAlign: 'right', fontSize: '.85rem',
+                            fontWeight: active ? 700 : 400, fontFamily: 'inherit',
+                            background: active ? 'rgba(37,99,235,.1)' : 'transparent',
+                            color: active ? 'var(--primary)' : 'var(--text-secondary)', transition: 'all .15s'
+                        }}>
+                            <s.icon size={15} style={{ flexShrink: 0 }} />
+                            <span style={{ flex: 1 }}>{s.l}</span>
+                            {active && <ChevronRight size={13} />}
+                        </button>
+                    );
+                })}
             </div>
 
-            {/* Save status indicator */}
-            {saveStatus && (
-                <div style={{ position: 'fixed', bottom: '20px', left: '20px', padding: '12px 24px', background: saveStatus === t('savedSuccess') ? 'var(--success)' : saveStatus === t('saveFailed') ? 'var(--danger)' : 'var(--primary)', color: 'white', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000, fontWeight: 'bold' }}>
-                    {saveStatus}
-                </div>
-            )}
+            {/* ── Content ── */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
 
-            <div className="card">
-                <div className="card-body">
-                    {activeTab === 'company' && (
-                        <div>
-                            <div className="form-group">
-                                <label className="form-label">{t('set_companyLogo')}</label>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
-                                    <div style={{ width: '100px', height: '100px', border: '2px dashed var(--border)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-secondary)', cursor: 'pointer' }} onClick={handleLogoUpload} title={t('set_logoHelp')}>
-                                        {logoPreview ? (
-                                            <img src={logoPreview} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                                        ) : (
-                                            <Image size={32} style={{ color: 'var(--text-muted)' }} />
-                                        )}
-                                    </div>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                                            <input type="text" className="form-input" placeholder={t('set_logoPath')} value={companyForm.company_logo || ''} readOnly style={{ flex: 1 }} />
-                                            <button type="button" className="btn btn-secondary" onClick={handleLogoUpload}>{t('set_chooseFile')}</button>
+                {/* ══ 1. COMPANY ══════════════════════════════════════════════════════ */}
+                {sec === 'company' && <>
+                    <Card title={t('company_logo') || 'Company Logo'} icon={Image}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                            {/* Logo drop zone */}
+                            <div ref={dropRef} onClick={handleLogo}
+                                onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                                onDragLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+                                onDrop={async e => {
+                                    e.preventDefault(); e.currentTarget.style.borderColor = 'var(--border)';
+                                    const file = e.dataTransfer.files[0];
+                                    if (file) {
+                                        const final = window.api?.file?.copyLogo ? (await window.api.file.copyLogo(file.path)) || file.path : file.path;
+                                        setCo(f => ({ ...f, company_logo: final }));
+                                        const b64 = await window.api.file?.readAsBase64?.(final);
+                                        if (b64) setLogoPreview(b64);
+                                    }
+                                }}
+                                style={{
+                                    width: 110, height: 110, borderRadius: 12, border: '2px dashed var(--border)',
+                                    background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    cursor: 'pointer', overflow: 'hidden', flexShrink: 0, transition: 'border-color .2s'
+                                }}>
+                                {logoPreview
+                                    ? <img src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                    : <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}><Image size={32} /><div style={{ fontSize: '.72rem', marginTop: 6 }}>{t('drag_or_click_logo') || 'Drag logo or click'}</div></div>}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.6 }}>
+                                    {t('logo_hint') || 'Drag logo here or click to select. It appears in printed invoices and vouchers.'}
+                                </p>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} onClick={handleLogo}>
+                                        <Upload size={14} /> {t('upload_logo') || 'Upload Logo'}
+                                    </button>
+                                    {logoPreview && <button style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--danger)' }}
+                                        onClick={() => { setLogoPreview(''); setCo(f => ({ ...f, company_logo: '' })); }}>
+                                        <X size={14} /> {t('remove') || 'Remove'}
+                                    </button>}
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <Card title={t('company_details') || 'Company Details'} icon={Building2}>
+                        <div style={gridTwo}>
+                            <Fld label={t('company_name') || 'Company Name'}><input style={inp} value={co.company_name} onChange={e => setCo(f => ({ ...f, company_name: e.target.value }))} /></Fld>
+                            <Fld label={t('tax_number') || 'Tax Number'}><input style={inp} value={co.company_tax_number} onChange={e => setCo(f => ({ ...f, company_tax_number: e.target.value }))} /></Fld>
+                        </div>
+                        <div style={gridTwo}>
+                            <Fld label={t('phone') || 'Phone'}><input style={inp} value={co.company_phone} onChange={e => setCo(f => ({ ...f, company_phone: e.target.value }))} /></Fld>
+                            <Fld label={t('email') || 'Email'}><input style={inp} value={co.company_email} onChange={e => setCo(f => ({ ...f, company_email: e.target.value }))} /></Fld>
+                        </div>
+                        <Fld label={t('address') || 'Address'}><input style={inp} value={co.company_address} onChange={e => setCo(f => ({ ...f, company_address: e.target.value }))} /></Fld>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                            <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving}
+                                onClick={() => saveSection('company', co, t('saved_company_details') || 'Company details saved')}>
+                                <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
+                            </button>
+                        </div>
+                    </Card>
+                </>}
+
+                {/* ══ 2. GENERAL ══════════════════════════════════════════════════════ */}
+                {sec === 'general' && <>
+                    <Card title={t('currency_and_numbers') || 'Currency & Numbers'} icon={Globe}>
+                        <div style={gridTwo}>
+                            <Fld label={t('currency_name') || 'Currency Name'}><input style={inp} value={gen.currency} onChange={e => setGen(f => ({ ...f, currency: e.target.value }))} /></Fld>
+                            <Fld label={t('currency_symbol') || 'Currency Symbol'}><input style={inp} value={gen.currency_symbol} onChange={e => setGen(f => ({ ...f, currency_symbol: e.target.value }))} /></Fld>
+                        </div>
+                        <div style={gridTwo}>
+                            <Fld label={t('tax_rate_percent') || 'Tax Rate (%)'}>
+                                <input style={inp} type="number" value={gen.tax_rate} onChange={e => setGen(f => ({ ...f, tax_rate: e.target.value }))} />
+                            </Fld>
+                            <Fld label={t('decimal_places') || 'Decimal Places'}>
+                                <select style={inp} value={gen.decimal_places} onChange={e => setGen(f => ({ ...f, decimal_places: e.target.value }))}>
+                                    <option value="2">2 {t('digits') || 'Digits'}</option>
+                                    <option value="3">3 {t('digits') || 'Digits'}</option>
+                                </select>
+                            </Fld>
+                        </div>
+                        <div style={gridTwo}>
+                            <Fld label={t('language') || 'Language'}>
+                                <select style={inp} value={gen.language} onChange={e => setGen(f => ({ ...f, language: e.target.value }))}>
+                                    <option value="ar">العربية</option>
+                                    <option value="en">English</option>
+                                </select>
+                            </Fld>
+                        </div>
+                    </Card>
+
+                    <Card title={t('dashboard_options') || 'Dashboard Options'} icon={Ico}>
+                        <TRow label={t('show_financial_summary') || 'Show Financial Summary'} desc={t('desc_financial_summary') || 'Total sales and purchases'} value={gen.show_financial_summary} onChange={v => setGen(f => ({ ...f, show_financial_summary: v }))} />
+                        <TRow label={t('stock_alerts') || 'Stock Alerts'} desc={t('desc_stock_alerts') || 'Products that reached minimum stock limit'} value={gen.show_low_stock_products} onChange={v => setGen(f => ({ ...f, show_low_stock_products: v }))} />
+                        <TRow label={t('customer_receivables') || 'Customer Receivables'} desc={t('desc_customer_receivables') || 'Customers with outstanding balances'} value={gen.show_customer_receivables} onChange={v => setGen(f => ({ ...f, show_customer_receivables: v }))} />
+                        <TRow label={t('charts') || 'Charts'} desc={t('desc_charts') || 'Graphs for sales and purchases volume'} value={gen.show_sales_purchases_charts} onChange={v => setGen(f => ({ ...f, show_sales_purchases_charts: v }))} />
+                        <TRow label={t('allow_negative_stock') || 'Allow Negative Stock'} desc={t('desc_negative_stock') || 'Allows completing sales even when stock is depleted'} value={gen.allow_negative_stock} onChange={v => setGen(f => ({ ...f, allow_negative_stock: v }))} />
+                    </Card>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving}
+                            onClick={async () => {
+                                setSaving(true);
+                                await Promise.all([
+                                    ...Object.entries(gen).map(([k, v]) => k === 'tax_rate' ? saveSetting('tax', k, v) : saveSetting('general', k, v))
+                                ]);
+                                toast.success(t('savedSuccess') || 'Settings saved successfully'); window.dispatchEvent(new Event('settingsUpdated'));
+                                setSaving(false);
+                            }}>
+                            <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_general_settings') || 'Save General Settings')}
+                        </button>
+                    </div>
+                </>}
+
+                {/* ══ 3. PRINT INVOICE ════════════════════════════════════════════════ */}
+                {sec === 'print_invoice' && <>
+                    <Card title={t('invoice_titles') || 'Invoice Titles'} icon={FileText}>
+                        <div style={gridTwo}>
+                            <Fld label={t('sales_invoice_title') || 'Sales Invoice Title'}><input style={inp} value={inv.invoice_title_sales} onChange={e => setInv(f => ({ ...f, invoice_title_sales: e.target.value }))} /></Fld>
+                            <Fld label={t('purchase_invoice_title') || 'Purchase Invoice Title'}><input style={inp} value={inv.invoice_title_purchase} onChange={e => setInv(f => ({ ...f, invoice_title_purchase: e.target.value }))} /></Fld>
+                        </div>
+                        <Fld label={t('welcome_message_top') || 'Welcome Message (Top)'}>
+                            <input style={inp} value={inv.thank_you_message} onChange={e => setInv(f => ({ ...f, thank_you_message: e.target.value }))} placeholder={t('thank_you_business') || 'Thank you for your business'} />
+                        </Fld>
+                        <Fld label={t('footer_bottom') || 'Footer (Bottom)'}>
+                            <input style={inp} value={inv.invoice_footer} onChange={e => setInv(f => ({ ...f, invoice_footer: e.target.value }))} />
+                        </Fld>
+                        <Fld label={t('terms_and_conditions') || 'Terms & Conditions'}>
+                            <textarea style={{ ...inp, minHeight: 80, resize: 'vertical' }} value={inv.invoice_terms} onChange={e => setInv(f => ({ ...f, invoice_terms: e.target.value }))} />
+                        </Fld>
+                    </Card>
+
+                    <Card title={t('voucher_settings') || 'Voucher Settings'} icon={Printer}>
+                        <div style={gridTwo}>
+                            <Fld label={t('receipt_voucher_title') || 'Receipt Voucher Title'}><input style={inp} value={inv.voucher_title_receipt} onChange={e => setInv(f => ({ ...f, voucher_title_receipt: e.target.value }))} /></Fld>
+                            <Fld label={t('payment_voucher_title') || 'Payment Voucher Title'}><input style={inp} value={inv.voucher_title_payment} onChange={e => setInv(f => ({ ...f, voucher_title_payment: e.target.value }))} /></Fld>
+                        </div>
+                        <Fld label={t('voucher_footer') || 'Voucher Footer'}><input style={inp} value={inv.voucher_footer} onChange={e => setInv(f => ({ ...f, voucher_footer: e.target.value }))} /></Fld>
+                    </Card>
+
+                    <Card title={t('show_hide_options') || 'Show/Hide Options'} icon={Eye}>
+                        <TRow label={t('show_company_logo') || 'Show Company Logo'} value={inv.show_logo} onChange={v => setInv(f => ({ ...f, show_logo: v }))} />
+                        <TRow label={t('show_company_info') || 'Show Company Info'} value={inv.show_company_info} onChange={v => setInv(f => ({ ...f, show_company_info: v }))} />
+                        <TRow label={t('show_invoice_notes') || 'Show Invoice Notes'} value={inv.show_notes} onChange={v => setInv(f => ({ ...f, show_notes: v }))} />
+                        <TRow label={t('show_signature_area') || 'Show Signature Area'} value={inv.show_signature} onChange={v => setInv(f => ({ ...f, show_signature: v }))} />
+                        <TRow label={t('show_discount_column') || 'Show Discount Column'} value={inv.show_discount_column} onChange={v => setInv(f => ({ ...f, show_discount_column: v }))} />
+                        <TRow label={t('show_tax_column') || 'Show Tax Column'} value={inv.show_tax_column} onChange={v => setInv(f => ({ ...f, show_tax_column: v }))} />
+                    </Card>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving}
+                            onClick={() => saveSection('invoice', inv, t('saved_print_settings') || 'Print settings saved')}>
+                            <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_print_settings') || 'Save Print Settings')}
+                        </button>
+                    </div>
+                </>}
+
+                {/* ══ 4. PRINT IDENTITY ═══════════════════════════════════════════════ */}
+                {sec === 'print_identity' && <>
+                    <Card title={t('primary_print_color') || 'Primary Print Color'} icon={Palette}>
+                        <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
+                            {t('color_hint') || 'Affects table header, total bar, and divider lines in the printed invoice.'}
+                        </p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
+                            <input type="color" value={inv.print_color || '#2563eb'} onChange={e => setInv(f => ({ ...f, print_color: e.target.value }))}
+                                style={{ width: 48, height: 40, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', padding: 2 }} />
+                            <span style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '.9rem' }}>{inv.print_color}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {COLORS.map(c => (
+                                <div key={c} onClick={() => setInv(f => ({ ...f, print_color: c }))}
+                                    style={{
+                                        width: 32, height: 32, borderRadius: 8, background: c, cursor: 'pointer',
+                                        border: inv.print_color === c ? '3px solid var(--text-primary)' : '2px solid transparent',
+                                        transition: 'border .15s', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                    }}>
+                                    {inv.print_color === c && <Check size={14} color="#fff" />}
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
+
+                    <Card title={t('logo_position_size') || 'Logo Position & Size'} icon={Image}>
+                        <Fld label={t('logo_position') || 'Logo Position'}>
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                {[['right', t('right') || 'Right'], ['center', t('center') || 'Center'], ['left', t('left') || 'Left']].map(([v, l]) => (
+                                    <button key={v} onClick={() => setInv(f => ({ ...f, logo_position: v }))} style={{
+                                        flex: 1, padding: '10px 0', borderRadius: 8, border: inv.logo_position === v ? '2px solid var(--primary)' : '1px solid var(--border)',
+                                        background: inv.logo_position === v ? 'rgba(37,99,235,.08)' : 'transparent',
+                                        color: inv.logo_position === v ? 'var(--primary)' : 'var(--text-secondary)',
+                                        cursor: 'pointer', fontWeight: inv.logo_position === v ? 700 : 400, fontFamily: 'inherit', fontSize: '.875rem', transition: 'all .15s'
+                                    }}>{l}</button>
+                                ))}
+                            </div>
+                        </Fld>
+                        <Fld label={t('logo_size') || 'Logo Size'}>
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                {[['small', t('small') || 'Small'], ['medium', t('medium') || 'Medium'], ['large', t('large') || 'Large']].map(([v, l]) => (
+                                    <button key={v} onClick={() => setInv(f => ({ ...f, logo_size: v }))} style={{
+                                        flex: 1, padding: '10px 0', borderRadius: 8, border: inv.logo_size === v ? '2px solid var(--primary)' : '1px solid var(--border)',
+                                        background: inv.logo_size === v ? 'rgba(37,99,235,.08)' : 'transparent',
+                                        color: inv.logo_size === v ? 'var(--primary)' : 'var(--text-secondary)',
+                                        cursor: 'pointer', fontWeight: inv.logo_size === v ? 700 : 400, fontFamily: 'inherit', fontSize: '.875rem', transition: 'all .15s'
+                                    }}>{l}</button>
+                                ))}
+                            </div>
+                        </Fld>
+                    </Card>
+
+                    <Card title={t('paper_size_orientation') || 'Paper Size & Orientation'} icon={FileText}>
+                        <div style={gridTwo}>
+                            <Fld label={t('paper_size') || 'Paper Size'}>
+                                <select style={inp} value={inv.paper_size} onChange={e => setInv(f => ({ ...f, paper_size: e.target.value }))}>
+                                    <option value="A4">A4</option>
+                                    <option value="A5">A5</option>
+                                    <option value="thermal_80">{t('thermal_80') || 'Thermal 80mm'}</option>
+                                    <option value="thermal_58">{t('thermal_58') || 'Thermal 58mm'}</option>
+                                </select>
+                            </Fld>
+                            <Fld label={t('paper_orientation') || 'Orientation'}>
+                                <select style={inp} value={inv.paper_orientation} onChange={e => setInv(f => ({ ...f, paper_orientation: e.target.value }))}>
+                                    <option value="portrait">{t('portrait') || 'Portrait'}</option>
+                                    <option value="landscape">{t('landscape') || 'Landscape'}</option>
+                                </select>
+                            </Fld>
+                        </div>
+                    </Card>
+
+                    <Card title={t('invoice_template') || 'Invoice Template'} icon={FileText}>
+                        <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14 }}>{t('template_hint') || 'Choose the design that fits your company identity.'}</p>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                            {[
+                                { id: 'modern', label: t('modern') || 'Modern', desc: t('modern_desc') || 'Modern colored bar' },
+                                { id: 'classic', label: t('classic') || 'Classic', desc: t('classic_desc') || 'Formal black & white' },
+                                { id: 'professional', label: t('professional') || 'Professional', desc: t('professional_desc') || 'Gradient bar & badge' },
+                                { id: 'minimal', label: t('minimal') || 'Minimal', desc: t('minimal_desc') || 'Lines only' },
+                            ].map(tmpl => {
+                                const active = inv.invoice_template === tmpl.id;
+                                const c = inv.print_color || '#2563eb';
+                                return (
+                                    <div key={tmpl.id} onClick={() => setInv(f => ({ ...f, invoice_template: tmpl.id }))}
+                                        style={{
+                                            padding: 8, borderRadius: 10, cursor: 'pointer', transition: 'all .15s', overflow: 'hidden',
+                                            border: active ? `2px solid ${c}` : '1px solid var(--border)',
+                                            background: active ? c + '0f' : 'var(--bg-secondary)'
+                                        }}>
+                                        <div style={{ height: 72, background: '#fff', borderRadius: 6, marginBottom: 8, border: '1px solid #eee', padding: 6, overflow: 'hidden' }}>
+                                            {tmpl.id === 'modern' && <div style={{ background: c, height: 16, margin: '-6px -6px 6px', borderRadius: '6px 6px 0 0' }} />}
+                                            {tmpl.id === 'professional' && <div style={{ height: 4, background: `linear-gradient(90deg,${c},${c}88)`, margin: '-6px -6px 6px', borderRadius: '6px 6px 0 0' }} />}
+                                            {tmpl.id === 'classic' && <div style={{ border: '2px solid #000', height: 14, marginBottom: 6 }} />}
+                                            {tmpl.id === 'minimal' && <div style={{ borderBottom: `2px solid ${c}`, marginBottom: 6 }} />}
+                                            <div style={{ height: 5, background: '#e5e7eb', borderRadius: 2, marginBottom: 3, width: '70%' }} />
+                                            <div style={{ height: 4, background: '#f3f4f6', borderRadius: 2, marginBottom: 3, width: '90%' }} />
+                                            <div style={{ height: 4, background: '#f3f4f6', borderRadius: 2, marginBottom: 6, width: '80%' }} />
+                                            <div style={{ height: 11, background: tmpl.id === 'classic' ? '#000' : c, borderRadius: 2, opacity: .9 }} />
                                         </div>
-                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>{t('set_logoHelp')}</p>
+                                        <div style={{ fontWeight: active ? 700 : 500, fontSize: '.83rem', color: active ? c : 'var(--text-primary)', marginBottom: 2 }}>{tmpl.label}</div>
+                                        <div style={{ fontSize: '.72rem', color: 'var(--text-muted)' }}>{tmpl.desc}</div>
                                     </div>
-                                </div>
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">{t('set_companyName')}</label>
-                                <input type="text" className="form-input" value={companyForm.company_name || ''} onChange={e => setCompanyForm({ ...companyForm, company_name: e.target.value })} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">{t('set_companyAddress')}</label>
-                                <input type="text" className="form-input" value={companyForm.company_address || ''} onChange={e => setCompanyForm({ ...companyForm, company_address: e.target.value })} />
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_companyPhone')}</label>
-                                    <input type="text" className="form-input" value={companyForm.company_phone || ''} onChange={e => setCompanyForm({ ...companyForm, company_phone: e.target.value })} />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_companyEmail')}</label>
-                                    <input type="email" className="form-input" value={companyForm.company_email || ''} onChange={e => setCompanyForm({ ...companyForm, company_email: e.target.value })} />
-                                </div>
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">{t('set_taxNumber')}</label>
-                                <input type="text" className="form-input" value={companyForm.company_tax_number || ''} onChange={e => setCompanyForm({ ...companyForm, company_tax_number: e.target.value })} />
-                            </div>
-                            <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid var(--border)' }}>
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={saveCompanySettings}
-                                    disabled={saving}
-                                    style={{ minWidth: '120px' }}
-                                >
-                                    {saving ? t('savingProgress') : t('set_saveData')}
-                                </button>
-                            </div>
+                                );
+                            })}
                         </div>
-                    )}
+                    </Card>
 
-                    {activeTab === 'users' && (
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                <h4>{t('set_userManagement')}</h4>
-                                <button className="btn btn-primary btn-sm" onClick={() => openUserModal()}><Plus size={16} /> {t('set_newUser')}</button>
-                            </div>
-                            <table>
-                                <thead><tr><th>{t('set_username')}</th><th>{t('name')}</th><th>{t('set_role')}</th><th>{t('status')}</th><th>{t('actions')}</th></tr></thead>
-                                <tbody>
-                                    {users.map(u => (
-                                        <tr key={u.id}>
-                                            <td className="font-bold">{u.username}</td>
-                                            <td>{u.full_name}</td>
-                                            <td><span className="badge badge-primary">{u.role === 'admin' ? t('admin') : u.role === 'accountant' ? t('accountant') : t('user')}</span></td>
-                                            <td>
-                                                {u.id !== 1 ? (
-                                                    <button className={`btn btn-sm ${u.is_active ? 'btn-success' : 'btn-danger'}`} onClick={() => toggleActive(u)} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', padding: '4px 10px' }}>
-                                                        {u.is_active ? <><ToggleRight size={14} /> {t('active')}</> : <><ToggleLeft size={14} /> {t('inactive')}</>}
-                                                    </button>
-                                                ) : (
-                                                    <span className="badge badge-success">{t('active')}</span>
-                                                )}
-                                            </td>
-                                            <td><div className="table-actions"><button className="btn btn-ghost btn-sm" onClick={() => openUserModal(u)}><Edit2 size={16} /></button>{u.id !== 1 && <button className="btn btn-ghost btn-sm text-danger" onClick={() => deleteUser(u.id)}><Trash2 size={16} /></button>}</div></td>
-                                        </tr>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving}
+                            onClick={() => saveSection('invoice', inv, t('saved_visual_identity') || 'Visual identity saved')}>
+                            <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_visual_identity') || 'Save Visual Identity')}
+                        </button>
+                    </div>
+                </>}
+
+                {/* ══ 5. USERS ════════════════════════════════════════════════════════ */}
+                {sec === 'users' && <>
+                    <Card title={t('user_management') || 'User Management'} icon={Users} action={
+                        <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff', padding: '7px 14px' }}
+                            onClick={() => { setEditingUser(null); setUserForm({ username: '', password: '', full_name: '', role: 'user' }); setShowPw(false); setShowUserModal(true); }}>
+                            <Plus size={14} /> {t('new_user') || 'New User'}
+                        </button>
+                    }>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr>
+                                    {[t('user') || 'User', t('role') || 'Role', t('status') || 'Status', t('actions') || 'Actions'].map(h => (
+                                        <th key={h} style={{ padding: '9px 12px', textAlign: 'right', fontSize: '.78rem', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--bg-secondary)' }}>{h}</th>
                                     ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {users.map(u => (
+                                    <tr key={u.id} style={{ borderBottom: '1px solid var(--border-light)' }}>
+                                        <td style={{ padding: '12px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                <div style={{
+                                                    width: 36, height: 36, borderRadius: '50%', background: roleColor(u.role),
+                                                    color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, flexShrink: 0
+                                                }}>
+                                                    {(u.full_name || u.username || '?')[0]}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontWeight: 600, fontSize: '.875rem' }}>{u.full_name || u.username}</div>
+                                                    <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>@{u.username}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '12px' }}>
+                                            <span style={{
+                                                padding: '3px 10px', borderRadius: 20, fontSize: '.75rem', fontWeight: 600,
+                                                background: roleColor(u.role) + '18', color: roleColor(u.role)
+                                            }}>
+                                                {roleName(u.role)}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '12px' }}>
+                                            {u.id === 1
+                                                ? <span style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>{t('protected') || 'Protected'}</span>
+                                                : <Tog on={!!u.is_active} onChange={async () => {
+                                                    await window.api.users.update({ ...u, is_active: u.is_active ? 0 : 1 });
+                                                    window.api.users.getAll().then(setUsers);
+                                                }} />}
+                                        </td>
+                                        <td style={{ padding: '12px' }}>
+                                            <div style={{ display: 'flex', gap: 6 }}>
+                                                <button style={{ ...btnStyle, padding: '5px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                                                    onClick={() => { setEditingUser(u); setUserForm({ username: u.username, password: '', full_name: u.full_name || '', role: u.role }); setShowPw(false); setShowUserModal(true); }}>
+                                                    <Edit2 size={13} />
+                                                </button>
+                                                {u.id !== 1 && <button style={{ ...btnStyle, padding: '5px 10px', background: 'rgba(239,68,68,0.1)', border: 'none', color: 'var(--danger)' }}
+                                                    onClick={async () => { if (confirm(t('delete_user_confirm') || 'Delete user?')) { await window.api.users.delete(u.id); window.api.users.getAll().then(setUsers); } }}>
+                                                    <Trash2 size={13} />
+                                                </button>}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </Card>
+                </>}
 
-                    {activeTab === 'permissions' && (
-                        <div>
-                            <h4 style={{ marginBottom: '16px' }}>{t('set_permissionsTitle')}</h4>
-                            <div className="alert alert-info" style={{ marginBottom: '16px' }}>
-                                <strong>{t('notes')}:</strong> {t('set_permissionsNote')}
-                            </div>
+                {/* ══ 6. ROLE PERMISSIONS ═════════════════════════════════════════════ */}
+                {sec === 'permissions' && <>
+                    {!permLoaded && <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>{t('loading') || 'Loading...'}</div>}
+                    {permLoaded && ['accountant', 'user'].map(role => (
+                        <Card key={role} title={`${t('role_permissions') || 'Role Permissions'}: ${roleName(role)}`} icon={Shield}>
                             <div style={{ overflowX: 'auto' }}>
-                                <table style={{ minWidth: '700px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
                                     <thead>
                                         <tr>
-                                            <th rowSpan="2" style={{ verticalAlign: 'middle' }}>{t('set_module')}</th>
-                                            <th colSpan="4" style={{ textAlign: 'center', borderBottom: '1px solid var(--border)' }}>{t('admin')}</th>
-                                            <th colSpan="4" style={{ textAlign: 'center', borderBottom: '1px solid var(--border)' }}>{t('accountant')}</th>
-                                            <th colSpan="4" style={{ textAlign: 'center', borderBottom: '1px solid var(--border)' }}>{t('user')}</th>
-                                        </tr>
-                                        <tr>
-                                            {['admin', 'accountant', 'user'].map(role =>
-                                                ['view', 'create', 'edit', 'delete'].map(act => (
-                                                    <th key={`${role}-${act}`} style={{ textAlign: 'center', fontSize: '0.7rem', padding: '6px 4px', fontWeight: 500 }}>{actionLabels[act]}</th>
-                                                ))
-                                            )}
+                                            <th style={{ ...thStyle(null), textAlign: 'right', padding: '9px 12px' }}>{t('module') || 'Module'}</th>
+                                            {PERM_KEYS.map(pk => <th key={pk.key} style={thStyle(70)}>{pk.label}</th>)}
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {permModules.map(p => (
-                                            <tr key={p.module}>
-                                                <td style={{ fontWeight: 500 }}>{t(p.labelKey)}</td>
-                                                {/* Admin — always fully checked, disabled */}
-                                                {['view', 'create', 'edit', 'delete'].map(act => (
-                                                    <td key={`admin-${act}`} style={{ textAlign: 'center', background: 'rgba(16,185,129,0.05)' }}>
-                                                        {p.actions.includes(act) ? <input type="checkbox" checked disabled /> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                                                    </td>
-                                                ))}
-                                                {/* Accountant — controlled */}
-                                                {['view', 'create', 'edit', 'delete'].map(act => (
-                                                    <td key={`accountant-${act}`} style={{ textAlign: 'center' }}>
-                                                        {p.actions.includes(act) ? (
-                                                            <input type="checkbox"
-                                                                checked={!!permState.accountant?.[p.module]?.[`can_${act}`]}
-                                                                onChange={() => togglePerm('accountant', p.module, `can_${act}`)}
-                                                            />
-                                                        ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                                                    </td>
-                                                ))}
-                                                {/* User — controlled */}
-                                                {['view', 'create', 'edit', 'delete'].map(act => (
-                                                    <td key={`user-${act}`} style={{ textAlign: 'center', background: 'rgba(239,68,68,0.03)' }}>
-                                                        {p.actions.includes(act) ? (
-                                                            <input type="checkbox"
-                                                                checked={!!permState.user?.[p.module]?.[`can_${act}`]}
-                                                                onChange={() => togglePerm('user', p.module, `can_${act}`)}
-                                                            />
-                                                        ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                                        {PERM_MODS.map((m, i) => (
+                                            <tr key={m.m} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
+                                                <td style={{ padding: '9px 12px', fontWeight: 500, fontSize: '.875rem' }}>{m.l}</td>
+                                                {PERM_KEYS.map(pk => (
+                                                    <td key={pk.key} style={{ padding: 8, textAlign: 'center' }}>
+                                                        <PermCell has={!!permState[role]?.[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
+                                                            onToggle={() => togglePerm(role, m.m, pk.key)} />
                                                     </td>
                                                 ))}
                                             </tr>
@@ -574,249 +720,192 @@ function Settings() {
                                     </tbody>
                                 </table>
                             </div>
-                            <div style={{ marginTop: '16px' }}>
-                                <button className="btn btn-primary" onClick={savePermissions} disabled={saving}>
-                                    {saving ? t('savingProgress') : t('set_savePermissions')}
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                        </Card>
+                    ))}
+                    {permLoaded && <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving} onClick={savePerms}>
+                            <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_role_permissions') || 'Save Role Permissions')}
+                        </button>
+                    </div>}
+                </>}
 
-                    {activeTab === 'general' && (
-                        <div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_currency')}</label>
-                                    <select className="form-select" value={generalForm.currency} onChange={e => setGeneralForm({ ...generalForm, currency: e.target.value })}>
-                                        <option value="دينار كويتي">دينار كويتي</option>
-                                        <option value="ريال سعودي">ريال سعودي</option>
-                                        <option value="درهم إماراتي">درهم إماراتي</option>
-                                        <option value="جنيه مصري">جنيه مصري</option>
-                                        <option value="دولار أمريكي">دولار أمريكي</option>
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_currencySymbol')}</label>
-                                    <select className="form-select" value={generalForm.currency_symbol} onChange={e => setGeneralForm({ ...generalForm, currency_symbol: e.target.value })}>
-                                        <option value="د.ك">د.ك (دينار كويتي)</option>
-                                        <option value="ر.س">ر.س (ريال سعودي)</option>
-                                        <option value="د.إ">د.إ (درهم إماراتي)</option>
-                                        <option value="ج.م">ج.م (جنيه مصري)</option>
-                                        <option value="$">$ (دولار)</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_taxRate')}</label>
-                                    <input type="number" className="form-input" value={generalForm.tax_rate} onChange={e => setGeneralForm({ ...generalForm, tax_rate: e.target.value })} />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_decimalPlaces')}</label>
-                                    <select className="form-select" value={generalForm.decimal_places} onChange={e => setGeneralForm({ ...generalForm, decimal_places: e.target.value })}>
-                                        <option value="2">2</option>
-                                        <option value="3">3</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_language')}</label>
-                                    <select className="form-select" value={generalForm.language} onChange={e => setGeneralForm({ ...generalForm, language: e.target.value })}>
-                                        <option value="ar">العربية</option>
-                                        <option value="en">English</option>
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_allowNegativeStock')}</label>
-                                    <select className="form-select" value={generalForm.allow_negative_stock} onChange={e => setGeneralForm({ ...generalForm, allow_negative_stock: e.target.value })}>
-                                        <option value="no">{t('set_allowNegativeNo')}</option>
-                                        <option value="yes">{t('set_allowNegativeYes')}</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
-                                <h4 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-primary)' }}>خيارات الصفحة الرئيسية</h4>
-                                <div className="form-row">
-                                    <div className="form-group">
-                                        <label className="form-label">إظهار الملخص المالي</label>
-                                        <select className="form-select" value={generalForm.show_financial_summary || 'yes'} onChange={e => setGeneralForm({ ...generalForm, show_financial_summary: e.target.value })}>
-                                            <option value="yes">نعم - إظهار</option>
-                                            <option value="no">لا - إخفاء</option>
-                                        </select>
+                {/* ══ 7. USER PERMISSIONS ════════════════════════════════════════════ */}
+                {sec === 'user_permissions' && <>
+                    <Card title={t('select_user_permissions') || 'Select a user to customize permissions'} icon={Users}>
+                        <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
+                            {t('user_permissions_hint') || 'Individual permissions override role permissions. Admin always has full access.'}
+                        </p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                            {users.filter(u => u.role !== 'admin').map(u => (
+                                <div key={u.id} onClick={() => { setSelUser(u); loadUserPerms(u); }}
+                                    style={{
+                                        padding: '11px 14px', borderRadius: 10, cursor: 'pointer', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 10,
+                                        border: selUser?.id === u.id ? '2px solid var(--primary)' : '1px solid var(--border)',
+                                        background: selUser?.id === u.id ? 'rgba(37,99,235,.07)' : 'var(--surface)'
+                                    }}>
+                                    <div style={{
+                                        width: 36, height: 36, borderRadius: '50%', background: roleColor(u.role), color: '#fff',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, flexShrink: 0
+                                    }}>
+                                        {(u.full_name || u.username || '?')[0]}
                                     </div>
-                                    <div className="form-group">
-                                        <label className="form-label">إظهار المنتجات منخفضة المخزون</label>
-                                        <select className="form-select" value={generalForm.show_low_stock_products || 'yes'} onChange={e => setGeneralForm({ ...generalForm, show_low_stock_products: e.target.value })}>
-                                            <option value="yes">نعم - إظهار</option>
-                                            <option value="no">لا - إخفاء</option>
-                                        </select>
+                                    <div>
+                                        <div style={{ fontWeight: 600, fontSize: '.875rem' }}>{u.full_name || u.username}</div>
+                                        <div style={{ fontSize: '.73rem', color: 'var(--text-muted)' }}>{roleName(u.role)}</div>
                                     </div>
                                 </div>
-                                <div className="form-row">
-                                    <div className="form-group">
-                                        <label className="form-label">إظهار الذمم المدينة</label>
-                                        <select className="form-select" value={generalForm.show_customer_receivables || 'yes'} onChange={e => setGeneralForm({ ...generalForm, show_customer_receivables: e.target.value })}>
-                                            <option value="yes">نعم - إظهار</option>
-                                            <option value="no">لا - إخفاء</option>
-                                        </select>
-                                    </div>
+                            ))}
+                            {users.filter(u => u.role !== 'admin').length === 0 && <p style={{ color: 'var(--text-muted)' }}>{t('no_users_found') || 'No users found'}</p>}
+                        </div>
+                    </Card>
+
+                    {selUser && (
+                        <Card title={`${t('override_role_permissions') || 'Override Role Permissions'}: ${selUser.full_name || selUser.username}`} icon={Shield}
+                            action={upHasInd
+                                ? <span style={{ fontSize: '.72rem', background: 'rgba(16,185,129,.1)', color: 'var(--success)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('custom_permissions_badge') || 'Custom Permissions Active'}</span>
+                                : <span style={{ fontSize: '.72rem', background: 'var(--bg-secondary)', color: 'var(--text-muted)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('default_role_permissions_badge') || 'Using Role Permissions'}</span>}
+                        >
+                            {upLoading ? <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>{t('loading') || 'Loading...'}</div> : <>
+                                <div style={{ overflowX: 'auto', marginBottom: 14 }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ ...thStyle(null), textAlign: 'right', padding: '9px 12px' }}>{t('module') || 'Module'}</th>
+                                                {PERM_KEYS.map(pk => <th key={pk.key} style={thStyle(70)}>{pk.label}</th>)}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {PERM_MODS.map((m, i) => (
+                                                <tr key={m.m} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
+                                                    <td style={{ padding: '9px 12px', fontWeight: 500, fontSize: '.875rem' }}>{m.l}</td>
+                                                    {PERM_KEYS.map(pk => (
+                                                        <td key={pk.key} style={{ padding: 8, textAlign: 'center' }}>
+                                                            <PermCell has={!!upState[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
+                                                                onToggle={() => setUpState(p => ({ ...p, [m.m]: { ...p[m.m], [pk.key]: !p[m.m]?.[pk.key] } }))} />
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
+                                <div style={{ display: 'flex', gap: 10 }}>
+                                    <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving} onClick={saveUserPerms}>
+                                        <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_individual_permissions') || 'Save Individual Permissions')}
+                                    </button>
+                                    {upHasInd && <button style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                                        disabled={saving} onClick={clearUserPerms}>
+                                        <RefreshCw size={13} /> {t('reset_to_role_permissions') || 'Reset to Role Permissions'}
+                                    </button>}
+                                </div>
+                            </>}
+                        </Card>
+                    )}
+                </>}
+
+                {/* ══ 8. DATABASE ════════════════════════════════════════════════════ */}
+                {sec === 'database' && (isAdmin || user?.permissions?.database?.can_view) && <>
+                    <Card title={t('database_info') || 'Database Info'} icon={HardDrive}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <div style={{ padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8, fontFamily: 'monospace', fontSize: '.82rem', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+                                <strong>{t('path') || 'Path'}: </strong>{dbPath || (t('not_available') || 'Not available')}
                             </div>
-                            <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid var(--border)' }}>
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={saveGeneralSettings}
-                                    disabled={saving}
-                                    style={{ minWidth: '120px' }}
-                                >
-                                    {saving ? t('savingProgress') : t('set_saveSettings')}
+                            <div style={{ padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8, fontSize: '.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <strong>{t('size') || 'Size'}: </strong><span dir="ltr">{dbSize || (t('calculating') || 'Calculating...')}</span>
+                                </div>
+                                <button style={{ padding: '7px 12px', background: 'var(--primary)', color: '#fff', borderRadius: 6, fontSize: '.75rem', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }} disabled={saving} onClick={async () => {
+                                    setSaving(true);
+                                    try {
+                                        if (typeof window.api.settings.optimizeDb !== 'function') {
+                                            toast.error(t('restart_to_apply_optimization') || 'Please restart the app to activate this feature');
+                                            setSaving(false);
+                                            return;
+                                        }
+                                        const res = await window.api.settings.optimizeDb();
+                                        if (res && res.success === false) {
+                                            toast.error((t('optimization_failed') || 'Space optimization failed: ') + res.error);
+                                        } else {
+                                            const size = await window.api.settings.getDbSize();
+                                            setDbSize(size);
+                                            toast.success(t('optimization_success') || 'Space optimized successfully');
+                                        }
+                                    } catch (e) {
+                                        toast.error((t('optimization_error') || 'Error during database optimization: ') + e.message);
+                                    }
+                                    setSaving(false);
+                                }}>
+                                    <RefreshCw size={14} /> {t('optimize_space') || 'Optimize Space'}
                                 </button>
                             </div>
                         </div>
-                    )}
+                    </Card>
 
-                    {activeTab === 'invoice' && (
-                        <div>
-                            <h4 style={{ marginBottom: '16px' }}>{t('set_invoicePrintSettings')}</h4>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_invoiceTitleSales')}</label>
-                                    <input type="text" className="form-input" value={invoiceForm.invoice_title_sales} onChange={e => setInvoiceForm({ ...invoiceForm, invoice_title_sales: e.target.value })} />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_invoiceTitlePurchase')}</label>
-                                    <input type="text" className="form-input" value={invoiceForm.invoice_title_purchase} onChange={e => setInvoiceForm({ ...invoiceForm, invoice_title_purchase: e.target.value })} />
-                                </div>
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">{t('set_invoiceFooter')}</label>
-                                <textarea className="form-textarea" value={invoiceForm.invoice_footer} onChange={e => setInvoiceForm({ ...invoiceForm, invoice_footer: e.target.value })} rows={2} placeholder={t('set_invoiceFooterPlaceholder')} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">{t('set_invoiceTerms')}</label>
-                                <textarea className="form-textarea" value={invoiceForm.invoice_terms} onChange={e => setInvoiceForm({ ...invoiceForm, invoice_terms: e.target.value })} rows={4} placeholder={t('set_invoiceTermsPlaceholder')} />
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_showLogo')}</label>
-                                    <select className="form-select" value={invoiceForm.show_logo} onChange={e => setInvoiceForm({ ...invoiceForm, show_logo: e.target.value })}>
-                                        <option value="yes">{t('yes')}</option>
-                                        <option value="no">{t('no')}</option>
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_showCompanyInfo')}</label>
-                                    <select className="form-select" value={invoiceForm.show_company_info} onChange={e => setInvoiceForm({ ...invoiceForm, show_company_info: e.target.value })}>
-                                        <option value="yes">{t('yes')}</option>
-                                        <option value="no">{t('no')}</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_paperSize')}</label>
-                                    <select className="form-select" value={invoiceForm.paper_size} onChange={e => setInvoiceForm({ ...invoiceForm, paper_size: e.target.value })}>
-                                        <option value="A4">A4</option>
-                                        <option value="A5">A5</option>
-                                        <option value="Letter">Letter</option>
-                                        <option value="thermal">حراري (80mm)</option>
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">{t('set_paperOrientation')}</label>
-                                    <select className="form-select" value={invoiceForm.paper_orientation} onChange={e => setInvoiceForm({ ...invoiceForm, paper_orientation: e.target.value })}>
-                                        <option value="portrait">{t('set_portrait')}</option>
-                                        <option value="landscape">{t('set_landscape')}</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid var(--border)' }}>
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={saveInvoiceSettings}
-                                    disabled={saving}
-                                    style={{ minWidth: '120px' }}
-                                >
-                                    {saving ? t('savingProgress') : t('set_saveSettings')}
-                                </button>
-                            </div>
+                    <Card title={t('backup_and_restore') || 'Backup & Restore'} icon={Database}>
+                        <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
+                            {t('backup_hint') || 'Take regular backups to protect your data.'}
+                        </p>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} onClick={backup}>
+                                <Download size={14} /> {t('backup') || 'Backup'}
+                            </button>
+                            <button style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }} onClick={restore}>
+                                <Upload size={14} /> {t('restore_from_backup') || 'Restore from Backup'}
+                            </button>
                         </div>
-                    )}
+                    </Card>
 
-                    {activeTab === 'backup' && (
-                        <div>
-                            {/* Database location card */}
-                            <div style={{ background: 'var(--bg-secondary)', borderRadius: '10px', padding: '20px', marginBottom: '20px', border: '1px solid var(--border)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                                    <HardDrive size={20} style={{ color: 'var(--primary)' }} />
-                                    <h4 style={{ margin: 0, fontWeight: 600 }}>موقع تخزين قاعدة البيانات</h4>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <input
-                                        type="text"
-                                        readOnly
-                                        value={dbPath || 'جاري تحميل المسار...'}
-                                        style={{ flex: 1, fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--text-muted)', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 12px', direction: 'ltr', textAlign: 'left' }}
-                                    />
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary btn-sm"
-                                        title="نسخ"
-                                        onClick={() => { if (dbPath) { navigator.clipboard.writeText(dbPath); } }}
-                                    >
-                                        <Copy size={15} />
-                                    </button>
-                                </div>
-                                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '8px 0 8px' }}>
-                                    ℹ️ هذا المسار هو مكان تخزين بيانات التطبيق تلقائياً. لا تقم بحذف هذا الملف.
-                                </p>
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary btn-sm"
-                                    onClick={changeDbLocation}
-                                    style={{ marginTop: '4px' }}
-                                >
-                                    <FolderOpen size={14} /> تغيير موقع التخزين
-                                </button>
-                            </div>
+                    <Card title={t('reset_app') || 'Reset App'} icon={AlertTriangle} action={
+                        <span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('danger') || 'Danger'}</span>
+                    }>
+                        <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: t('reset_app_desc') || 'Resetting will <strong>permanently delete all data</strong>. This cannot be undone.' }} />
+                        <button style={{ ...btnStyle, background: 'var(--danger)', color: '#fff' }} onClick={resetApp}>
+                            <AlertTriangle size={14} /> {t('reset_app') || 'Reset App'}
+                        </button>
+                    </Card>
+                </>}
 
-                            {/* Backup & Restore cards */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                <div style={{ background: 'var(--bg-secondary)', borderRadius: '10px', padding: '20px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                                    <Database size={40} style={{ color: 'var(--primary)', marginBottom: '12px' }} />
-                                    <h4 style={{ margin: '0 0 8px' }}>{t('set_backupNow')}</h4>
-                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 16px' }}>
-                                        حفظ نسخة احتياطية من قاعدة البيانات. ستختار مكان حفظ الملف.
-                                    </p>
-                                    <button className="btn btn-primary" onClick={backup} style={{ width: '100%' }}>
-                                        <FolderOpen size={16} /> {t('set_backupNow')}
-                                    </button>
-                                </div>
-                                <div style={{ background: 'var(--bg-secondary)', borderRadius: '10px', padding: '20px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                                    <Database size={40} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
-                                    <h4 style={{ margin: '0 0 8px' }}>{t('set_restoreFile')}</h4>
-                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 16px' }}>
-                                        استعادة بيانات من نسخة احتياطية سابقة. سيتم إعادة تشغيل التطبيق.
-                                    </p>
-                                    <button className="btn btn-secondary" onClick={restore} style={{ width: '100%' }}>
-                                        {t('set_restoreFile')}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
             </div>
 
-            <Modal isOpen={showUserModal} onClose={() => setShowUserModal(false)} title={editingUser ? t('set_editUser') : t('set_newUser')} footer={<><button className="btn btn-secondary" onClick={() => setShowUserModal(false)}>{t('cancel')}</button><button className="btn btn-primary" onClick={handleUserSubmit}>{t('save')}</button></>}>
-                <div className="form-group"><label className="form-label">{t('set_username')} *</label><input type="text" className="form-input" value={userForm.username} onChange={e => setUserForm({ ...userForm, username: e.target.value })} /></div>
-                <div className="form-group"><label className="form-label">{editingUser ? t('set_newPassword') : t('set_password') + ' *'}</label><input type="password" className="form-input" value={userForm.password} onChange={e => setUserForm({ ...userForm, password: e.target.value })} placeholder={editingUser ? t('set_leaveEmpty') : ''} /></div>
-                <div className="form-group"><label className="form-label">{t('set_fullName')}</label><input type="text" className="form-input" value={userForm.full_name} onChange={e => setUserForm({ ...userForm, full_name: e.target.value })} /></div>
-                <div className="form-group"><label className="form-label">{t('set_role')}</label><select className="form-select" value={userForm.role} onChange={e => setUserForm({ ...userForm, role: e.target.value })}><option value="admin">{t('admin')}</option><option value="accountant">{t('accountant')}</option><option value="user">{t('user')}</option></select></div>
-            </Modal>
+            {/* ── User Modal ─────────────────────────────────────────────────────── */}
+            {showUserModal && (
+                <Modal isOpen={showUserModal} onClose={() => setShowUserModal(false)} title={editingUser ? (t('edit_user') || 'Edit User') : (t('new_user') || 'New User')}>
+                    <Fld label={t('full_name') || 'Full Name'}>
+                        <input className="form-input" value={userForm.full_name} onChange={e => setUserForm(f => ({ ...f, full_name: e.target.value }))} />
+                    </Fld>
+                    <Fld label={t('login_username') || 'Username (Login)'}>
+                        <input className="form-input" value={userForm.username} onChange={e => setUserForm(f => ({ ...f, username: e.target.value }))} disabled={!!editingUser} />
+                    </Fld>
+                    <Fld label={<>{t('password') || 'Password'} {editingUser && <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: '.8rem' }}>({t('empty_no_change') || 'Empty = No change'})</span>}</>}>
+                        <div style={{ position: 'relative' }}>
+                            <input className="form-input" type={showPw ? 'text' : 'password'} value={userForm.password}
+                                onChange={e => setUserForm(f => ({ ...f, password: e.target.value }))} style={{ paddingLeft: 38 }} />
+                            <button onClick={() => setShowPw(p => !p)} style={{
+                                position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+                                background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2
+                            }}>
+                                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                        </div>
+                    </Fld>
+                    <Fld label={t('role') || 'Role'}>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            {[['user', t('user_role') || 'User'], ['accountant', t('accountant_role') || 'Accountant'], ['admin', t('admin_role') || 'Admin']].map(([v, l]) => (
+                                <button key={v} onClick={() => setUserForm(f => ({ ...f, role: v }))} style={{
+                                    flex: 1, padding: '9px 0', borderRadius: 8, border: userForm.role === v ? `2px solid ${roleColor(v)}` : '1px solid var(--border)',
+                                    background: userForm.role === v ? roleColor(v) + '15' : 'transparent',
+                                    color: userForm.role === v ? roleColor(v) : 'var(--text-secondary)',
+                                    cursor: 'pointer', fontWeight: userForm.role === v ? 700 : 400, fontFamily: 'inherit', fontSize: '.875rem', transition: 'all .15s'
+                                }}>{l}</button>
+                            ))}
+                        </div>
+                    </Fld>
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-start', marginTop: 20 }}>
+                        <button className="btn btn-primary" onClick={saveUser}><Save size={14} /> {t('save') || 'Save'}</button>
+                        <button className="btn btn-secondary" onClick={() => setShowUserModal(false)}>{t('cancel') || 'Cancel'}</button>
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 }
-
-export default Settings;

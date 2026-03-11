@@ -127,6 +127,9 @@ body {
   flex-direction: column;
   transition: width 0.3s ease;
   flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 10;
 }
 
 .sidebar.collapsed {
@@ -134,21 +137,11 @@ body {
 }
 
 .sidebar-header {
-  padding: 16px 12px;
+  padding: 20px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
-  gap: 10px;
-  justify-content: space-between;
-  min-height: 68px;
-}
-
-.sidebar.collapsed .sidebar-header {
-  justify-content: center;
-  gap: 0;
-  flex-direction: column;
-  padding: 12px 8px;
-  gap: 6px;
+  gap: 12px;
 }
 
 .sidebar-logo {
@@ -169,52 +162,34 @@ body {
   flex: 1;
 }
 
-.sidebar-collapse-btn {
-  background: transparent;
-  border: none;
-  color: var(--sidebar-text);
-  cursor: pointer;
-  padding: 4px;
+.sidebar-collapse-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: var(--radius);
+  gap: 12px;
+  padding: 13px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.65);
   transition: var(--transition);
+  user-select: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-.sidebar-collapse-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+.sidebar-collapse-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.95);
 }
 
-.sidebar-collapse-btn:active {
-  background: rgba(255, 255, 255, 0.15);
+.sidebar-collapse-row svg {
+  flex-shrink: 0;
 }
 
 .sidebar.collapsed .sidebar-title,
 .sidebar.collapsed .nav-text,
 .sidebar.collapsed .nav-section-title {
   display: none;
-}
-
-.sidebar-footer-toggle {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  cursor: pointer;
-  color: var(--sidebar-text);
-  transition: var(--transition);
-  user-select: none;
-  flex-shrink: 0;
-}
-
-.sidebar-footer-toggle:hover {
-  background: var(--sidebar-hover);
-}
-
-.sidebar-footer-toggle svg {
-  flex-shrink: 0;
 }
 
 .sidebar-nav {
@@ -962,6 +937,17 @@ select {
 .badge-warning {
   background: var(--warning-light);
   color: var(--warning);
+}
+
+.badge-info {
+  background: var(--info-light);
+  color: var(--info);
+}
+
+.badge-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
 }
 
 /* Alerts */

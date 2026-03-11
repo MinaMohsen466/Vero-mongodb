@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Wallet, Building, ArrowUpRight, ArrowDownRight, Plus, RefreshCw, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
+import { toast } from 'react-hot-toast';
+import { useShortcuts } from '../hooks/useShortcuts';
 
 function CashBank() {
     const { t, user } = useAuth();
@@ -14,6 +16,19 @@ function CashBank() {
     const [modalType, setModalType] = useState('deposit'); // 'deposit' or 'withdraw'
     const [formData, setFormData] = useState({ amount: '', description: '', date: new Date().toISOString().split('T')[0] });
     const [saving, setSaving] = useState(false);
+
+    useShortcuts({
+        Save: (e) => {
+            if (showModal) {
+                const btn = document.querySelector('#cashbank-form button[type="submit"]') || document.querySelector('button[form="cashbank-form"]');
+                if (btn) btn.click();
+                else handleSubmit(e);
+            }
+        },
+        Escape: () => {
+            if (showModal) setShowModal(false);
+        }
+    });
 
     useEffect(() => { loadData(); }, []);
 
@@ -64,8 +79,8 @@ function CashBank() {
     };
 
     const formatCurrency = (amount) => {
-        const symbol = settings.general?.currency_symbol || 'د.ك';
-        return new Intl.NumberFormat('ar-KW', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + symbol;
+        const symbol = settings.general?.currency_symbol || (t('currency_kd') || 'KD');
+        return new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + symbol;
     };
 
     const totalBalance = accounts.reduce((sum, a) => sum + (a.balance || 0), 0);
@@ -86,41 +101,42 @@ function CashBank() {
         setSaving(true);
         try {
             const account = accounts.find(a => a.id === selectedAccount);
-            // Find or use equity account (حقوق الملكية code=3) as the other side
+            // Find or use equity account (Equity code=3) as the other side
             const allAccounts = await window.api.accounts.getAll();
             const equityAccount = allAccounts.find(a => a.code === '3') || allAccounts.find(a => a.code === '31');
 
             if (!equityAccount) {
-                alert('لا يوجد حساب حقوق ملكية لتسجيل العملية');
+                toast.error(t('cb_noEquityAccount') || 'No equity account to record transaction');
                 setSaving(false);
                 return;
             }
 
             const lines = [];
             if (modalType === 'deposit') {
-                // Deposit: Debit Cash/Bank, Credit Equity (رأس المال)
-                lines.push({ account_id: selectedAccount, debit: amount, credit: 0, description: formData.description || 'إيداع نقدي' });
-                lines.push({ account_id: equityAccount.id, debit: 0, credit: amount, description: formData.description || 'إيداع نقدي' });
+                // Deposit: Debit Cash/Bank, Credit Equity (Capital)
+                lines.push({ account_id: selectedAccount, debit: amount, credit: 0, description: formData.description || (t('cb_cashDeposit') || 'Cash Deposit') });
+                lines.push({ account_id: equityAccount.id, debit: 0, credit: amount, description: formData.description || (t('cb_cashDeposit') || 'Cash Deposit') });
             } else {
                 // Withdraw: Debit Equity/Expense, Credit Cash/Bank
                 const expenseAcct = allAccounts.find(a => a.code === '5') || equityAccount;
-                lines.push({ account_id: expenseAcct.id, debit: amount, credit: 0, description: formData.description || 'سحب نقدي' });
-                lines.push({ account_id: selectedAccount, debit: 0, credit: amount, description: formData.description || 'سحب نقدي' });
+                lines.push({ account_id: expenseAcct.id, debit: amount, credit: 0, description: formData.description || (t('cb_cashWithdrawal') || 'Cash Withdrawal') });
+                lines.push({ account_id: selectedAccount, debit: 0, credit: amount, description: formData.description || (t('cb_cashWithdrawal') || 'Cash Withdrawal') });
             }
 
             await window.api.journal.create({
                 date: formData.date,
-                description: formData.description || (modalType === 'deposit' ? 'إيداع نقدي' : 'سحب نقدي'),
+                description: formData.description || (modalType === 'deposit' ? (t('cb_cashDeposit') || 'Cash Deposit') : (t('cb_cashWithdrawal') || 'Cash Withdrawal')),
                 reference: modalType === 'deposit' ? 'DEP' : 'WTH',
                 created_by: user?.id,
                 lines
             });
 
+            toast.success(modalType === 'deposit' ? (t('cb_depositSuccess') || 'Deposit successful') : (t('cb_withdrawSuccess') || 'Withdrawal successful'));
             setShowModal(false);
             loadData();
         } catch (e) {
             console.error(e);
-            alert('حدث خطأ أثناء تسجيل العملية');
+            toast.error(t('errorOccurred') || 'Error occurred while recording transaction');
         }
         setSaving(false);
     };
@@ -148,7 +164,7 @@ function CashBank() {
                             <Wallet size={22} style={{ color: 'var(--success, #10b981)' }} />
                         </div>
                         <div>
-                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>الصندوق</p>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('cb_cash') || 'Cash'}</p>
                             <h3 style={{ margin: '4px 0 0', fontSize: '1.2rem', fontWeight: 700, color: totalCash >= 0 ? 'var(--success, #10b981)' : 'var(--danger, #ef4444)' }}>{formatCurrency(totalCash)}</h3>
                         </div>
                     </div>
@@ -159,7 +175,7 @@ function CashBank() {
                             <Building size={22} style={{ color: 'var(--primary)' }} />
                         </div>
                         <div>
-                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>البنك</p>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('cb_bank') || 'Bank'}</p>
                             <h3 style={{ margin: '4px 0 0', fontSize: '1.2rem', fontWeight: 700, color: totalBank >= 0 ? 'var(--success, #10b981)' : 'var(--danger, #ef4444)' }}>{formatCurrency(totalBank)}</h3>
                         </div>
                     </div>
@@ -170,7 +186,7 @@ function CashBank() {
             <div className="card" style={{ marginBottom: '16px' }}>
                 <div className="card-body" style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>الحساب:</label>
+                        <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{t('cb_account') || 'Account:'}</label>
                         <select
                             className="form-input"
                             value={selectedAccount || ''}
@@ -184,13 +200,13 @@ function CashBank() {
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
                         <button className="btn btn-success btn-sm" onClick={() => openModal('deposit')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <ArrowDownCircle size={16} /> إيداع
+                            <ArrowDownCircle size={16} /> {t('cb_deposit') || 'Deposit'}
                         </button>
                         <button className="btn btn-danger btn-sm" onClick={() => openModal('withdraw')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <ArrowUpCircle size={16} /> سحب
+                            <ArrowUpCircle size={16} /> {t('cb_withdraw') || 'Withdraw'}
                         </button>
                         <button className="btn btn-ghost btn-sm" onClick={() => { setLoading(true); loadData(); }} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <RefreshCw size={16} /> تحديث
+                            <RefreshCw size={16} /> {t('refresh') || 'Refresh'}
                         </button>
                     </div>
                 </div>
@@ -200,32 +216,32 @@ function CashBank() {
             <div className="card">
                 <div className="card-header">
                     <h4 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Wallet size={18} /> سجل الحركات
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>({filteredTransactions.length} حركة)</span>
+                        <Wallet size={18} /> {t('cb_transactionsLog') || 'Transactions Log'}
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>({filteredTransactions.length} {t('cb_transactions') || 'transactions'})</span>
                     </h4>
                 </div>
                 <div className="card-body" style={{ padding: 0 }}>
                     {filteredTransactions.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                             <Wallet size={48} style={{ marginBottom: '12px', opacity: 0.3 }} />
-                            <p>لا توجد حركات مالية بعد</p>
+                            <p>{t('cb_noTransactionsYet') || 'No financial transactions yet'}</p>
                         </div>
                     ) : (
                         <table>
                             <thead>
                                 <tr>
-                                    <th>التاريخ</th>
-                                    <th>المرجع</th>
-                                    <th>الحساب</th>
-                                    <th>البيان</th>
-                                    <th style={{ textAlign: 'center' }}>مدين (وارد)</th>
-                                    <th style={{ textAlign: 'center' }}>دائن (صادر)</th>
+                                    <th>{t('date') || 'Date'}</th>
+                                    <th>{t('cb_reference') || 'Reference'}</th>
+                                    <th>{t('cb_account') || 'Account'}</th>
+                                    <th>{t('description') || 'Description'}</th>
+                                    <th style={{ textAlign: 'center' }}>{t('cb_debitIn') || 'Debit (In)'}</th>
+                                    <th style={{ textAlign: 'center' }}>{t('cb_creditOut') || 'Credit (Out)'}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {filteredTransactions.map((tx, i) => (
                                     <tr key={tx.id}>
-                                        <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{new Date(tx.date).toLocaleDateString('ar-KW')}</td>
+                                        <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{new Date(tx.date).toLocaleDateString('en-GB')}</td>
                                         <td><span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>{tx.entry_number}</span></td>
                                         <td style={{ fontSize: '0.85rem' }}>{tx.account_name}</td>
                                         <td style={{ fontSize: '0.85rem' }}>{tx.description || '-'}</td>
@@ -247,56 +263,60 @@ function CashBank() {
             <Modal
                 isOpen={showModal}
                 onClose={() => setShowModal(false)}
-                title={modalType === 'deposit' ? 'إيداع مبلغ' : 'سحب مبلغ'}
+                title={modalType === 'deposit' ? (t('cb_depositAmount') || 'Deposit Amount') : (t('cb_withdrawAmount') || 'Withdraw Amount')}
             >
-                <div className="form-group" style={{ marginBottom: '16px' }}>
-                    <label className="form-label">الحساب</label>
-                    <select className="form-input" value={selectedAccount || ''} onChange={e => setSelectedAccount(Number(e.target.value))}>
-                        {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}
-                    </select>
-                </div>
-                <div className="form-group" style={{ marginBottom: '16px' }}>
-                    <label className="form-label">المبلغ</label>
-                    <input
-                        type="number"
-                        className="form-input"
-                        value={formData.amount}
-                        onChange={e => setFormData({ ...formData, amount: e.target.value })}
-                        placeholder="0.000"
-                        step="0.001"
-                        min="0"
-                        autoFocus
-                    />
-                </div>
-                <div className="form-group" style={{ marginBottom: '16px' }}>
-                    <label className="form-label">التاريخ</label>
-                    <input
-                        type="date"
-                        className="form-input"
-                        value={formData.date}
-                        onChange={e => setFormData({ ...formData, date: e.target.value })}
-                    />
-                </div>
-                <div className="form-group" style={{ marginBottom: '20px' }}>
-                    <label className="form-label">الوصف / السبب</label>
-                    <input
-                        type="text"
-                        className="form-input"
-                        value={formData.description}
-                        onChange={e => setFormData({ ...formData, description: e.target.value })}
-                        placeholder={modalType === 'deposit' ? 'مثال: إيداع رأس مال' : 'مثال: مصروفات إدارية'}
-                    />
-                </div>
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                    <button className="btn btn-ghost" onClick={() => setShowModal(false)}>{t('cancel')}</button>
-                    <button
-                        className={`btn ${modalType === 'deposit' ? 'btn-success' : 'btn-danger'}`}
-                        onClick={handleSubmit}
-                        disabled={saving || !formData.amount}
-                    >
-                        {saving ? t('savingProgress') : (modalType === 'deposit' ? 'إيداع' : 'سحب')}
-                    </button>
-                </div>
+                <form id="cashbank-form" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+                    <div className="form-group" style={{ marginBottom: '16px' }}>
+                        <label className="form-label">{t('cb_account') || 'Account'}</label>
+                        <select className="form-input" value={selectedAccount || ''} onChange={e => setSelectedAccount(Number(e.target.value))}>
+                            {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: '16px' }}>
+                        <label className="form-label">{t('amount') || 'Amount'}</label>
+                        <input
+                            type="number"
+                            className="form-input"
+                            value={formData.amount}
+                            onChange={e => setFormData({ ...formData, amount: e.target.value })}
+                            placeholder="0.000"
+                            step="0.250"
+                            min="0"
+                            autoFocus
+                            required
+                        />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: '16px' }}>
+                        <label className="form-label">{t('date') || 'Date'}</label>
+                        <input
+                            type="date"
+                            className="form-input"
+                            value={formData.date}
+                            onChange={e => setFormData({ ...formData, date: e.target.value })}
+                        />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: '20px' }}>
+                        <label className="form-label">{t('description') || 'Description / Reason'}</label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            value={formData.description}
+                            onChange={e => setFormData({ ...formData, description: e.target.value })}
+                            placeholder={modalType === 'deposit' ? (t('cb_exampleDeposit') || 'e.g. Capital deposit') : (t('cb_exampleWithdraw') || 'e.g. Administrative expenses')}
+                        />
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)}>{t('cancel') || 'Cancel'} (Esc)</button>
+                        <button
+                            type="submit"
+                            form="cashbank-form"
+                            className={`btn ${modalType === 'deposit' ? 'btn-success' : 'btn-danger'}`}
+                            disabled={saving || !formData.amount}
+                        >
+                            {saving ? t('savingProgress') : (modalType === 'deposit' ? (t('cb_deposit') || 'Deposit') : (t('cb_withdraw') || 'Withdraw'))} (Ctrl+S)
+                        </button>
+                    </div>
+                </form>
             </Modal>
         </div>
     );

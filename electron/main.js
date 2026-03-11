@@ -49,6 +49,10 @@ app.on('window-all-closed', () => {
 
 // ==================== IPC Handlers ====================
 
+// --- System Setup ---
+ipcMain.handle('system:isFirstRun', async () => db.system.isFirstRun());
+ipcMain.handle('system:runSetup', async (event, data) => db.system.runSetup(data));
+
 // --- Users & Auth ---
 ipcMain.handle('users:login', async (event, { username, password }) => db.users.login(username, password));
 ipcMain.handle('users:getAll', async () => db.users.getAll());
@@ -140,10 +144,45 @@ ipcMain.handle('settings:changeDbPath', async (event, newFolderPath) => {
     return result;
 });
 ipcMain.handle('settings:restore', async (event, filePath) => db.restore(filePath));
+ipcMain.handle('settings:optimizeDb', async () => db.vacuum());
+
+// Get database file size
+ipcMain.handle('settings:getDbSize', async () => {
+    try {
+        const dbFilePath = db.getDbPath ? db.getDbPath() : null;
+        if (!dbFilePath || !fs.existsSync(dbFilePath)) return null;
+        const stats = fs.statSync(dbFilePath);
+        const bytes = stats.size;
+        if (bytes < 1024) return `${bytes} بايت`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} كيلوبايت`;
+        return `${(bytes / (1024 * 1024)).toFixed(2)} ميجابايت`;
+    } catch (e) { return null; }
+});
+
+// Reset application (delete all data)
+ipcMain.handle('settings:resetApp', async () => {
+    try {
+        if (db.resetApp) {
+            await db.resetApp();
+        } else {
+            const dbFilePath = db.getDbPath ? db.getDbPath() : null;
+            if (dbFilePath && fs.existsSync(dbFilePath)) fs.unlinkSync(dbFilePath);
+        }
+        app.relaunch();
+        app.exit(0);
+        return { success: true };
+    } catch (e) {
+        console.error('[settings:resetApp] Error:', e);
+        return { success: false, error: e.message };
+    }
+});
 
 // --- Permissions ---
 ipcMain.handle('permissions:getByRole', async (event, role) => db.permissions.getByRole(role));
 ipcMain.handle('permissions:savePermissions', async (event, { role, permissions }) => db.permissions.savePermissions(role, permissions));
+ipcMain.handle('permissions:getUserPermissions', async (event, userId) => db.permissions.getUserPermissions(userId));
+ipcMain.handle('permissions:saveUserPermissions', async (event, { userId, permissions }) => db.permissions.saveUserPermissions(userId, permissions));
+ipcMain.handle('permissions:clearUserPermissions', async (event, userId) => db.permissions.clearUserPermissions(userId));
 
 // --- HR: Employees ---
 ipcMain.handle('employees:getAll', async () => db.employees.getAll());
@@ -244,5 +283,20 @@ ipcMain.handle('file:copyLogo', async (event, srcPath) => {
     } catch (e) {
         console.error('[file:copyLogo] Error copying logo:', e);
         return null;
+    }
+});
+// --- Save text/csv file to disk ---
+ipcMain.handle('file:saveText', async (event, { content, defaultName, filters }) => {
+    try {
+        const result = await dialog.showSaveDialog(mainWindow, {
+            defaultPath: defaultName || 'export.csv',
+            filters: filters || [{ name: 'CSV Files', extensions: ['csv'] }, { name: 'All Files', extensions: ['*'] }]
+        });
+        if (result.canceled || !result.filePath) return { success: false };
+        fs.writeFileSync(result.filePath, '\uFEFF' + content, 'utf8'); // BOM for Excel Arabic support
+        return { success: true, filePath: result.filePath };
+    } catch (e) {
+        console.error('[file:saveText] Error:', e);
+        return { success: false, error: e.message };
     }
 });

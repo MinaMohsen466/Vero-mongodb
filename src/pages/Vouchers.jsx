@@ -3,6 +3,8 @@ import { Plus, Trash2, Search, CreditCard, ArrowDownCircle, ArrowUpCircle, Edit 
 import Modal from '../components/Modal';
 import SearchableSelect from '../components/SearchableSelect';
 import { useAuth } from '../App';
+import { toast } from 'react-hot-toast';
+import { useShortcuts } from '../hooks/useShortcuts';
 
 function Vouchers() {
     const { t, user } = useAuth();
@@ -21,6 +23,26 @@ function Vouchers() {
         type: 'receipt', date: new Date().toISOString().split('T')[0],
         amount: 0, customer_id: '', supplier_id: '',
         payment_method: 'cash', invoice_id: '', reference: '', description: ''
+    });
+    const searchInputRef = React.useRef(null);
+
+    useShortcuts({
+        Save: (e) => {
+            if (showModal) {
+                const btn = document.querySelector('#voucher-form button[type="submit"]') || document.querySelector('button[form="voucher-form"]');
+                if (btn) btn.click();
+                else handleSubmit(e);
+            }
+        },
+        New: () => {
+            if (!showModal && user?.permissions?.[activeTab === 'receipt' ? 'receipt_vouchers' : 'payment_vouchers']?.can_create) openModal(activeTab);
+        },
+        Escape: () => {
+            if (showModal) closeModal();
+        },
+        Search: () => {
+            if (searchInputRef.current) searchInputRef.current.focus();
+        }
     });
 
     useEffect(() => { loadData(); }, []);
@@ -96,18 +118,29 @@ function Vouchers() {
 
             if (editMode) {
                 await window.api.vouchers.update({ ...voucherData, id: editingId });
+                toast.success(t('savedSuccess') || 'Voucher updated successfully');
             } else {
                 await window.api.vouchers.create(voucherData);
+                toast.success(t('savedSuccess') || 'Voucher added successfully');
             }
             loadData();
             closeModal();
-        } catch (error) { console.error('Error:', error); }
+        } catch (error) {
+            console.error('Error:', error);
+            toast.error(t('errorOccurred') || 'Error occurred while saving voucher');
+        }
     };
 
     const handleDelete = async (id) => {
         if (confirm(t('vouch_deleteConfirm'))) {
-            await window.api.vouchers.delete(id);
-            loadData();
+            try {
+                await window.api.vouchers.delete(id);
+                toast.success(t('savedSuccess') || 'Voucher deleted successfully');
+                loadData();
+            } catch (error) {
+                console.error('Error deleting voucher:', error);
+                toast.error(t('errorOccurred') || 'Error occurred while deleting voucher');
+            }
         }
     };
 
@@ -177,7 +210,7 @@ function Vouchers() {
         );
     });
 
-    const formatCurrency = (amount) => new Intl.NumberFormat('ar-KW', { minimumFractionDigits: 3 }).format(amount || 0) + ' د.ك';
+    const formatCurrency = (amount) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (t('currency_kd') || 'KD');
 
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
 
@@ -194,7 +227,15 @@ function Vouchers() {
                         </button>
                     </div>
                     <div style={{ position: 'relative' }}>
-                        <input type="text" className="form-input" placeholder={t('search')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ width: '250px' }} />
+                        <input
+                            ref={searchInputRef}
+                            type="text"
+                            className="form-input"
+                            placeholder={t('search') + " (Ctrl+F)"}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            style={{ width: '250px' }}
+                        />
                     </div>
                 </div>
                 {user?.permissions?.[activeTab === 'receipt' ? 'receipt_vouchers' : 'payment_vouchers']?.can_create && (
@@ -229,7 +270,7 @@ function Vouchers() {
                                     {filteredVouchers.map(voucher => (
                                         <tr key={voucher.id}>
                                             <td className="font-bold">{voucher.voucher_number}</td>
-                                            <td>{new Date(voucher.date).toLocaleDateString('ar-EG')}</td>
+                                            <td>{new Date(voucher.date).toLocaleDateString('en-GB')}</td>
                                             <td>{voucher.customer_name || voucher.supplier_name || '-'}</td>
                                             <td className={`font-bold ${activeTab === 'receipt' ? 'text-success' : 'text-danger'}`}>
                                                 {formatCurrency(voucher.amount)}
@@ -263,18 +304,9 @@ function Vouchers() {
                 </div>
             </div>
 
-            <Modal
-                isOpen={showModal}
-                onClose={closeModal}
-                title={editMode ? (formData.type === 'receipt' ? t('vouch_editReceipt') : t('vouch_editPayment')) : (formData.type === 'receipt' ? t('vouch_addReceipt') : t('vouch_addPayment'))}
-                footer={
-                    <>
-                        <button className="btn btn-secondary" onClick={closeModal}>{t('cancel')}</button>
-                        <button className="btn btn-primary" onClick={handleSubmit}>{editMode ? t('saveChanges') : t('save')}</button>
-                    </>
-                }
-            >
-                <form onSubmit={handleSubmit}>
+            {/* Create/Edit Modal */}
+            <Modal isOpen={showModal} onClose={closeModal} title={editMode ? (formData.type === 'receipt' ? t('vouch_editReceipt') : t('vouch_editPayment')) : (formData.type === 'receipt' ? t('vouch_addReceipt') : t('vouch_addPayment'))} size="lg" footer={<><button type="button" className="btn btn-secondary" onClick={closeModal}>{t('cancel') || 'Cancel'} (Esc)</button><button type="submit" form="voucher-form" className="btn btn-primary">{t('save') || 'Save'} (Ctrl+S)</button></>}>
+                <form id="voucher-form" onSubmit={handleSubmit}>
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">{t('date')}</label>
@@ -282,7 +314,7 @@ function Vouchers() {
                         </div>
                         <div className="form-group">
                             <label className="form-label">{t('vouch_amount')} *</label>
-                            <input type="number" className="form-input" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} step="0.001" required />
+                            <input type="number" className="form-input" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} step="0.250" required />
                         </div>
                     </div>
 
@@ -377,7 +409,7 @@ function Vouchers() {
                                                     <div>
                                                         <span style={{ fontWeight: 'bold', marginLeft: '8px' }}>{inv.invoice_number}</span>
                                                         <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                                                            {new Date(inv.date).toLocaleDateString('ar-EG')}
+                                                            {new Date(inv.date).toLocaleDateString('en-GB')}
                                                         </span>
                                                     </div>
                                                     <div style={{ textAlign: 'left' }}>

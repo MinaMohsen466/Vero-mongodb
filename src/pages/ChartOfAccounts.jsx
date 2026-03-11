@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, ChevronRight, Building2, FolderTree } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
+import { toast } from 'react-hot-toast';
+import { useShortcuts } from '../hooks/useShortcuts';
 
 function ChartOfAccounts() {
-    const { user } = useAuth();
+    const { t, user } = useAuth();
     const [accounts, setAccounts] = useState([]);
     const [accountsTree, setAccountsTree] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -23,6 +25,22 @@ function ChartOfAccounts() {
     useEffect(() => {
         loadAccounts();
     }, []);
+
+    useShortcuts({
+        Save: (e) => {
+            if (showModal) {
+                const btn = document.querySelector('#account-form button[type="submit"]') || document.querySelector('button[form="account-form"]');
+                if (btn) btn.click();
+                else handleSubmit(e);
+            }
+        },
+        New: () => {
+            if (!showModal && user?.permissions?.chart_of_accounts?.can_create) openModal();
+        },
+        Escape: () => {
+            if (showModal) closeModal();
+        }
+    });
 
     const loadAccounts = async () => {
         try {
@@ -51,27 +69,32 @@ function ChartOfAccounts() {
             };
             if (editingAccount) {
                 await window.api.accounts.update({ ...data, id: editingAccount.id });
+                toast.success(t('account_updated') || 'Account updated successfully');
             } else {
                 await window.api.accounts.create(data);
+                toast.success(t('account_added') || 'Account added successfully');
             }
             loadAccounts();
             closeModal();
         } catch (error) {
             console.error('Error saving account:', error);
+            toast.error(t('error_saving_account') || 'Error saving account');
         }
     };
 
     const handleDelete = async (id) => {
-        if (confirm('هل أنت متأكد من حذف هذا الحساب؟')) {
+        if (confirm(t('confirm_delete_account') || 'Are you sure you want to delete this account?')) {
             try {
                 const result = await window.api.accounts.delete(id);
                 if (!result.success) {
-                    alert(result.error);
+                    toast.error(result.error);
                 } else {
+                    toast.success(t('account_deleted') || 'Account deleted successfully');
                     loadAccounts();
                 }
             } catch (error) {
                 console.error('Error deleting account:', error);
+                toast.error(t('error_deleting_account') || 'Error deleting account');
             }
         }
     };
@@ -113,11 +136,11 @@ function ChartOfAccounts() {
 
     const getAccountTypeLabel = (type) => {
         const types = {
-            asset: 'أصول',
-            liability: 'خصوم',
-            equity: 'حقوق ملكية',
-            revenue: 'إيرادات',
-            expense: 'مصروفات'
+            asset: t('assets') || 'Assets',
+            liability: t('liabilities') || 'Liabilities',
+            equity: t('equity') || 'Equity',
+            revenue: t('revenue') || 'Revenue',
+            expense: t('expenses') || 'Expenses'
         };
         return types[type] || type;
     };
@@ -181,7 +204,7 @@ function ChartOfAccounts() {
             <div className="page-header">
                 <div className="flex items-center gap-2">
                     <FolderTree size={24} style={{ color: 'var(--primary)' }} />
-                    <span style={{ color: 'var(--text-muted)' }}>إجمالي {accounts.length} حساب</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{t('total')} {accounts.length} {t('accounts_count') || 'accounts'}</span>
                 </div>
                 {user?.permissions?.chart_of_accounts?.can_create && (
                     <button className="btn btn-primary" onClick={() => openModal()}>
@@ -196,8 +219,8 @@ function ChartOfAccounts() {
                     {accountsTree.length === 0 ? (
                         <div className="empty-state">
                             <Building2 size={48} />
-                            <h3>لا يوجد حسابات</h3>
-                            <p>قم بإضافة حسابات لإنشاء شجرة الحسابات</p>
+                            <h3>{t('no_accounts') || 'No Accounts'}</h3>
+                            <p>{t('add_accounts_desc') || 'Add accounts to build the chart of accounts tree'}</p>
                         </div>
                     ) : (
                         <div className="tree-view">
@@ -210,20 +233,20 @@ function ChartOfAccounts() {
             <Modal
                 isOpen={showModal}
                 onClose={closeModal}
-                title={editingAccount ? 'تعديل حساب' : 'إضافة حساب جديد'}
+                title={editingAccount ? t('edit_account') || 'Edit Account' : t('new_account') || 'New Account'}
                 footer={
                     <>
-                        <button className="btn btn-secondary" onClick={closeModal}>إلغاء</button>
-                        <button className="btn btn-primary" onClick={handleSubmit}>
-                            {editingAccount ? 'حفظ التغييرات' : 'إضافة'}
+                        <button type="button" className="btn btn-secondary" onClick={closeModal}>{t('cancel_esc') || 'Cancel (Esc)'}</button>
+                        <button type="submit" form="account-form" className="btn btn-primary">
+                            {editingAccount ? t('save_ctrl_s') || 'Save (Ctrl+S)' : t('add_ctrl_s') || 'Add (Ctrl+S)'}
                         </button>
                     </>
                 }
             >
-                <form onSubmit={handleSubmit}>
+                <form id="account-form" onSubmit={handleSubmit}>
                     <div className="form-row">
                         <div className="form-group">
-                            <label className="form-label">كود الحساب *</label>
+                            <label className="form-label">{t('account_code') || 'Account Code'} *</label>
                             <input
                                 type="text"
                                 className="form-input"
@@ -233,7 +256,7 @@ function ChartOfAccounts() {
                             />
                         </div>
                         <div className="form-group">
-                            <label className="form-label">اسم الحساب *</label>
+                            <label className="form-label">{t('account_name') || 'Account Name'} *</label>
                             <input
                                 type="text"
                                 className="form-input"
@@ -245,13 +268,13 @@ function ChartOfAccounts() {
                     </div>
 
                     <div className="form-group">
-                        <label className="form-label">الحساب الأب</label>
+                        <label className="form-label">{t('parent_account') || 'Parent Account'}</label>
                         <select
                             className="form-select"
                             value={formData.parent_id}
                             onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}
                         >
-                            <option value="">-- حساب رئيسي --</option>
+                            <option value="">-- {t('main_account') || 'Main Account'} --</option>
                             {accounts.map(acc => (
                                 <option key={acc.id} value={acc.id} disabled={acc.id === editingAccount?.id}>
                                     {acc.code} - {acc.name}
@@ -262,28 +285,28 @@ function ChartOfAccounts() {
 
                     <div className="form-row">
                         <div className="form-group">
-                            <label className="form-label">نوع الحساب *</label>
+                            <label className="form-label">{t('account_type') || 'Account Type'} *</label>
                             <select
                                 className="form-select"
                                 value={formData.account_type}
                                 onChange={(e) => setFormData({ ...formData, account_type: e.target.value })}
                             >
-                                <option value="asset">أصول</option>
-                                <option value="liability">خصوم</option>
-                                <option value="equity">حقوق ملكية</option>
-                                <option value="revenue">إيرادات</option>
-                                <option value="expense">مصروفات</option>
+                                <option value="asset">{t('assets') || 'Assets'}</option>
+                                <option value="liability">{t('liabilities') || 'Liabilities'}</option>
+                                <option value="equity">{t('equity') || 'Equity'}</option>
+                                <option value="revenue">{t('revenue') || 'Revenue'}</option>
+                                <option value="expense">{t('expenses') || 'Expenses'}</option>
                             </select>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">طبيعة الحساب *</label>
+                            <label className="form-label">{t('account_nature') || 'Account Nature'} *</label>
                             <select
                                 className="form-select"
                                 value={formData.nature}
                                 onChange={(e) => setFormData({ ...formData, nature: e.target.value })}
                             >
-                                <option value="debit">مدين</option>
-                                <option value="credit">دائن</option>
+                                <option value="debit">{t('debit') || 'Debit'}</option>
+                                <option value="credit">{t('credit') || 'Credit'}</option>
                             </select>
                         </div>
                     </div>
@@ -295,7 +318,7 @@ function ChartOfAccounts() {
                                 checked={formData.can_post}
                                 onChange={(e) => setFormData({ ...formData, can_post: e.target.checked })}
                             />
-                            يمكن الترحيل إليه (حساب تحليلي)
+                            {t('can_post_to') || 'Can post to (Analytical Account)'}
                         </label>
                     </div>
                 </form>

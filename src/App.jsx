@@ -5,6 +5,7 @@ import {
     ChevronLeft, Search, Moon, Sun, Building2
 } from 'lucide-react';
 import translations from './translations';
+import { Toaster } from 'react-hot-toast';
 
 // Context
 const AuthContext = createContext(null);
@@ -26,6 +27,8 @@ import Reports from './pages/Reports';
 import SettingsPage from './pages/Settings';
 import CashBank from './pages/CashBank';
 import HR from './pages/HR';
+import POS from './pages/POS';
+import SetupWizard from './pages/SetupWizard';
 
 export { AuthContext, useAuth };
 
@@ -35,6 +38,7 @@ function App() {
     const [currentPage, setCurrentPage] = useState('dashboard');
     const [theme, setTheme] = useState('light');
     const [language, setLanguage] = useState('ar');
+    const [isFirstRun, setIsFirstRun] = useState(false);
 
     // Translation function
     const t = (key) => {
@@ -42,19 +46,26 @@ function App() {
     };
 
     useEffect(() => {
-        // Check for saved session
-        const savedUser = localStorage.getItem('accapp_user');
-        if (savedUser) {
-            setUser(JSON.parse(savedUser));
-        }
+        const initApp = async () => {
+            try {
+                const firstRun = await window.api.system.isFirstRun();
+                setIsFirstRun(firstRun);
+            } catch (e) {
+                console.error("Error checking first run:", e);
+            }
 
-        // Check theme preference
-        const savedTheme = localStorage.getItem('accapp_theme') || 'light';
-        setTheme(savedTheme);
-        document.documentElement.setAttribute('data-theme', savedTheme);
+            // Check for saved session
+            const savedUser = localStorage.getItem('accapp_user');
+            if (savedUser) {
+                setUser(JSON.parse(savedUser));
+            }
 
-        // Load language from settings
-        const loadLanguage = async () => {
+            // Check theme preference
+            const savedTheme = localStorage.getItem('accapp_theme') || 'light';
+            setTheme(savedTheme);
+            document.documentElement.setAttribute('data-theme', savedTheme);
+
+            // Load language from settings
             try {
                 const settingsData = await window.api.settings.getAll();
                 const lang = settingsData?.general?.language || 'ar';
@@ -64,10 +75,24 @@ function App() {
             } catch (e) {
                 console.log('Could not load language setting, using default');
             }
-        };
-        loadLanguage();
 
-        setLoading(false);
+            setLoading(false);
+        };
+
+        initApp();
+
+        // Listen for settings update to change language dynamically
+        const handleSettingsUpdate = () => {
+            window.api.settings.getAll().then(data => {
+                const lang = data?.general?.language || 'ar';
+                setLanguage(lang);
+            }).catch(e => console.error(e));
+        };
+        window.addEventListener('settingsUpdated', handleSettingsUpdate);
+
+        return () => {
+            window.removeEventListener('settingsUpdated', handleSettingsUpdate);
+        };
     }, []);
 
     // Update dir/lang when language changes
@@ -111,9 +136,29 @@ function App() {
         );
     }
 
+    if (isFirstRun) {
+        return (
+            <AuthContext.Provider value={{ t, language, setLanguage }}>
+                <Toaster position="top-center" reverseOrder={false} />
+                <SetupWizard
+                    t={t}
+                    language={language}
+                    changeLanguage={setLanguage}
+                    onComplete={async (username, password) => {
+                        setIsFirstRun(false);
+                        if (username && password) {
+                            await login(username, password);
+                        }
+                    }}
+                />
+            </AuthContext.Provider>
+        );
+    }
+
     if (!user) {
         return (
             <AuthContext.Provider value={{ user, login, logout, t, language, setLanguage }}>
+                <Toaster position="top-center" reverseOrder={false} />
                 <Login onLogin={login} />
             </AuthContext.Provider>
         );
@@ -134,12 +179,14 @@ function App() {
             case 'settings': return <SettingsPage />;
             case 'cashbank': return <CashBank />;
             case 'hr': return <HR />;
+            case 'pos': return <POS />;
             default: return <Dashboard />;
         }
     };
 
     return (
         <AuthContext.Provider value={{ user, login, logout, theme, toggleTheme, t, language, setLanguage }}>
+            <Toaster position="top-center" reverseOrder={false} />
             <Layout currentPage={currentPage} setCurrentPage={setCurrentPage}>
                 {renderPage()}
             </Layout>

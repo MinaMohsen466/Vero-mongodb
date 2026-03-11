@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Eye, Trash2, Search, ShoppingCart, Printer, X, Edit } from 'lucide-react';
+import { Plus, Eye, Trash2, Search, ShoppingCart, Printer, X, Edit, Download } from 'lucide-react';
 import Modal from '../components/Modal';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
 import SearchableSelect from '../components/SearchableSelect';
 import { useAuth } from '../App';
+import { toast } from 'react-hot-toast';
+import { useShortcuts } from '../hooks/useShortcuts';
 
 function SalesInvoices() {
     const { t, user } = useAuth();
@@ -34,6 +36,28 @@ function SalesInvoices() {
     });
 
     const [formData, setFormData] = useState(emptyForm());
+    const searchInputRef = React.useRef(null);
+
+    useShortcuts({
+        Save: (e) => {
+            if (showModal) {
+                const btn = document.querySelector('#sales-invoice-form button[type="submit"]') || document.querySelector('button[form="sales-invoice-form"]');
+                if (btn) btn.click();
+                else handleSubmit(e);
+            }
+        },
+        New: () => {
+            if (!showModal && user?.permissions?.sales_invoices?.can_create) openModal();
+        },
+        Escape: () => {
+            if (showModal) closeModal();
+            if (showViewModal) setShowViewModal(false);
+            if (showPrintPreview) setShowPrintPreview(false);
+        },
+        Search: () => {
+            if (searchInputRef.current) searchInputRef.current.focus();
+        }
+    });
 
     useEffect(() => { loadData(); }, []);
 
@@ -98,7 +122,7 @@ function SalesInvoices() {
             const requestedQty = parseFloat(item.quantity) || 0;
 
             if (requestedQty > currentStock) {
-                setError(`${t('inv_stockError') || 'الكمية المطلوبة غير متوفرة في المخزون'}: "${product.name}" - ${t('inv_available') || 'المتوفر'}: ${currentStock}, ${t('inv_requested') || 'المطلوب'}: ${requestedQty}`);
+                setError(`${t('inv_stockError') || 'Requested quantity exceeds available stock'}: "${product.name}" - ${t('inv_available') || 'Available'}: ${currentStock}, ${t('inv_requested') || 'Requested'}: ${requestedQty}`);
                 return false;
             }
         }
@@ -127,8 +151,8 @@ function SalesInvoices() {
                 const totals = calculateTotals();
                 const newBalance = (customer.balance || 0) + totals.total;
                 if (newBalance > customer.credit_limit) {
-                    const formatCurr = (a) => new Intl.NumberFormat('ar-KW', { minimumFractionDigits: 3 }).format(a || 0) + ' د.ك';
-                    setError(`تجاوز الحد الائتماني للعميل "${customer.name}"\nالحد الائتماني: ${formatCurr(customer.credit_limit)}\nالرصيد الحالي: ${formatCurr(customer.balance)}\nقيمة الفاتورة: ${formatCurr(totals.total)}\nالإجمالي بعد الفاتورة: ${formatCurr(newBalance)}`);
+                    const formatCurr = (a) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(a || 0);
+                    setError(t('errorOccurred') + `: ${t('cust_creditLimit')} - ${customer.name}`);
                     return;
                 }
             }
@@ -170,25 +194,36 @@ function SalesInvoices() {
             }
 
             if (result.success) {
+                toast.success(t('savedSuccess') || (editMode ? 'Invoice updated successfully' : 'Invoice saved successfully'));
                 await loadData();
                 closeModal();
             } else {
-                setError(result.error || t('inv_saveError'));
+                const errorMsg = result.error || t('inv_saveError') || 'Error saving invoice';
+                setError(errorMsg);
+                toast.error(errorMsg);
             }
         } catch (e) {
             console.error('Error saving invoice:', e);
-            setError(t('inv_saveError') + ': ' + e.message);
+            const errorMsg = (t('inv_saveError') || 'Error') + ': ' + e.message;
+            setError(errorMsg);
+            toast.error(errorMsg);
         }
         setSaving(false);
     };
 
     const handleDelete = async (id) => {
-        if (confirm(t('inv_deleteConfirm') + ' ' + t('sinv_deleteNote'))) {
-            const result = await window.api.invoices.delete(id);
-            if (result.success) {
-                loadData();
-            } else {
-                alert(t('errorOccurred') + ': ' + (result.error || t('saveFailed')));
+        if (confirm((t('inv_deleteConfirm') || 'Are you sure you want to delete this invoice?') + ' ' + (t('sinv_deleteNote') || ''))) {
+            try {
+                const result = await window.api.invoices.delete(id);
+                if (result.success) {
+                    toast.success(t('deletedSuccess') || 'Invoice deleted successfully');
+                    loadData();
+                } else {
+                    toast.error((t('errorOccurred') || 'Error occurred') + ': ' + (result.error || t('deleteFailed') || 'Delete failed'));
+                }
+            } catch (error) {
+                console.error('Error deleting invoice:', error);
+                toast.error(t('errorOccurred') || 'Error occurred while deleting invoice');
             }
         }
     };
@@ -201,7 +236,7 @@ function SalesInvoices() {
             console.log('[handleEdit] Invoice items:', invoice?.items);
 
             if (!invoice) {
-                alert(t('inv_loadError'));
+                toast.error(t('inv_loadError'));
                 return;
             }
 
@@ -237,7 +272,7 @@ function SalesInvoices() {
             setShowModal(true);
         } catch (err) {
             console.error('[handleEdit] Error:', err);
-            alert(t('inv_loadError') + ': ' + err.message);
+            toast.error(t('inv_loadError') + ': ' + err.message);
         }
     };
 
@@ -259,11 +294,11 @@ function SalesInvoices() {
 
     const printInvoice = async () => {
         if (!selectedInvoice) return;
-        const currencySymbol = settings.general?.currency_symbol || 'د.ك';
-        const invoiceTitle = settings.invoice?.invoice_title_sales || 'فاتورة مبيعات';
-        const invoiceFooter = settings.invoice?.invoice_footer || 'شكراً لتعاملكم معنا';
+        const currencySymbol = settings.general?.currency_symbol || (t('currency_kd') || 'KD');
+        const invoiceTitle = settings.invoice?.invoice_title_sales || (t('sales_invoice') || 'Sales Invoice');
+        const invoiceFooter = settings.invoice?.invoice_footer || (t('invoice_footer_default') || 'Thank you for your business');
         const invoiceTerms = settings.invoice?.invoice_terms || '';
-        const companyName = settings.company?.company_name || 'شركتي';
+        const companyName = settings.company?.company_name || (t('my_company') || 'My Company');
         const companyAddress = settings.company?.company_address || '';
         const companyPhone = settings.company?.company_phone || '';
         const companyEmail = settings.company?.company_email || '';
@@ -275,15 +310,19 @@ function SalesInvoices() {
         }
         const logoHtml = logoBase64 ? `<img src="${logoBase64}" alt="Logo" style="max-height:60px;max-width:140px;object-fit:contain" />` : '';
         const showCompanyInfo = settings.invoice?.show_company_info !== 'no';
-        const companyInfoHtml = showCompanyInfo ? `<div style="line-height:1.5"><h1 style="margin:0;font-size:20px;font-weight:700">${companyName}</h1>${companyAddress ? `<p style="margin:2px 0;font-size:11px;color:#555">${companyAddress}</p>` : ''}${companyPhone ? `<p style="margin:2px 0;font-size:11px;color:#555">هاتف: ${companyPhone}</p>` : ''}${companyEmail ? `<p style="margin:2px 0;font-size:11px;color:#555">${companyEmail}</p>` : ''}${companyTaxNumber ? `<p style="margin:2px 0;font-size:11px;color:#555">الرقم الضريبي: ${companyTaxNumber}</p>` : ''}</div>` : '';
+        const companyInfoHtml = showCompanyInfo ? `<div style="line-height:1.5"><h1 style="margin:0;font-size:20px;font-weight:700">${companyName}</h1>${companyAddress ? `<p style="margin:2px 0;font-size:11px;color:#555">${companyAddress}</p>` : ''}${companyPhone ? `<p style="margin:2px 0;font-size:11px;color:#555">${t('phone_abbr') || 'Tel'}: ${companyPhone}</p>` : ''}${companyEmail ? `<p style="margin:2px 0;font-size:11px;color:#555">${companyEmail}</p>` : ''}${companyTaxNumber ? `<p style="margin:2px 0;font-size:11px;color:#555">${t('tax_number_abbr') || 'Tax No'}: ${companyTaxNumber}</p>` : ''}</div>` : '';
         const inv = selectedInvoice;
-        const statusLabel = inv.status === 'paid' ? 'مدفوعة' : inv.status === 'partial' ? 'مدفوعة جزئياً' : 'آجلة';
-        const formatCurr = (a) => new Intl.NumberFormat('ar-KW', { minimumFractionDigits: 3 }).format(a || 0) + ' ' + currencySymbol;
+        const statusLabel = inv.status === 'paid' ? (t('inv_paid') || 'Paid') : inv.status === 'partial' ? (t('inv_partial') || 'Partially Paid') : (t('inv_credit') || 'Credit');
+        const formatCurr = (a) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(a || 0) + ' ' + currencySymbol;
         const statusColor = inv.status === 'paid' ? '#22c55e' : inv.status === 'partial' ? '#f59e0b' : '#ef4444';
 
         const itemsHtml = (inv.items || []).map((item, i) => `<tr style="border-bottom:1px solid #e2e8f0;${i % 2 === 1 ? 'background:#f8fafc' : ''}"><td style="padding:10px 12px;text-align:center;color:#64748b;font-size:13px">${i + 1}</td><td style="padding:10px 12px;font-weight:500">${item.product_name || item.description || '-'}</td><td style="padding:10px 12px;text-align:center">${item.quantity}</td><td style="padding:10px 12px;text-align:center">${Number(item.unit_price).toFixed(3)} ${currencySymbol}</td><td style="padding:10px 12px;text-align:center;font-weight:600;color:#1a365d">${Number(item.total).toFixed(3)} ${currencySymbol}</td></tr>`).join('');
 
-        const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><style>@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Cairo','Arial',sans-serif;padding:0;background:white;color:#334155;font-size:14px}.invoice-page{max-width:780px;margin:0 auto;padding:30px}.header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px}.divider{height:3px;background:linear-gradient(90deg,#1a365d 0%,#3b82f6 50%,#1a365d 100%);border-radius:2px;margin-bottom:20px}.invoice-title-bar{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#1a365d,#2563eb);color:white;padding:12px 20px;border-radius:8px;margin-bottom:20px}.invoice-title-bar h2{margin:0;font-size:18px;font-weight:600}.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px}.meta-box{padding:15px;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafc}.meta-box h4{font-size:12px;color:#64748b;margin-bottom:8px}.meta-box .value{font-weight:600;color:#1a365d}table{width:100%;border-collapse:collapse;margin-bottom:20px}thead th{background:linear-gradient(135deg,#1a365d,#2563eb);color:white;padding:11px 12px;font-weight:600;font-size:13px;text-align:right}thead th:first-child{border-radius:0 8px 0 0}thead th:last-child{border-radius:8px 0 0 0}.totals-section{display:flex;justify-content:flex-start;margin-bottom:20px}.totals-table{width:280px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0}.totals-table tr td{padding:10px 15px;font-size:13px}.totals-table tr:last-child{background:linear-gradient(135deg,#1a365d,#2563eb);color:white;font-size:16px;font-weight:700}.notes-box{padding:12px 15px;background:#fefce8;border:1px solid #fde68a;border-radius:8px;margin-bottom:15px;font-size:13px}.terms-box{padding:12px 15px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;margin-bottom:20px;font-size:12px}.footer{border-top:2px solid #e2e8f0;padding-top:15px;text-align:center;color:#64748b;font-size:13px}.status-badge{display:inline-block;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:600;color:white}@media print{body{padding:0}.invoice-page{padding:15px}@page{margin:10mm}}</style></head><body><div class="invoice-page"><div class="header"><div style="display:flex;align-items:center;gap:15px">${logoHtml}${companyInfoHtml}</div><div style="text-align:left"><p style="font-size:13px;color:#64748b;margin:3px 0"><strong>رقم الفاتورة:</strong> ${inv.invoice_number}</p><p style="font-size:13px;color:#64748b;margin:3px 0"><strong>التاريخ:</strong> ${new Date(inv.date).toLocaleDateString('ar-KW')}</p>${inv.due_date ? `<p style="font-size:13px;color:#64748b;margin:3px 0"><strong>الاستحقاق:</strong> ${new Date(inv.due_date).toLocaleDateString('ar-KW')}</p>` : ''}</div></div><div class="divider"></div><div class="invoice-title-bar"><h2>${invoiceTitle}</h2><span class="status-badge" style="background:${statusColor}">${statusLabel}</span></div><div class="meta-grid"><div class="meta-box"><h4>بيانات العميل</h4><p class="value">${inv.customer_name || 'عميل نقدي'}</p></div><div class="meta-box"><h4>معلومات الدفع</h4><p><strong>الحالة:</strong> <span style="color:${statusColor};font-weight:600">${statusLabel}</span></p>${inv.payment_method ? `<p><strong>طريقة الدفع:</strong> ${inv.payment_method === 'cash' ? 'نقداً' : inv.payment_method === 'bank' ? 'تحويل بنكي' : inv.payment_method}</p>` : ''}</div></div><table><thead><tr><th style="width:40px;text-align:center">#</th><th>الصنف</th><th style="width:80px;text-align:center">الكمية</th><th style="width:110px;text-align:center">السعر</th><th style="width:110px;text-align:center">الإجمالي</th></tr></thead><tbody>${itemsHtml}</tbody></table><div class="totals-section"><table class="totals-table">${inv.subtotal && inv.subtotal !== inv.total ? `<tr style="background:#f8fafc"><td>المجموع الفرعي</td><td style="text-align:left">${formatCurr(inv.subtotal)}</td></tr>` : ''}${inv.discount ? `<tr style="background:#fef2f2"><td>الخصم</td><td style="text-align:left;color:#ef4444">- ${formatCurr(inv.discount)}</td></tr>` : ''}${inv.tax ? `<tr style="background:#f0f9ff"><td>الضريبة</td><td style="text-align:left">${formatCurr(inv.tax)}</td></tr>` : ''}<tr><td>الإجمالي النهائي</td><td style="text-align:left">${formatCurr(inv.total)}</td></tr></table></div>${inv.notes ? `<div class="notes-box"><strong>ملاحظات:</strong> ${inv.notes}</div>` : ''}${invoiceTerms ? `<div class="terms-box"><strong style="display:block;margin-bottom:5px">الشروط والأحكام:</strong><div style="white-space:pre-wrap;color:#475569">${invoiceTerms}</div></div>` : ''}<div class="footer"><p>${invoiceFooter}</p></div></div></body></html>`;
+        const isRtl = document.documentElement.dir === 'rtl';
+        const alignLeft = isRtl ? 'right' : 'left';
+        const alignRight = isRtl ? 'left' : 'right';
+
+        const html = `<!DOCTYPE html><html dir="${isRtl ? 'rtl' : 'ltr'}" lang="${isRtl ? 'ar' : 'en'}"><head><meta charset="UTF-8"><style>@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Cairo','Arial',sans-serif;padding:0;background:white;color:#334155;font-size:14px}.invoice-page{max-width:780px;margin:0 auto;padding:30px}.header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px}.divider{height:3px;background:linear-gradient(90deg,#1a365d 0%,#3b82f6 50%,#1a365d 100%);border-radius:2px;margin-bottom:20px}.invoice-title-bar{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#1a365d,#2563eb);color:white;padding:12px 20px;border-radius:8px;margin-bottom:20px}.invoice-title-bar h2{margin:0;font-size:18px;font-weight:600}.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px}.meta-box{padding:15px;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafc}.meta-box h4{font-size:12px;color:#64748b;margin-bottom:8px}.meta-box .value{font-weight:600;color:#1a365d}table{width:100%;border-collapse:collapse;margin-bottom:20px}thead th{background:linear-gradient(135deg,#1a365d,#2563eb);color:white;padding:11px 12px;font-weight:600;font-size:13px;text-align:${isRtl ? 'right' : 'left'}}thead th:first-child{border-radius:${isRtl ? '0 8px 0 0' : '8px 0 0 0'}}thead th:last-child{border-radius:${isRtl ? '8px 0 0 0' : '0 8px 0 0'}}.totals-section{display:flex;justify-content:flex-end;margin-bottom:20px;${isRtl ? 'justify-content:flex-start;' : ''}}.totals-table{width:280px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0}.totals-table tr td{padding:10px 15px;font-size:13px}.totals-table tr:last-child{background:linear-gradient(135deg,#1a365d,#2563eb);color:white;font-size:16px;font-weight:700}.notes-box{padding:12px 15px;background:#fefce8;border:1px solid #fde68a;border-radius:8px;margin-bottom:15px;font-size:13px}.terms-box{padding:12px 15px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;margin-bottom:20px;font-size:12px}.footer{border-top:2px solid #e2e8f0;padding-top:15px;text-align:center;color:#64748b;font-size:13px}.status-badge{display:inline-block;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:600;color:white}@media print{body{padding:0}.invoice-page{padding:15px}@page{margin:10mm}}</style></head><body><div class="invoice-page"><div class="header"><div style="display:flex;align-items:center;gap:15px">${logoHtml}${companyInfoHtml}</div><div style="text-align:${alignRight}"><p style="font-size:13px;color:#64748b;margin:3px 0"><strong>${t('inv_number') || 'Invoice No'}:</strong> ${inv.invoice_number}</p><p style="font-size:13px;color:#64748b;margin:3px 0"><strong>${t('date') || 'Date'}:</strong> ${new Date(inv.date).toLocaleDateString('en-GB')}</p>${inv.due_date ? `<p style="font-size:13px;color:#64748b;margin:3px 0"><strong>${t('inv_dueDate') || 'Due Date'}:</strong> ${new Date(inv.due_date).toLocaleDateString('en-GB')}</p>` : ''}</div></div><div class="divider"></div><div class="invoice-title-bar"><h2>${invoiceTitle}</h2><span class="status-badge" style="background:${statusColor}">${statusLabel}</span></div><div class="meta-grid"><div class="meta-box"><h4>${t('customer_data') || 'Customer Data'}</h4><p class="value">${inv.customer_name || (t('cash_customer') || 'Cash Customer')}</p></div><div class="meta-box"><h4>${t('payment_info') || 'Payment Info'}</h4><p><strong>${t('status') || 'Status'}:</strong> <span style="color:${statusColor};font-weight:600">${statusLabel}</span></p>${inv.payment_method ? `<p><strong>${t('inv_paymentMethod') || 'Payment Method'}:</strong> ${inv.payment_method === 'cash' ? (t('inv_cash') || 'Cash') : inv.payment_method === 'bank' ? (t('inv_bank') || 'Bank Transfer') : inv.payment_method}</p>` : ''}</div></div><table><thead><tr><th style="width:40px;text-align:center">#</th><th>${t('inv_product') || 'Item'}</th><th style="width:80px;text-align:center">${t('inv_quantity') || 'Qty'}</th><th style="width:110px;text-align:center">${t('inv_unitPrice') || 'Price'}</th><th style="width:110px;text-align:center">${t('inv_itemTotal') || 'Total'}</th></tr></thead><tbody>${itemsHtml}</tbody></table><div class="totals-section"><table class="totals-table">${inv.subtotal && inv.subtotal !== inv.total ? `<tr style="background:#f8fafc"><td>${t('subtotal') || 'Subtotal'}</td><td style="text-align:${alignLeft}">${formatCurr(inv.subtotal)}</td></tr>` : ''}${inv.discount ? `<tr style="background:#fef2f2"><td>${t('discount') || 'Discount'}</td><td style="text-align:${alignLeft};color:#ef4444">- ${formatCurr(inv.discount)}</td></tr>` : ''}${inv.tax ? `<tr style="background:#f0f9ff"><td>${t('tax') || 'Tax'}</td><td style="text-align:${alignLeft}">${formatCurr(inv.tax)}</td></tr>` : ''}<tr><td>${t('final_total') || 'Final Total'}</td><td style="text-align:${alignLeft}">${formatCurr(inv.total)}</td></tr></table></div>${inv.notes ? `<div class="notes-box"><strong>${t('notes') || 'Notes'}:</strong> ${inv.notes}</div>` : ''}${invoiceTerms ? `<div class="terms-box"><strong style="display:block;margin-bottom:5px">${t('terms_and_conditions') || 'Terms and Conditions'}:</strong><div style="white-space:pre-wrap;color:#475569">${invoiceTerms}</div></div>` : ''}<div class="footer"><p>${invoiceFooter}</p></div></div></body></html>`;
         await window.api.print.invoice(html);
     };
 
@@ -302,7 +341,7 @@ function SalesInvoices() {
         setEditingId(null);
     };
 
-    const formatCurrency = (amount) => new Intl.NumberFormat('ar-KW', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (settings.general?.currency_symbol || 'د.ك');
+    const formatCurrency = (amount) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (settings.general?.currency_symbol || (t('currency_kd') || 'KD'));
 
     const filteredInvoices = invoices.filter(inv => {
         const matchesSearch = inv.invoice_number?.includes(searchQuery) || inv.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -311,6 +350,12 @@ function SalesInvoices() {
         const matchesDateFrom = !dateFrom || inv.date >= dateFrom;
         const matchesDateTo = !dateTo || inv.date <= dateTo;
         return matchesSearch && matchesStatus && matchesCustomer && matchesDateFrom && matchesDateTo;
+    }).sort((a, b) => {
+        // Sort by date descending, then by id descending
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        if (dateB !== dateA) return dateB - dateA;
+        return b.id - a.id;
     });
 
     const getStatusLabel = (status) => {
@@ -318,6 +363,33 @@ function SalesInvoices() {
         if (status === 'partial') return t('inv_partial');
         if (status === 'cancelled') return t('inv_cancelled');
         return t('inv_pending');
+    };
+
+    const exportCSV = async () => {
+        const rows = [[
+            t('inv_number') || 'Invoice Number',
+            t('sinv_customer') || 'Customer',
+            t('date') || 'Date',
+            t('subtotal') || 'Subtotal',
+            t('discount') || 'Discount',
+            t('total') || 'Total',
+            t('status') || 'Status',
+            t('notes') || 'Notes'
+        ]];
+        filteredInvoices.forEach(inv => {
+            rows.push([
+                inv.invoice_number || '',
+                inv.customer_name || '',
+                inv.date || '',
+                inv.subtotal || 0,
+                inv.discount || 0,
+                inv.total || 0,
+                inv.status === 'paid' ? (t('inv_paid') || 'Paid') : (t('inv_credit') || 'Credit'),
+                inv.notes || ''
+            ]);
+        });
+        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+        await window.api.file.saveText({ content: csv, defaultName: 'Sales_Invoices.csv', filters: [{ name: 'CSV', extensions: ['csv'] }] });
     };
 
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
@@ -328,17 +400,23 @@ function SalesInvoices() {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '16px', padding: '14px 16px', background: 'var(--bg-secondary)', borderRadius: '10px', border: '1px solid var(--border)' }}>
                 {/* Search */}
                 <div style={{ position: 'relative' }}>
-                    <input type="text" className="form-input" placeholder={t('search')} value={searchQuery}
+                    <input
+                        ref={searchInputRef}
+                        type="text"
+                        className="form-input"
+                        placeholder={t('search') + " (Ctrl+F)"}
+                        value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        style={{ paddingRight: '40px', width: '220px', margin: 0 }} />
+                        style={{ paddingRight: '40px', width: '220px', margin: 0 }}
+                    />
                     <Search size={16} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 </div>
                 {/* Status Filter */}
                 <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
                     style={{ width: '130px', margin: 0 }}>
-                    <option value="all">كل الحالات</option>
-                    <option value="paid">مدفوعة</option>
-                    <option value="pending">آجلة</option>
+                    <option value="all">{t('all') || 'All Statuses'}</option>
+                    <option value="paid">{t('inv_paid') || 'Paid'}</option>
+                    <option value="pending">{t('inv_credit') || 'Credit'}</option>
                 </select>
                 {/* Customer Filter */}
                 <div style={{ width: '200px' }}>
@@ -346,22 +424,25 @@ function SalesInvoices() {
                         options={customers.map(c => ({ value: String(c.id), label: c.name }))}
                         value={customerFilter}
                         onChange={setCustomerFilter}
-                        placeholder="كل العملاء"
-                        emptyLabel="كل العملاء"
+                        placeholder={t('all') || "All Customers"}
+                        emptyLabel={t('all') || "All Customers"}
                     />
                 </div>
                 {/* Date From */}
                 <input type="date" className="form-input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                    style={{ width: '150px', margin: 0 }} title="من تاريخ" />
+                    style={{ width: '150px', margin: 0 }} title={t('from_date') || "From Date"} />
                 {/* Date To */}
                 <input type="date" className="form-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                    style={{ width: '150px', margin: 0 }} title="إلى تاريخ" />
+                    style={{ width: '150px', margin: 0 }} title={t('to_date') || "To Date"} />
                 {/* Clear */}
                 {(searchQuery || statusFilter !== 'all' || customerFilter || dateFrom || dateTo) && (
                     <button className="btn btn-ghost btn-sm" onClick={() => { setSearchQuery(''); setStatusFilter('all'); setCustomerFilter(''); setDateFrom(''); setDateTo(''); }}
-                        style={{ color: 'var(--text-muted)' }}>✕ مسح</button>
+                        style={{ color: 'var(--text-muted)' }}>✕ {t('clear') || 'Clear'}</button>
                 )}
-                <span style={{ marginRight: 'auto', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{filteredInvoices.length} فاتورة</span>
+                <span style={{ marginRight: 'auto', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{filteredInvoices.length} {t('menu_sales')}</span>
+                <button className="btn btn-secondary" onClick={exportCSV} style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#059669' }}>
+                    <Download size={16} /> CSV
+                </button>
                 {user?.permissions?.sales_invoices?.can_create && (
                     <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> {t('sinv_add')}</button>
                 )}
@@ -380,7 +461,7 @@ function SalesInvoices() {
                                         <tr key={inv.id}>
                                             <td className="font-bold">{inv.invoice_number}</td>
                                             <td>{inv.customer_name || '-'}</td>
-                                            <td>{new Date(inv.date).toLocaleDateString('ar-KW')}</td>
+                                            <td>{new Date(inv.date).toLocaleDateString('en-GB')}</td>
                                             <td className="font-bold">{formatCurrency(inv.total)}</td>
                                             <td><span className={`badge ${inv.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{getStatusLabel(inv.status)}</span></td>
                                             <td>
@@ -409,9 +490,9 @@ function SalesInvoices() {
             </div>
 
             {/* Create/Edit Modal */}
-            <Modal isOpen={showModal} onClose={closeModal} title={editMode ? t('sinv_edit') : t('sinv_add')} size="lg" footer={<><button className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel')}</button><button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>{saving ? t('savingProgress') : t('save')}</button></>}>
+            <Modal isOpen={showModal} onClose={closeModal} title={editMode ? t('sinv_edit') : t('sinv_add')} size="lg" footer={<><button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel')} (Esc)</button><button type="submit" form="sales-invoice-form" className="btn btn-primary" disabled={saving}>{saving ? t('savingProgress') : t('save') + ' (Ctrl+S)'}</button></>}>
                 {error && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{error}</div>}
-                <form onSubmit={handleSubmit}>
+                <form id="sales-invoice-form" onSubmit={handleSubmit}>
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">{t('sinv_customer')}</label>
@@ -454,14 +535,17 @@ function SalesInvoices() {
                                 <tbody>
                                     {formData.items.map((item, index) => {
                                         const product = item.product_id ? products.find(p => p.id === parseInt(item.product_id)) : null;
-                                        const stockInfo = product ? ` (${t('inv_available') || 'المتوفر'}: ${product.stock_quantity || 0})` : '';
+                                        const stockInfo = product ? ` (${t('inv_available') || 'Available'}: ${product.stock_quantity || 0})` : '';
                                         return (
                                             <tr key={index}>
-                                                <td>
-                                                    <select className="form-select" value={item.product_id} onChange={(e) => handleProductChange(index, e.target.value)} style={{ margin: 0 }}>
-                                                        <option value="">{t('inv_selectProduct')}</option>
-                                                        {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.stock_quantity || 0})</option>)}
-                                                    </select>
+                                                <td style={{ minWidth: '200px' }}>
+                                                    <SearchableSelect
+                                                        options={products.map(p => ({ value: String(p.id), label: `${p.name} (${p.stock_quantity || 0})`, subLabel: p.code }))}
+                                                        value={item.product_id ? String(item.product_id) : ''}
+                                                        onChange={(val) => handleProductChange(index, val)}
+                                                        placeholder={t('inv_selectProduct')}
+                                                        emptyLabel={t('inv_selectProduct')}
+                                                    />
                                                 </td>
                                                 <td><input type="text" className="form-input" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} style={{ margin: 0 }} /></td>
                                                 <td><input type="number" className="form-input" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} min="1" step="1" style={{ margin: 0 }} /></td>
@@ -485,7 +569,7 @@ function SalesInvoices() {
             <Modal isOpen={showViewModal} onClose={() => setShowViewModal(false)} title={`${t('inv_view')} ${selectedInvoice?.invoice_number}`} size="lg" footer={<><button className="btn btn-secondary" onClick={() => setShowViewModal(false)}>{t('close')}</button><button className="btn btn-primary" onClick={printInvoice}><Printer size={18} /> {t('inv_print')}</button></>}>
                 {selectedInvoice && (
                     <div>
-                        <div className="form-row mb-4"><div><strong>{t('sinv_customer')}:</strong> {selectedInvoice.customer_name || '-'}</div><div><strong>{t('date')}:</strong> {new Date(selectedInvoice.date).toLocaleDateString('ar-KW')}</div></div>
+                        <div className="form-row mb-4"><div><strong>{t('sinv_customer')}:</strong> {selectedInvoice.customer_name || '-'}</div><div><strong>{t('date')}:</strong> {new Date(selectedInvoice.date).toLocaleDateString('en-GB')}</div></div>
                         <div className="table-container">
                             <table><thead><tr><th>#</th><th>{t('inv_product')}</th><th>{t('inv_quantity')}</th><th>{t('inv_unitPrice')}</th><th>{t('inv_total')}</th></tr></thead><tbody>{selectedInvoice.items?.map((item, i) => <tr key={i}><td>{i + 1}</td><td>{item.product_name || item.description}</td><td>{item.quantity}</td><td>{formatCurrency(item.unit_price)}</td><td className="font-bold">{formatCurrency(item.total)}</td></tr>)}</tbody></table>
                         </div>

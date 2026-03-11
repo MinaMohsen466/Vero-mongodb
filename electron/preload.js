@@ -1,6 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+    // System
+    system: {
+        isFirstRun: () => ipcRenderer.invoke('system:isFirstRun'),
+        runSetup: (data) => ipcRenderer.invoke('system:runSetup', data)
+    },
+
     // Users & Auth
     users: {
         login: (username, password) => ipcRenderer.invoke('users:login', { username, password }),
@@ -95,14 +101,20 @@ contextBridge.exposeInMainWorld('api', {
         backup: () => ipcRenderer.invoke('settings:backup'),
         backupToPath: (destPath) => ipcRenderer.invoke('settings:backupToPath', destPath),
         getDbPath: () => ipcRenderer.invoke('settings:getDbPath'),
+        getDbSize: () => ipcRenderer.invoke('settings:getDbSize'),
         changeDbPath: (newFolderPath) => ipcRenderer.invoke('settings:changeDbPath', newFolderPath),
-        restore: (filePath) => ipcRenderer.invoke('settings:restore', filePath)
+        restore: (filePath) => ipcRenderer.invoke('settings:restore', filePath),
+        resetApp: () => ipcRenderer.invoke('settings:resetApp'),
+        optimizeDb: () => ipcRenderer.invoke('settings:optimizeDb')
     },
 
     // Permissions
     permissions: {
         getByRole: (role) => ipcRenderer.invoke('permissions:getByRole', role),
-        savePermissions: (role, permissions) => ipcRenderer.invoke('permissions:savePermissions', { role, permissions })
+        savePermissions: (role, permissions) => ipcRenderer.invoke('permissions:savePermissions', { role, permissions }),
+        getUserPermissions: (userId) => ipcRenderer.invoke('permissions:getUserPermissions', userId),
+        saveUserPermissions: (userId, permissions) => ipcRenderer.invoke('permissions:saveUserPermissions', { userId, permissions }),
+        clearUserPermissions: (userId) => ipcRenderer.invoke('permissions:clearUserPermissions', userId)
     },
 
     // HR: Employees
@@ -154,6 +166,7 @@ contextBridge.exposeInMainWorld('api', {
     // File utils
     file: {
         readAsBase64: (filePath) => ipcRenderer.invoke('file:readAsBase64', filePath),
-        copyLogo: (srcPath) => ipcRenderer.invoke('file:copyLogo', srcPath)
+        copyLogo: (srcPath) => ipcRenderer.invoke('file:copyLogo', srcPath),
+        saveText: (options) => ipcRenderer.invoke('file:saveText', options)
     }
 });

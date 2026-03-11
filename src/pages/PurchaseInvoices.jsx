@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Eye, Trash2, Search, ShoppingBag, Printer, X, Edit } from 'lucide-react';
+import { Plus, Eye, Trash2, Search, ShoppingBag, Printer, X, Edit, Download } from 'lucide-react';
 import Modal from '../components/Modal';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
 import SearchableSelect from '../components/SearchableSelect';
 import { useAuth } from '../App';
+import { toast } from 'react-hot-toast';
+import { useShortcuts } from '../hooks/useShortcuts';
 
 function PurchaseInvoices() {
     const { t, user } = useAuth();
@@ -34,6 +36,28 @@ function PurchaseInvoices() {
     });
 
     const [formData, setFormData] = useState(emptyForm());
+    const searchInputRef = React.useRef(null);
+
+    useShortcuts({
+        Save: (e) => {
+            if (showModal) {
+                const btn = document.querySelector('#purchase-invoice-form button[type="submit"]') || document.querySelector('button[form="purchase-invoice-form"]');
+                if (btn) btn.click();
+                else handleSubmit(e);
+            }
+        },
+        New: () => {
+            if (!showModal && user?.permissions?.purchase_invoices?.can_create) openModal();
+        },
+        Escape: () => {
+            if (showModal) closeModal();
+            if (showViewModal) setShowViewModal(false);
+            if (showPrintPreview) setShowPrintPreview(false);
+        },
+        Search: () => {
+            if (searchInputRef.current) searchInputRef.current.focus();
+        }
+    });
 
     useEffect(() => { loadData(); }, []);
 
@@ -130,25 +154,36 @@ function PurchaseInvoices() {
             }
 
             if (result.success) {
+                toast.success(t('savedSuccess') || (editMode ? 'Invoice updated successfully' : 'Invoice saved successfully'));
                 await loadData();
                 closeModal();
             } else {
-                setError(result.error || t('inv_saveError'));
+                const errorMsg = result.error || t('inv_saveError') || 'Error saving invoice';
+                setError(errorMsg);
+                toast.error(errorMsg);
             }
         } catch (e) {
             console.error('Error saving invoice:', e);
-            setError(t('inv_saveError') + ': ' + e.message);
+            const errorMsg = (t('inv_saveError') || 'Error') + ': ' + e.message;
+            setError(errorMsg);
+            toast.error(errorMsg);
         }
         setSaving(false);
     };
 
     const handleDelete = async (id) => {
-        if (confirm(t('inv_deleteConfirm') + ' ' + t('pinv_deleteNote'))) {
-            const result = await window.api.invoices.delete(id);
-            if (result.success) {
-                loadData();
-            } else {
-                alert(t('errorOccurred') + ': ' + (result.error || t('saveFailed')));
+        if (confirm((t('inv_deleteConfirm') || 'Are you sure you want to delete this invoice?') + ' ' + (t('pinv_deleteNote') || ''))) {
+            try {
+                const result = await window.api.invoices.delete(id);
+                if (result.success) {
+                    toast.success(t('deletedSuccess') || 'Invoice deleted successfully');
+                    loadData();
+                } else {
+                    toast.error((t('errorOccurred') || 'Error occurred') + ': ' + (result.error || t('deleteFailed') || 'Delete failed'));
+                }
+            } catch (error) {
+                console.error('Error deleting invoice:', error);
+                toast.error(t('errorOccurred') || 'Error occurred while deleting invoice');
             }
         }
     };
@@ -161,7 +196,7 @@ function PurchaseInvoices() {
             console.log('[handleEdit] Invoice items:', invoice?.items);
 
             if (!invoice) {
-                alert(t('inv_loadError'));
+                toast.error(t('inv_loadError'));
                 return;
             }
 
@@ -203,7 +238,7 @@ function PurchaseInvoices() {
             setShowModal(true);
         } catch (err) {
             console.error('[handleEdit] Error:', err);
-            alert(t('inv_loadError') + ': ' + err.message);
+            toast.error(t('inv_loadError') + ': ' + err.message);
         }
     };
 
@@ -215,15 +250,19 @@ function PurchaseInvoices() {
 
     const printInvoice = async () => {
         if (!selectedInvoice) return;
-        const currencySymbol = settings.general?.currency_symbol || 'د.ك';
-        const invoiceTitle = settings.invoice?.invoice_title_purchase || 'فاتورة مشتريات';
-        const invoiceFooter = settings.invoice?.invoice_footer || 'شكراً لتعاملكم معنا';
-        const companyName = settings.company?.company_name || 'شركتي';
+        const currencySymbol = settings.general?.currency_symbol || (t('currency_kd') || 'KD');
+        const invoiceTitle = settings.invoice?.invoice_title_purchase || (t('purchase_invoice') || 'Purchase Invoice');
+        const invoiceFooter = settings.invoice?.invoice_footer || (t('invoice_footer_default') || 'Thank you for your business');
+        const companyName = settings.company?.company_name || (t('my_company') || 'My Company');
         const companyLogo = settings.company?.company_logo || '';
 
         const logoHtml = companyLogo ? `<img src="${companyLogo}" alt="Logo" style="max-height:60px;max-width:150px;object-fit:contain" />` : '';
 
-        const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><style>body{font-family:'Cairo','Arial',sans-serif;padding:40px;margin:0}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1e3a5f;padding-bottom:20px;margin-bottom:20px}.company{display:flex;align-items:center;gap:15px}.company h1{margin:0;font-size:24px;color:#1e3a5f}.info{text-align:left}.info p{margin:4px 0;font-size:14px}.supplier{margin:20px 0;padding:15px;background:#f8fafc;border-radius:8px;border-right:4px solid #1e3a5f}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{border:1px solid #e2e8f0;padding:12px;text-align:right}th{background:#1e3a5f;color:white;font-weight:600}tr:nth-child(even){background:#f8fafc}.totals{margin-top:20px;display:flex;justify-content:flex-end}.totals table{width:280px;border:none}.totals td{border:none;padding:8px 12px}.total-row{font-size:18px;font-weight:bold;background:#1e3a5f;color:white;border-radius:8px}.footer{margin-top:40px;text-align:center;color:#64748b;border-top:1px solid #e2e8f0;padding-top:20px;font-size:14px}</style></head><body><div class="header"><div class="company">${logoHtml}<div><h1>${companyName}</h1><p style="color:#64748b;margin:0">${invoiceTitle}</p></div></div><div class="info"><p><strong>${t('inv_number')}:</strong> ${selectedInvoice.invoice_number}</p><p><strong>${t('date')}:</strong> ${new Date(selectedInvoice.date).toLocaleDateString('ar-KW')}</p>${selectedInvoice.due_date ? `<p><strong>${t('inv_dueDate')}:</strong> ${new Date(selectedInvoice.due_date).toLocaleDateString('ar-KW')}</p>` : ''}</div></div><div class="supplier"><strong>${t('pinv_supplier')}:</strong> ${selectedInvoice.supplier_name || '-'}</div><table><thead><tr><th style="width:40px">#</th><th>${t('inv_product')}</th><th style="width:80px">${t('inv_quantity')}</th><th style="width:100px">${t('inv_unitPrice')}</th><th style="width:100px">${t('inv_total')}</th></tr></thead><tbody>${selectedInvoice.items?.map((item, i) => `<tr><td style="text-align:center">${i + 1}</td><td>${item.product_name || item.description}</td><td style="text-align:center">${item.quantity}</td><td>${Number(item.unit_price).toFixed(3)} ${currencySymbol}</td><td style="font-weight:bold">${Number(item.total).toFixed(3)} ${currencySymbol}</td></tr>`).join('')}</tbody></table><div class="totals"><table><tr class="total-row"><td>${t('inv_total')}:</td><td>${Number(selectedInvoice.total).toFixed(3)} ${currencySymbol}</td></tr></table></div>${selectedInvoice.notes ? `<div style="margin-top:20px;padding:10px;background:#fef9c3;border-radius:4px;font-size:14px"><strong>${t('notes')}:</strong> ${selectedInvoice.notes}</div>` : ''}<div class="footer"><p>${invoiceFooter}</p></div></body></html>`;
+        const isRtl = document.documentElement.dir === 'rtl';
+        const alignLeft = isRtl ? 'right' : 'left';
+        const alignRight = isRtl ? 'left' : 'right';
+
+        const html = `<!DOCTYPE html><html dir="${isRtl ? 'rtl' : 'ltr'}" lang="${isRtl ? 'ar' : 'en'}"><head><meta charset="UTF-8"><style>body{font-family:'Cairo','Arial',sans-serif;padding:40px;margin:0}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1e3a5f;padding-bottom:20px;margin-bottom:20px}.company{display:flex;align-items:center;gap:15px}.company h1{margin:0;font-size:24px;color:#1e3a5f}.info{text-align:${alignRight}}.info p{margin:4px 0;font-size:14px}.supplier{margin:20px 0;padding:15px;background:#f8fafc;border-radius:8px;border-${isRtl ? 'right' : 'left'}:4px solid #1e3a5f}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{border:1px solid #e2e8f0;padding:12px;text-align:${alignLeft}}th{background:#1e3a5f;color:white;font-weight:600;text-align:${isRtl ? 'right' : 'left'}}tr:nth-child(even){background:#f8fafc}.totals{margin-top:20px;display:flex;justify-content:flex-end;${isRtl ? 'justify-content:flex-start;' : ''}}.totals table{width:280px;border:none}.totals td{border:none;padding:8px 12px}.total-row{font-size:18px;font-weight:bold;background:#1e3a5f;color:white;border-radius:8px}.footer{margin-top:40px;text-align:center;color:#64748b;border-top:1px solid #e2e8f0;padding-top:20px;font-size:14px}</style></head><body><div class="header"><div class="company">${logoHtml}<div><h1>${companyName}</h1><p style="color:#64748b;margin:0">${invoiceTitle}</p></div></div><div class="info"><p><strong>${t('inv_number') || 'Invoice No'}:</strong> ${selectedInvoice.invoice_number}</p><p><strong>${t('date') || 'Date'}:</strong> ${new Date(selectedInvoice.date).toLocaleDateString('en-GB')}</p>${selectedInvoice.due_date ? `<p><strong>${t('inv_dueDate') || 'Due Date'}:</strong> ${new Date(selectedInvoice.due_date).toLocaleDateString('en-GB')}</p>` : ''}</div></div><div class="supplier"><strong>${t('pinv_supplier') || 'Supplier'}:</strong> ${selectedInvoice.supplier_name || '-'}</div><table><thead><tr><th style="width:40px;text-align:center">#</th><th>${t('inv_product') || 'Item'}</th><th style="width:80px;text-align:center">${t('inv_quantity') || 'Qty'}</th><th style="width:100px;text-align:center">${t('inv_unitPrice') || 'Price'}</th><th style="width:100px;text-align:center">${t('inv_total') || 'Total'}</th></tr></thead><tbody>${selectedInvoice.items?.map((item, i) => `<tr><td style="text-align:center">${i + 1}</td><td>${item.product_name || item.description}</td><td style="text-align:center">${item.quantity}</td><td>${Number(item.unit_price).toFixed(3)} ${currencySymbol}</td><td style="font-weight:bold">${Number(item.total).toFixed(3)} ${currencySymbol}</td></tr>`).join('')}</tbody></table><div class="totals"><table><tr class="total-row"><td>${t('inv_total') || 'Total'}:</td><td>${Number(selectedInvoice.total).toFixed(3)} ${currencySymbol}</td></tr></table></div>${selectedInvoice.notes ? `<div style="margin-top:20px;padding:10px;background:#fef9c3;border-radius:4px;font-size:14px"><strong>${t('notes') || 'Notes'}:</strong> ${selectedInvoice.notes}</div>` : ''}<div class="footer"><p>${invoiceFooter}</p></div></body></html>`;
         await window.api.print.invoice(html);
     };
 
@@ -242,7 +281,7 @@ function PurchaseInvoices() {
         setEditingId(null);
     };
 
-    const formatCurrency = (amount) => new Intl.NumberFormat('ar-KW', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (settings.general?.currency_symbol || 'د.ك');
+    const formatCurrency = (amount) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (settings.general?.currency_symbol || (t('currency_kd') || 'KD'));
 
     const filteredInvoices = invoices.filter(inv => {
         const matchesSearch = inv.invoice_number?.includes(searchQuery) || inv.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -251,6 +290,12 @@ function PurchaseInvoices() {
         const matchesDateFrom = !dateFrom || inv.date >= dateFrom;
         const matchesDateTo = !dateTo || inv.date <= dateTo;
         return matchesSearch && matchesStatus && matchesSupplier && matchesDateFrom && matchesDateTo;
+    }).sort((a, b) => {
+        // Sort by date descending, then by id descending
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        if (dateB !== dateA) return dateB - dateA;
+        return b.id - a.id;
     });
 
     const getStatusLabel = (status) => {
@@ -260,42 +305,79 @@ function PurchaseInvoices() {
         return t('inv_pending');
     };
 
+    const exportCSV = async () => {
+        const rows = [[
+            t('inv_number') || 'Invoice Number',
+            t('pinv_supplier') || 'Supplier',
+            t('date') || 'Date',
+            t('subtotal') || 'Subtotal',
+            t('discount') || 'Discount',
+            t('total') || 'Total',
+            t('status') || 'Status',
+            t('notes') || 'Notes'
+        ]];
+        filteredInvoices.forEach(inv => {
+            rows.push([
+                inv.invoice_number || '',
+                inv.supplier_name || '',
+                inv.date || '',
+                inv.subtotal || 0,
+                inv.discount || 0,
+                inv.total || 0,
+                inv.status === 'paid' ? (t('inv_paid') || 'Paid') : (t('inv_credit') || 'Credit'),
+                inv.notes || ''
+            ]);
+        });
+        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+        await window.api.file.saveText({ content: csv, defaultName: 'Purchase_Invoices.csv', filters: [{ name: 'CSV', extensions: ['csv'] }] });
+    };
+
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
 
     return (
         <div>
             {/* Filter Bar */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '16px', padding: '14px 16px', background: 'var(--bg-secondary)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                {/* Search */}
                 <div style={{ position: 'relative' }}>
-                    <input type="text" className="form-input" placeholder={t('search')} value={searchQuery}
+                    <input
+                        ref={searchInputRef}
+                        type="text"
+                        className="form-input"
+                        placeholder={t('search') + " (Ctrl+F)"}
+                        value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        style={{ paddingRight: '40px', width: '220px', margin: 0 }} />
+                        style={{ paddingRight: '40px', width: '220px', margin: 0 }}
+                    />
                     <Search size={16} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 </div>
                 <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
                     style={{ width: '130px', margin: 0 }}>
-                    <option value="all">كل الحالات</option>
-                    <option value="paid">مدفوعة</option>
-                    <option value="pending">آجلة</option>
+                    <option value="all">{t('all') || 'All Statuses'}</option>
+                    <option value="paid">{t('inv_paid') || 'Paid'}</option>
+                    <option value="pending">{t('inv_credit') || 'Credit'}</option>
                 </select>
                 <div style={{ width: '200px' }}>
                     <SearchableSelect
                         options={suppliers.map(s => ({ value: String(s.id), label: s.name }))}
                         value={supplierFilter}
                         onChange={setSupplierFilter}
-                        placeholder="كل الموردين"
-                        emptyLabel="كل الموردين"
+                        placeholder={t('all') || "All Suppliers"}
+                        emptyLabel={t('all') || "All Suppliers"}
                     />
                 </div>
                 <input type="date" className="form-input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                    style={{ width: '150px', margin: 0 }} title="من تاريخ" />
+                    style={{ width: '150px', margin: 0 }} title={t('from_date') || "From Date"} />
                 <input type="date" className="form-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                    style={{ width: '150px', margin: 0 }} title="إلى تاريخ" />
+                    style={{ width: '150px', margin: 0 }} title={t('to_date') || "To Date"} />
                 {(searchQuery || statusFilter !== 'all' || supplierFilter || dateFrom || dateTo) && (
                     <button className="btn btn-ghost btn-sm" onClick={() => { setSearchQuery(''); setStatusFilter('all'); setSupplierFilter(''); setDateFrom(''); setDateTo(''); }}
-                        style={{ color: 'var(--text-muted)' }}>✕ مسح</button>
+                        style={{ color: 'var(--text-muted)' }}>✕ {t('clear') || 'Clear'}</button>
                 )}
-                <span style={{ marginRight: 'auto', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{filteredInvoices.length} فاتورة</span>
+                <span style={{ marginRight: 'auto', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{filteredInvoices.length} {t('menu_purchases')}</span>
+                <button className="btn btn-secondary" onClick={exportCSV} style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#059669' }}>
+                    <Download size={16} /> CSV
+                </button>
                 {user?.permissions?.purchase_invoices?.can_create && (
                     <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> {t('pinv_add')}</button>
                 )}
@@ -314,7 +396,7 @@ function PurchaseInvoices() {
                                         <tr key={inv.id}>
                                             <td className="font-bold">{inv.invoice_number}</td>
                                             <td>{inv.supplier_name || '-'}</td>
-                                            <td>{new Date(inv.date).toLocaleDateString('ar-KW')}</td>
+                                            <td>{new Date(inv.date).toLocaleDateString('en-GB')}</td>
                                             <td className="font-bold">{formatCurrency(inv.total)}</td>
                                             <td><span className={`badge ${inv.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{getStatusLabel(inv.status)}</span></td>
                                             <td>
@@ -343,9 +425,9 @@ function PurchaseInvoices() {
             </div>
 
             {/* Create/Edit Modal */}
-            <Modal isOpen={showModal} onClose={closeModal} title={editMode ? t('pinv_edit') : t('pinv_add')} size="lg" footer={<><button className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel')}</button><button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>{saving ? t('savingProgress') : t('save')}</button></>}>
+            <Modal isOpen={showModal} onClose={closeModal} title={editMode ? t('pinv_edit') || 'Edit Purchase Invoice' : t('pinv_add') || 'New Purchase Invoice'} size="lg" footer={<><button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel') || 'Cancel'} (Esc)</button><button type="submit" form="purchase-invoice-form" className="btn btn-primary" disabled={saving}>{saving ? (t('savingProgress') || 'Saving...') : (t('save') || 'Save') + ' (Ctrl+S)'}</button></>}>
                 {error && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{error}</div>}
-                <form onSubmit={handleSubmit}>
+                <form id="purchase-invoice-form" onSubmit={handleSubmit}>
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">{t('pinv_supplier')}</label>
@@ -388,7 +470,15 @@ function PurchaseInvoices() {
                                 <tbody>
                                     {formData.items.map((item, index) => (
                                         <tr key={index}>
-                                            <td><select className="form-select" value={item.product_id} onChange={(e) => handleProductChange(index, e.target.value)} style={{ margin: 0 }}><option value="">{t('inv_selectProduct')}</option>{products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></td>
+                                            <td style={{ minWidth: '200px' }}>
+                                                <SearchableSelect
+                                                    options={products.map(p => ({ value: String(p.id), label: p.name, subLabel: p.code }))}
+                                                    value={item.product_id ? String(item.product_id) : ''}
+                                                    onChange={(val) => handleProductChange(index, val)}
+                                                    placeholder={t('inv_selectProduct')}
+                                                    emptyLabel={t('inv_selectProduct')}
+                                                />
+                                            </td>
                                             <td><input type="text" className="form-input" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} style={{ margin: 0 }} /></td>
                                             <td><input type="number" className="form-input" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} min="1" step="1" style={{ margin: 0 }} /></td>
                                             <td><input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.25" style={{ margin: 0 }} /></td>
@@ -410,7 +500,7 @@ function PurchaseInvoices() {
             <Modal isOpen={showViewModal} onClose={() => setShowViewModal(false)} title={`${t('inv_view')} ${selectedInvoice?.invoice_number}`} size="lg" footer={<><button className="btn btn-secondary" onClick={() => setShowViewModal(false)}>{t('close')}</button><button className="btn btn-primary" onClick={printInvoice}><Printer size={18} /> {t('inv_print')}</button></>}>
                 {selectedInvoice && (
                     <div>
-                        <div className="form-row mb-4"><div><strong>{t('pinv_supplier')}:</strong> {selectedInvoice.supplier_name || '-'}</div><div><strong>{t('date')}:</strong> {new Date(selectedInvoice.date).toLocaleDateString('ar-KW')}</div></div>
+                        <div className="form-row mb-4"><div><strong>{t('pinv_supplier')}:</strong> {selectedInvoice.supplier_name || '-'}</div><div><strong>{t('date')}:</strong> {new Date(selectedInvoice.date).toLocaleDateString('en-GB')}</div></div>
                         <div className="table-container">
                             <table><thead><tr><th>#</th><th>{t('inv_product')}</th><th>{t('inv_quantity')}</th><th>{t('inv_unitPrice')}</th><th>{t('inv_total')}</th></tr></thead><tbody>{selectedInvoice.items?.map((item, i) => <tr key={i}><td>{i + 1}</td><td>{item.product_name || item.description}</td><td>{item.quantity}</td><td>{formatCurrency(item.unit_price)}</td><td className="font-bold">{formatCurrency(item.total)}</td></tr>)}</tbody></table>
                         </div>
