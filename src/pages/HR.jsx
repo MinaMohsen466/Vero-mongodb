@@ -3,7 +3,7 @@ import { useAuth } from '../App';
 import Modal from '../components/Modal';
 import {
     Users, Plus, Edit2, Trash2, DollarSign,
-    Calendar, AlertCircle, Check, X, Save as SaveIcon, Search
+    Calendar, AlertCircle, Check, X, Save as SaveIcon, Search, Building2
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -12,6 +12,7 @@ import SearchableSelect from '../components/SearchableSelect';
 const getTabs = (t) => [
     { id: 'employees', label: t('hr_employees') || 'Employees', icon: Users },
     { id: 'salaries', label: t('hr_salaries') || 'Salaries', icon: DollarSign },
+    { id: 'rent', label: t('hr_rent') || 'Rent', icon: Building2 },
     { id: 'leaves', label: t('hr_leaves') || 'Leaves', icon: Calendar },
     { id: 'deductions', label: t('hr_deductions') || 'Deductions', icon: AlertCircle },
 ];
@@ -921,6 +922,183 @@ const DeductionsTab = ({ t }) => {
     );
 }
 
+// ============ RENT TAB ============
+const RentTab = ({ t }) => {
+    const { user } = useAuth();
+    const [payments, setPayments] = useState([]);
+    const [showModal, setShowModal] = useState(false);
+    const [accounts, setAccounts] = useState([]);
+    const [form, setForm] = useState({
+        month: new Date().toISOString().slice(0, 7),
+        amount: '', description: '', payment_method: 'cash',
+        payment_account_id: '', notes: '',
+        date: new Date().toISOString().split('T')[0]
+    });
+
+    const load = async () => {
+        try {
+            const [data, accs] = await Promise.all([
+                window.api.rent.getAll(),
+                window.api.accounts.getBankAccounts()
+            ]);
+            setPayments(data || []);
+            setAccounts(accs || []);
+        } catch (e) { console.error(e); }
+    };
+
+    useEffect(() => { load(); }, []);
+
+    const payRent = async (e) => {
+        e.preventDefault();
+        if (!form.amount || parseFloat(form.amount) <= 0) { toast.error(t('hr_rent_amount_required') || 'Enter a valid amount'); return; }
+        if (!form.month) { toast.error(t('hr_rent_month_required') || 'Select a month'); return; }
+        const r = await window.api.rent.pay({
+            ...form,
+            created_by: user?.id
+        });
+        if (r.success) {
+            toast.success(t('hr_rent_paid_success') || 'Rent paid successfully');
+            setShowModal(false);
+            setForm({ month: new Date().toISOString().slice(0, 7), amount: '', description: '', payment_method: 'cash', payment_account_id: '', notes: '', date: new Date().toISOString().split('T')[0] });
+            load();
+        } else {
+            toast.error(r.error || t('errorOccurred'));
+        }
+    };
+
+    const deletePayment = async (id) => {
+        if (!confirm(t('hr_rent_delete_confirm') || 'Delete this rent payment?')) return;
+        const r = await window.api.rent.delete(id);
+        if (r.success) { toast.success(t('deleted_success') || 'Deleted'); load(); }
+        else toast.error(r.error || t('errorOccurred'));
+    };
+
+    const totalRent = payments.reduce((s, p) => s + (p.amount || 0), 0);
+
+    const inpStyle = {
+        width: '100%', padding: '10px 14px', border: '1px solid var(--border)',
+        borderRadius: 10, fontSize: '.9rem', fontFamily: 'inherit',
+        background: 'var(--surface)', color: 'var(--text-primary)', outline: 'none'
+    };
+
+    return (
+        <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div style={{ display: 'flex', gap: 16 }}>
+                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 42, height: 42, borderRadius: 10, background: '#6366f118', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Building2 size={20} color="#6366f1" />
+                        </div>
+                        <div>
+                            <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#6366f1' }}>{payments.length}</div>
+                            <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>{t('hr_rent_payments_count') || 'Payments'}</div>
+                        </div>
+                    </div>
+                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 42, height: 42, borderRadius: 10, background: '#ef444418', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <DollarSign size={20} color="#ef4444" />
+                        </div>
+                        <div>
+                            <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#ef4444' }}>{totalRent.toFixed(3)}</div>
+                            <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>{t('hr_rent_total') || 'Total Rent'}</div>
+                        </div>
+                    </div>
+                </div>
+                <button className="btn btn-primary" onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Plus size={18} /> {t('hr_rent_pay') || 'Pay Rent'}
+                </button>
+            </div>
+
+            <div className="card" style={{ overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                        <tr style={{ background: 'var(--bg-secondary)' }}>
+                            {[t('hr_rent_number') || '#', t('hr_salary_month') || 'Month', t('hr_rent_description') || 'Description', t('total') || 'Amount', t('hr_salary_method') || 'Method', t('date') || 'Date', t('actions') || 'Actions'].map(h => (
+                                <th key={h} style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, fontSize: '.82rem', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>{h}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {payments.length === 0 && (
+                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>{t('hr_rent_no_payments') || 'No rent payments yet'}</td></tr>
+                        )}
+                        {payments.map((p, i) => (
+                            <tr key={p.id} style={{ borderBottom: '1px solid var(--border-light)', background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)' }}>
+                                <td style={{ padding: '12px 16px', fontSize: '.85rem', fontWeight: 600, color: 'var(--primary)' }}>{p.payment_number}</td>
+                                <td style={{ padding: '12px 16px', fontSize: '.85rem' }}>{p.month}</td>
+                                <td style={{ padding: '12px 16px', fontSize: '.85rem' }}>{p.description}</td>
+                                <td style={{ padding: '12px 16px', fontSize: '.85rem', fontWeight: 700, color: '#ef4444' }}>{(p.amount || 0).toFixed(3)}</td>
+                                <td style={{ padding: '12px 16px', fontSize: '.85rem' }}>
+                                    <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: '.75rem', fontWeight: 600, background: p.payment_method === 'bank' ? '#3b82f618' : '#10b98118', color: p.payment_method === 'bank' ? '#3b82f6' : '#10b981' }}>
+                                        {p.payment_method === 'bank' ? (t('hr_bank') || 'Bank') : (t('hr_cash') || 'Cash')}
+                                    </span>
+                                </td>
+                                <td style={{ padding: '12px 16px', fontSize: '.85rem', color: 'var(--text-muted)' }}>{p.created_at?.split('T')[0] || p.created_at?.split(' ')[0]}</td>
+                                <td style={{ padding: '12px 16px' }}>
+                                    <button onClick={() => deletePayment(p.id)} style={{ padding: '5px 10px', background: 'rgba(239,68,68,.1)', border: 'none', borderRadius: 8, cursor: 'pointer', color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <Trash2 size={14} />
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={t('hr_rent_pay') || 'Pay Rent'} size="md">
+                <form onSubmit={payRent}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: 6, fontWeight: 500, fontSize: '.875rem' }}>{t('hr_salary_month') || 'Month'} *</label>
+                            <input type="month" value={form.month} onChange={e => setForm(f => ({ ...f, month: e.target.value }))} style={inpStyle} required />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: 6, fontWeight: 500, fontSize: '.875rem' }}>{t('total') || 'Amount'} *</label>
+                            <input type="number" step="0.001" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} style={inpStyle} required placeholder="0.000" />
+                        </div>
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={{ display: 'block', marginBottom: 6, fontWeight: 500, fontSize: '.875rem' }}>{t('hr_rent_description') || 'Description'}</label>
+                        <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={inpStyle} placeholder={t('hr_rent_desc_placeholder') || 'e.g. Office rent, Store rent...'} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: 6, fontWeight: 500, fontSize: '.875rem' }}>{t('hr_salary_method') || 'Payment Method'}</label>
+                            <select value={form.payment_method} onChange={e => setForm(f => ({ ...f, payment_method: e.target.value }))} style={inpStyle}>
+                                <option value="cash">{t('hr_cash') || 'Cash'}</option>
+                                <option value="bank">{t('hr_bank') || 'Bank'}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: 6, fontWeight: 500, fontSize: '.875rem' }}>{t('date') || 'Date'}</label>
+                            <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={inpStyle} />
+                        </div>
+                    </div>
+                    {form.payment_method === 'bank' && accounts.length > 0 && (
+                        <div style={{ marginBottom: 16 }}>
+                            <label style={{ display: 'block', marginBottom: 6, fontWeight: 500, fontSize: '.875rem' }}>{t('hr_salary_account') || 'Payment Account'}</label>
+                            <select value={form.payment_account_id} onChange={e => setForm(f => ({ ...f, payment_account_id: e.target.value }))} style={inpStyle}>
+                                <option value="">{t('hr_auto_select') || 'Auto select'}</option>
+                                {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}
+                            </select>
+                        </div>
+                    )}
+                    <div style={{ marginBottom: 20 }}>
+                        <label style={{ display: 'block', marginBottom: 6, fontWeight: 500, fontSize: '.875rem' }}>{t('notes') || 'Notes'}</label>
+                        <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...inpStyle, minHeight: 60, resize: 'vertical' }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                        <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>{t('cancel') || 'Cancel'}</button>
+                        <button type="submit" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <DollarSign size={16} /> {t('hr_rent_pay') || 'Pay Rent'}
+                        </button>
+                    </div>
+                </form>
+            </Modal>
+        </div>
+    );
+}
+
 // ============ MAIN HR PAGE ============
 export default function HR() {
     const { t } = useAuth();
@@ -929,6 +1107,7 @@ export default function HR() {
     const tabContent = {
         employees: <EmployeesTab t={t} />,
         salaries: <SalariesTab t={t} />,
+        rent: <RentTab t={t} />,
         leaves: <LeavesTab t={t} />,
         deductions: <DeductionsTab t={t} />,
     };

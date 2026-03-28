@@ -33,6 +33,18 @@ export function useShortcuts(shortcuts) {
                 e.preventDefault();
                 currentShortcuts.Search(e);
             }
+
+            // Ctrl/Cmd + / for help panel
+            if ((e.ctrlKey || e.metaKey) && (e.key === '/' || e.key === 'ظ') && currentShortcuts.Help) {
+                e.preventDefault();
+                currentShortcuts.Help(e);
+            }
+
+            // Ctrl/Cmd + [1-9] for global navigation
+            if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9' && currentShortcuts.GlobalNav) {
+                e.preventDefault();
+                currentShortcuts.GlobalNav(e.key);
+            }
         };
 
         window.addEventListener('keydown', handleKeyDown);

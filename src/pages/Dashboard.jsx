@@ -4,11 +4,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
 import { useAuth } from '../App';
 
 function Dashboard() {
-    const { t } = useAuth();
+    const { t, user } = useAuth();
     const [stats, setStats] = useState({ customers: 0, suppliers: 0, products: 0, salesInvoices: 0, purchaseInvoices: 0, totalSales: 0, totalPurchases: 0 });
     const [recentInvoices, setRecentInvoices] = useState([]);
     const [lowStockProducts, setLowStockProducts] = useState([]);
     const [receivableCustomers, setReceivableCustomers] = useState([]);
+    const [overdueInstallments, setOverdueInstallments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [settings, setSettings] = useState({});
     const [monthlyData, setMonthlyData] = useState([]);
@@ -147,7 +148,7 @@ function Dashboard() {
             </div>
 
             {/* Financial Summary */}
-            {settings.general?.show_financial_summary !== 'no' && (
+            {settings.general?.show_financial_summary !== 'no' && (user?.role === 'admin' || user?.permissions?.financial_summary?.can_view) && (
                 <div style={{ marginBottom: '24px' }}>
                     <div style={{
                         display: 'flex',
@@ -434,6 +435,47 @@ function Dashboard() {
                                     ))}
                                 </div>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Overdue Installments */}
+                {overdueInstallments.length > 0 && (
+                    <div className="card" style={{ borderTop: '4px solid #f97316' }}>
+                        <div className="card-header" style={{ paddingBottom: '16px', borderBottom: '1px solid var(--border)' }}>
+                            <h4 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.1rem', fontWeight: 600, color: '#f97316' }}>
+                                <AlertCircle size={20} /> {t('inst_overduePlans') || 'أقساط متأخرة'}
+                            </h4>
+                        </div>
+                        <div className="card-body" style={{ padding: '16px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {overdueInstallments.map((inst, i) => (
+                                    <div key={i} style={{
+                                        padding: '12px',
+                                        background: '#ffedd5',
+                                        borderRadius: '8px',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        borderLeft: '4px solid #f97316'
+                                    }}>
+                                        <div>
+                                            <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>{inst.customer_name || inst.plan_number}</p>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                {t('inv_dueDate') || 'تاريخ الاستحقاق'}: {new Date(inst.due_date).toLocaleDateString('en-GB')}
+                                            </p>
+                                        </div>
+                                        <span style={{
+                                            padding: '6px 12px',
+                                            background: '#f97316',
+                                            color: 'white',
+                                            borderRadius: '20px',
+                                            fontSize: '0.85rem',
+                                            fontWeight: 600
+                                        }}>{formatCurrency(inst.amount)}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 )}

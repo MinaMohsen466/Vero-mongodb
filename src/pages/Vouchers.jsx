@@ -62,7 +62,7 @@ function Vouchers() {
     };
 
     // Load ALL unpaid invoices (those not fully paid) when customer/supplier changes
-    const loadPendingInvoices = async (type, id) => {
+    const loadPendingInvoices = async (type, id, currentInvoiceId = null) => {
         if (!id) { setPendingInvoices([]); return; }
         try {
             let invoices = [];
@@ -72,7 +72,9 @@ function Vouchers() {
                 invoices = await window.api.invoices.getBySupplier(parseInt(id));
             }
             // Filter to only unpaid invoices (exclude if status is 'paid' or if paid >= total)
+            // Always include the currently linked invoice so it stays visible during editing
             const unpaid = (invoices || []).filter(inv => {
+                if (currentInvoiceId && inv.id === parseInt(currentInvoiceId)) return true; // Keep linked invoice
                 if (inv.status === 'paid') return false; // Exclude fully paid invoices
                 const paid = inv.paid || 0;
                 const total = inv.total || 0;
@@ -158,13 +160,13 @@ function Vouchers() {
             reference: voucher.reference || '',
             description: voucher.description || ''
         });
-        setInvoiceSearch('');
-        if (voucher.type === 'receipt' && voucher.customer_id) {
-            loadPendingInvoices('receipt', voucher.customer_id);
-        } else if (voucher.type === 'payment' && voucher.supplier_id) {
-            loadPendingInvoices('payment', voucher.supplier_id);
-        }
         setShowModal(true);
+        // Load pending invoices for the linked customer/supplier, passing the current invoice ID
+        if (voucher.type === 'receipt' && voucher.customer_id) {
+            loadPendingInvoices('receipt', voucher.customer_id, voucher.invoice_id);
+        } else if (voucher.type === 'payment' && voucher.supplier_id) {
+            loadPendingInvoices('payment', voucher.supplier_id, voucher.invoice_id);
+        }
     };
 
     const openModal = (type) => {

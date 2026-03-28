@@ -29,6 +29,9 @@ import CashBank from './pages/CashBank';
 import HR from './pages/HR';
 import POS from './pages/POS';
 import SetupWizard from './pages/SetupWizard';
+import Installments from './pages/Installments';
+import ShortcutsHelpPanel from './components/ShortcutsHelpPanel';
+import { useShortcuts } from './hooks/useShortcuts';
 
 export { AuthContext, useAuth };
 
@@ -39,6 +42,7 @@ function App() {
     const [theme, setTheme] = useState('light');
     const [language, setLanguage] = useState('ar');
     const [isFirstRun, setIsFirstRun] = useState(false);
+    const [showShortcutsPanel, setShowShortcutsPanel] = useState(false);
 
     // Translation function
     const t = (key) => {
@@ -121,12 +125,61 @@ function App() {
         setCurrentPage('dashboard');
     };
 
+    const updateUser = (newUserData) => {
+        setUser(newUserData);
+        localStorage.setItem('accapp_user', JSON.stringify(newUserData));
+    };
+
     const toggleTheme = () => {
         const newTheme = theme === 'light' ? 'dark' : 'light';
         setTheme(newTheme);
         localStorage.setItem('accapp_theme', newTheme);
         document.documentElement.setAttribute('data-theme', newTheme);
     };
+
+    useShortcuts({
+        Help: () => {
+            if (!user) return;
+            setShowShortcutsPanel(prev => !prev);
+        },
+        GlobalNav: (key) => {
+            if (!user) return;
+            const navMap = {
+                '1': 'dashboard',
+                '2': 'sales',
+                '3': 'purchases',
+                '4': 'vouchers',
+                '5': 'reports',
+                '6': 'cashbank',
+                '7': 'hr',
+                '8': 'pos',
+                '9': 'settings'
+            };
+            if (navMap[key]) {
+                const target = navMap[key];
+                // Check if user has permission for this section
+                const isAdmin = user?.role === 'admin';
+                const perms = user?.permissions || {};
+                
+                const moduleMap = {
+                    'dashboard': 'dashboard',
+                    'sales': 'sales_invoices',
+                    'purchases': 'purchase_invoices',
+                    'vouchers': 'receipt_vouchers',
+                    'reports': 'reports',
+                    'cashbank': 'cash_bank',
+                    'hr': 'hr',
+                    'pos': 'pos',
+                    'settings': 'settings'
+                };
+                
+                const mod = moduleMap[target];
+                if (isAdmin || !mod || perms[mod]?.can_view) {
+                    setCurrentPage(target);
+                }
+            }
+        }
+    });
 
     if (loading) {
         return (
@@ -157,7 +210,7 @@ function App() {
 
     if (!user) {
         return (
-            <AuthContext.Provider value={{ user, login, logout, t, language, setLanguage }}>
+            <AuthContext.Provider value={{ user, login, logout, updateUser, t, language, setLanguage }}>
                 <Toaster position="top-center" reverseOrder={false} />
                 <Login onLogin={login} />
             </AuthContext.Provider>
@@ -185,11 +238,18 @@ function App() {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, theme, toggleTheme, t, language, setLanguage }}>
+        <AuthContext.Provider value={{ user, login, logout, updateUser, theme, toggleTheme, t, language, setLanguage }}>
             <Toaster position="top-center" reverseOrder={false} />
-            <Layout currentPage={currentPage} setCurrentPage={setCurrentPage}>
+            <Layout currentPage={currentPage} setCurrentPage={setCurrentPage} onHelpClick={() => setShowShortcutsPanel(true)}>
                 {renderPage()}
             </Layout>
+
+            {user && (
+                <ShortcutsHelpPanel 
+                    isOpen={showShortcutsPanel} 
+                    onClose={() => setShowShortcutsPanel(false)} 
+                />
+            )}
         </AuthContext.Provider>
     );
 }

@@ -211,6 +211,13 @@ ipcMain.handle('deductions:getByEmployee', async (event, id) => db.deductions.ge
 ipcMain.handle('deductions:create', async (event, ded) => db.deductions.create(ded));
 ipcMain.handle('deductions:delete', async (event, id) => db.deductions.delete(id));
 
+// --- HR: Rent ---
+ipcMain.handle('rent:getAll', async () => db.rent.getAll());
+ipcMain.handle('rent:pay', async (event, payment) => db.rent.pay(payment));
+ipcMain.handle('rent:delete', async (event, id) => db.rent.delete(id));
+ipcMain.handle('rent:getTotal', async (event, { startDate, endDate }) => db.rent.getTotal(startDate, endDate));
+ipcMain.handle('salaries:getTotal', async (event, { startDate, endDate }) => db.salaries.getTotal(startDate, endDate));
+
 // --- File Dialog ---
 ipcMain.handle('dialog:openFile', async (event, options) => {
     const result = await dialog.showOpenDialog(mainWindow, options);

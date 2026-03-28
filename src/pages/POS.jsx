@@ -403,8 +403,8 @@ function POS() {
                 {/* Products Grid */}
                 <div style={{
                     flex: 1, overflowY: 'auto',
-                    display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(125px, 1fr))',
-                    gap: '8px', alignContent: 'start',
+                    display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                    gap: '12px', alignContent: 'start',
                     paddingTop: '12px',
                     paddingRight: '6px',
                 }}>
@@ -424,11 +424,11 @@ function POS() {
                                 style={{
                                     background: outOfStock ? 'var(--bg-secondary)' : 'var(--bg-primary)',
                                     border: inCart ? `2px solid ${color}` : '1px solid var(--border)',
-                                    borderRadius: '12px', padding: '8px',
+                                    borderRadius: '12px', padding: '10px',
                                     cursor: outOfStock ? 'not-allowed' : 'pointer',
                                     opacity: outOfStock ? 0.55 : 1,
                                     transition: 'all 0.15s',
-                                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+                                    display: 'flex', alignItems: 'center', gap: '12px',
                                     position: 'relative', userSelect: 'none',
                                     overflow: 'visible', /* prevent badge clipping */
                                     boxShadow: inCart ? `0 4px 16px ${color}33` : 'var(--shadow)'
@@ -453,33 +453,44 @@ function POS() {
                                         {inCart.qty}
                                     </div>
                                 )}
-                                {product.image ? (
-                                    <div style={{
-                                        width: '100%', height: '90px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0,
-                                        border: '1px solid var(--border)'
-                                    }}>
-                                        <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                    </div>
-                                ) : (
-                                    <div style={{
-                                        width: '100%', height: '90px', borderRadius: '8px',
-                                        background: `${color}15`, display: 'flex',
-                                        alignItems: 'center', justifyContent: 'center', color, flexShrink: 0,
-                                        border: '1px solid transparent'
-                                    }}>
-                                        <Package size={32} style={{ opacity: 0.7 }} />
-                                    </div>
-                                )}
-                                <div style={{ textAlign: 'center', width: '100%', padding: '2px 4px 0 4px' }}>
-                                    <p style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-primary)', margin: 0, lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.name}</p>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: 'auto', paddingTop: '4px' }}>
-                                    <p style={{ fontWeight: 700, color, fontSize: '0.85rem', margin: 0 }}>{formatCurrency(product.sale_price)}</p>
-                                    {outOfStock ? (
-                                        <span style={{ fontSize: '0.65rem', color: '#ef4444', fontWeight: 600 }}>✗ {t('out_of_stock') || 'Out of Stock'}</span>
+                                
+                                {/* Absolute positioned image to force it strictly onto the left in both RTL and LTR without interfering with DOM flow direction */}
+                                <div style={{ 
+                                    width: '85px', height: '85px', flexShrink: 0, position: 'absolute', left: '10px', top: '10px',
+                                    background: 'var(--bg-primary)', borderRadius: '8px'
+                                }}>
+                                    {product.image ? (
+                                        <div style={{
+                                            width: '100%', height: '100%', borderRadius: '8px', overflow: 'hidden',
+                                            border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                        }}>
+                                            <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                        </div>
                                     ) : (
-                                        <span style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: 600 }}>{t('in_stock') || 'In Stock'}: {product.stock_quantity}</span>
+                                        <div style={{
+                                            width: '100%', height: '100%', borderRadius: '8px',
+                                            background: `${color}15`, display: 'flex',
+                                            alignItems: 'center', justifyContent: 'center', color,
+                                            border: '1px solid transparent'
+                                        }}>
+                                            <Package size={32} style={{ opacity: 0.7 }} />
+                                        </div>
                                     )}
+                                </div>
+
+                                <div style={{ 
+                                    display: 'flex', flexDirection: 'column', flex: 1, 
+                                    minHeight: '85px', justifyContent: 'center', paddingLeft: '95px', textAlign: 'start' 
+                                }}>
+                                    <p style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', margin: '0 0 6px 0', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.name}</p>
+                                    <p style={{ fontWeight: 800, color, fontSize: '0.95rem', margin: '0 0 6px 0' }}>{formatCurrency(product.sale_price)}</p>
+                                    <div>
+                                        {outOfStock ? (
+                                            <span style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 600 }}>✗ {t('out_of_stock') || 'Out of Stock'}</span>
+                                        ) : (
+                                            <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 600 }}>{t('in_stock') || 'In Stock'}: {product.stock_quantity}</span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         );

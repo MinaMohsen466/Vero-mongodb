@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../App';
 import appIcon from '../assets/icon.png';
+import UserProfilePanel from './UserProfilePanel';
 import {
     Home, Users, Truck, ShoppingCart, ShoppingBag, FileText,
     CreditCard, BookOpen, BarChart3, Settings, LogOut,
     Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight, UserCheck, Menu, Monitor
 } from 'lucide-react';
 
-function Layout({ children, currentPage, setCurrentPage }) {
+function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
     const { user, logout, theme, toggleTheme, t } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -162,21 +163,17 @@ function Layout({ children, currentPage, setCurrentPage }) {
                             />
                         </div>
 
+                        <button className="btn btn-ghost btn-icon" onClick={onHelpClick} title={t('shortcuts_help') || 'اختصارات لوحة المفاتيح'}>
+                            <FileText size={20} />
+                        </button>
+
                         <button className="btn btn-ghost btn-icon" onClick={toggleTheme}>
                             {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
                         </button>
 
-                        <div className="user-menu">
-                            <div className="user-avatar">
-                                {user?.full_name?.charAt(0) || user?.username?.charAt(0) || 'U'}
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{user?.full_name || user?.username}</div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{getRoleLabel()}</div>
-                            </div>
-                        </div>
+                        <UserProfilePanel />
 
-                        <button className="btn btn-ghost btn-icon" onClick={logout} title={t('logout')}>
+                        <button className="btn btn-ghost btn-icon" onClick={logout} title={t('logout')} style={{ display: 'none' }}>
                             <LogOut size={20} />
                         </button>
                     </div>

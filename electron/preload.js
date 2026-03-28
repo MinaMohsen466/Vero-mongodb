@@ -132,7 +132,8 @@ contextBridge.exposeInMainWorld('api', {
         getAll: () => ipcRenderer.invoke('salaries:getAll'),
         getByEmployee: (id) => ipcRenderer.invoke('salaries:getByEmployee', id),
         pay: (payment) => ipcRenderer.invoke('salaries:pay', payment),
-        delete: (id) => ipcRenderer.invoke('salaries:delete', id)
+        delete: (id) => ipcRenderer.invoke('salaries:delete', id),
+        getTotal: (startDate, endDate) => ipcRenderer.invoke('salaries:getTotal', { startDate, endDate })
     },
 
     // HR: Leaves
@@ -150,6 +151,14 @@ contextBridge.exposeInMainWorld('api', {
         getByEmployee: (id) => ipcRenderer.invoke('deductions:getByEmployee', id),
         create: (deduction) => ipcRenderer.invoke('deductions:create', deduction),
         delete: (id) => ipcRenderer.invoke('deductions:delete', id)
+    },
+
+    // HR: Rent
+    rent: {
+        getAll: () => ipcRenderer.invoke('rent:getAll'),
+        pay: (payment) => ipcRenderer.invoke('rent:pay', payment),
+        delete: (id) => ipcRenderer.invoke('rent:delete', id),
+        getTotal: (startDate, endDate) => ipcRenderer.invoke('rent:getTotal', { startDate, endDate })
     },
 
     // Dialog

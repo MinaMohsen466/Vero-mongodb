@@ -103,6 +103,7 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS employee_leaves (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL, leave_type TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, days INTEGER NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', approved_by INTEGER, notes TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
       CREATE TABLE IF NOT EXISTS employee_deductions (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL, month TEXT NOT NULL, amount REAL NOT NULL, reason TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
       CREATE TABLE IF NOT EXISTS salary_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_number TEXT UNIQUE NOT NULL, employee_id INTEGER NOT NULL, month TEXT NOT NULL, base_salary REAL DEFAULT 0, deductions REAL DEFAULT 0, net_salary REAL DEFAULT 0, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, journal_entry_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
+      CREATE TABLE IF NOT EXISTS rent_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_number TEXT UNIQUE NOT NULL, month TEXT NOT NULL, amount REAL NOT NULL, description TEXT, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, journal_entry_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     `);
 
         /// Migration for existing databases - add missing columns
@@ -196,7 +197,8 @@ class AppDatabase {
                 ['21', 'الخصوم المتداولة', '2', 'liability', 'credit'], ['211', 'الموردون', '21', 'liability', 'credit'],
                 ['41', 'إيرادات المبيعات', '4', 'revenue', 'credit'], ['51', 'تكلفة المبيعات', '5', 'expense', 'debit'],
                 ['52', 'مصروفات الرواتب', '5', 'expense', 'debit'],
-                ['521', 'رواتب الموظفين', '52', 'expense', 'debit']
+                ['521', 'رواتب الموظفين', '52', 'expense', 'debit'],
+                ['53', 'مصروفات الإيجار', '5', 'expense', 'debit']
             ];
             for (const [code, name, parent, type, nature] of accs) {
                 const parentId = parent ? this.get('SELECT id FROM accounts WHERE code = ?', [parent])?.id : null;
@@ -219,6 +221,13 @@ class AppDatabase {
                         ['521', 'رواتب الموظفين', salaryMain.id, 'expense', 'debit']);
                 }
             }
+            // Ensure rent expense account exists
+            const rentMain = this.get("SELECT id FROM accounts WHERE code = '53'");
+            if (!rentMain) {
+                const expenseParent = this.get("SELECT id FROM accounts WHERE code = '5'");
+                this.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
+                    ['53', 'مصروفات الإيجار', expenseParent?.id || null, 'expense', 'debit']);
+            }
         }
 
         // Settings
@@ -237,7 +246,7 @@ class AppDatabase {
         // Default Permissions
         const permCount = this.get('SELECT COUNT(*) as count FROM permissions');
         if (permCount.count === 0) {
-            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'pos', 'database'];
+            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'pos', 'database', 'financial_summary'];
             for (const mod of modules) {
                 // Admin: full access to everything
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', mod]);
@@ -289,6 +298,16 @@ class AppDatabase {
                     this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'database']);
                 }
             } catch (e) { console.log('Database permission migration:', e.message); }
+
+            // Migration: add financial_summary permission for existing users
+            try {
+                const adminFs = this.get("SELECT id FROM permissions WHERE role='admin' AND module='financial_summary'");
+                if (!adminFs) {
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', 'financial_summary']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 0, 0, 0)", ['accountant', 'financial_summary']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'financial_summary']);
+                }
+            } catch (e) { console.log('Financial summary permission migration:', e.message); }
         }
     }
 
@@ -308,6 +327,7 @@ class AppDatabase {
         this.salaries = new SalaryRepo(this);
         this.leaves = new LeavesRepo(this);
         this.deductions = new DeductionsRepo(this);
+        this.rent = new RentRepo(this);
         this.system = new SystemRepo(this);
     }
 
@@ -363,24 +383,23 @@ class UsersRepo {
         const user = this.db.get('SELECT * FROM users WHERE username = ? AND password_hash = ? AND is_active = 1', [username, password]);
         if (user) {
             delete user.password_hash;
-            // Admins always have full permissions
+            // Admins (company managers) always have full permissions — hardcoded
             if (user.role === 'admin') {
                 const permMap = {};
-                const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'pos'];
+                const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'pos', 'financial_summary', 'database'];
                 for (const mod of modules) permMap[mod] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
                 user.permissions = permMap;
                 return { success: true, user };
             }
-            // Start with role-based permissions
+            // Non-admin: load role-based permissions
             const rolePerms = this.db.all('SELECT * FROM permissions WHERE role = ?', [user.role]);
             const permMap = {};
             for (const p of rolePerms) {
                 permMap[p.module] = { can_view: !!p.can_view, can_create: !!p.can_create, can_edit: !!p.can_edit, can_delete: !!p.can_delete };
             }
-            // Check if user has individual permissions override
+            // Check for individual permissions override
             const hasIndividual = this.db.get('SELECT COUNT(*) as count FROM user_permissions WHERE user_id = ?', [user.id]);
             if (hasIndividual && hasIndividual.count > 0) {
-                // Override role permissions with individual ones
                 const userPerms = this.db.all('SELECT * FROM user_permissions WHERE user_id = ?', [user.id]);
                 for (const p of userPerms) {
                     permMap[p.module] = { can_view: !!p.can_view, can_create: !!p.can_create, can_edit: !!p.can_edit, can_delete: !!p.can_delete };
@@ -394,7 +413,22 @@ class UsersRepo {
     }
     getAll() { return this.db.all('SELECT id, username, full_name, role, is_active, created_at FROM users'); }
     create(user) { try { const r = this.db.run("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)", [user.username, user.password, user.full_name, user.role || 'user']); return { success: true, id: r.lastInsertRowid }; } catch (e) { return { success: false, error: e.message }; } }
-    update(user) { try { if (user.password) this.db.run("UPDATE users SET username=?, password_hash=?, full_name=?, role=?, is_active=? WHERE id=?", [user.username, user.password, user.full_name, user.role, user.is_active ? 1 : 0, user.id]); else this.db.run("UPDATE users SET username=?, full_name=?, role=?, is_active=? WHERE id=?", [user.username, user.full_name, user.role, user.is_active ? 1 : 0, user.id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+    update(user) {
+        try {
+            if (user.password) {
+                if (user.current_password !== undefined) {
+                    const existing = this.db.get('SELECT password_hash FROM users WHERE id = ?', [user.id]);
+                    if (!existing || existing.password_hash !== user.current_password) {
+                        return { success: false, error: 'كلمة المرور الحالية غير صحيحة' };
+                    }
+                }
+                this.db.run("UPDATE users SET username=?, password_hash=?, full_name=?, role=?, is_active=? WHERE id=?", [user.username, user.password, user.full_name, user.role, user.is_active ? 1 : 0, user.id]);
+            } else {
+                this.db.run("UPDATE users SET username=?, full_name=?, role=?, is_active=? WHERE id=?", [user.username, user.full_name, user.role, user.is_active ? 1 : 0, user.id]);
+            }
+            return { success: true };
+        } catch (e) { return { success: false, error: e.message }; }
+    }
     delete(id) { try { this.db.run('DELETE FROM users WHERE id = ? AND id != 1', [id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
 }
 
@@ -796,15 +830,46 @@ class VouchersRepo {
             if (v.type === 'receipt' && v.customer_id) this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [v.amount, v.customer_id]);
             else if (v.type === 'payment' && v.supplier_id) this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [v.amount, v.supplier_id]);
 
-            // Update linked invoice status to paid
+            // Update linked invoice paid amount
             if (v.invoice_id) {
-                this.db.run("UPDATE invoices SET status = 'paid', paid = paid + ? WHERE id = ?", [v.amount, v.invoice_id]);
+                this.db.run("UPDATE invoices SET paid = paid + ? WHERE id = ?", [v.amount, v.invoice_id]);
+                // Smart status: check if fully paid, partially paid, or still pending
+                const inv = this.db.get("SELECT total, paid FROM invoices WHERE id = ?", [v.invoice_id]);
+                if (inv) {
+                    const newStatus = inv.paid >= inv.total ? 'paid' : inv.paid > 0 ? 'partial' : 'pending';
+                    this.db.run("UPDATE invoices SET status = ? WHERE id = ?", [newStatus, v.invoice_id]);
+                }
             }
 
             // Auto-create journal entry
             const jeId = this._createVoucherJournalEntry(v, r.lastInsertRowid, num);
             if (jeId) {
                 this.db.run('UPDATE vouchers SET journal_entry_id = ? WHERE id = ?', [jeId, r.lastInsertRowid]);
+            }
+
+            // If this voucher fully paid an invoice that has an installment plan, complete the plan
+            if (v.invoice_id && v.type === 'receipt') {
+                const invAfter = this.db.get('SELECT total, paid FROM invoices WHERE id = ?', [v.invoice_id]);
+                if (invAfter && invAfter.paid >= invAfter.total) {
+                    // Find any active installment plan linked to this invoice
+                    const linkedPlan = this.db.get("SELECT * FROM installment_plans WHERE invoice_id = ? AND status != 'completed'", [v.invoice_id]);
+                    if (linkedPlan) {
+                        // Mark all pending payments as completed
+                        const pendingPayments = this.db.all("SELECT * FROM installment_payments WHERE plan_id = ? AND status = 'pending'", [linkedPlan.id]);
+                        for (const pmt of pendingPayments) {
+                            // Reverse customer balance that was pre-charged for pending installments
+                            if (linkedPlan.customer_id) {
+                                // Don't double-deduct: the voucher already reduced customer balance
+                                // Just mark installment as complete without touching balance again
+                            }
+                            this.db.run(
+                                "UPDATE installment_payments SET status = 'paid', paid_date = ?, payment_method = ?, notes = ? WHERE id = ?",
+                                [v.date, v.payment_method || 'cash', 'مدفوع عبر سند قبض ' + num, pmt.id]
+                            );
+                        }
+                        this.db.run("UPDATE installment_plans SET status = 'completed' WHERE id = ?", [linkedPlan.id]);
+                    }
+                }
             }
 
             return { success: true, id: r.lastInsertRowid, voucher_number: num };
@@ -852,10 +917,11 @@ class VouchersRepo {
             // 6. Re-apply linked invoice paid amount if linked
             if (old.invoice_id) {
                 this.db.run("UPDATE invoices SET paid = paid + ? WHERE id = ?", [amount, old.invoice_id]);
-                // Check if now fully paid
+                // Smart status: check if fully paid, partially paid, or still pending
                 const inv = this.db.get("SELECT total, paid FROM invoices WHERE id = ?", [old.invoice_id]);
-                if (inv && inv.paid >= inv.total) {
-                    this.db.run("UPDATE invoices SET status = 'paid' WHERE id = ?", [old.invoice_id]);
+                if (inv) {
+                    const newStatus = inv.paid >= inv.total ? 'paid' : inv.paid > 0 ? 'partial' : 'pending';
+                    this.db.run("UPDATE invoices SET status = ? WHERE id = ?", [newStatus, old.invoice_id]);
                 }
             }
 
@@ -887,7 +953,13 @@ class VouchersRepo {
 
                 // Revert invoice status if linked
                 if (voucher.invoice_id) {
-                    this.db.run("UPDATE invoices SET status = 'pending', paid = paid - ? WHERE id = ?", [voucher.amount, voucher.invoice_id]);
+                    this.db.run("UPDATE invoices SET paid = CASE WHEN paid - ? < 0 THEN 0 ELSE paid - ? END WHERE id = ?", [voucher.amount, voucher.amount, voucher.invoice_id]);
+                    // Smart status: check remaining paid amount
+                    const inv = this.db.get("SELECT total, paid FROM invoices WHERE id = ?", [voucher.invoice_id]);
+                    if (inv) {
+                        const newStatus = inv.paid >= inv.total ? 'paid' : inv.paid > 0 ? 'partial' : 'pending';
+                        this.db.run("UPDATE invoices SET status = ? WHERE id = ?", [newStatus, voucher.invoice_id]);
+                    }
                 }
             }
             this.db.run('DELETE FROM vouchers WHERE id = ?', [id]);
@@ -1307,6 +1379,19 @@ class SalaryRepo {
         }
     }
 
+    getTotal(startDate, endDate) {
+        try {
+            let sql = 'SELECT COALESCE(SUM(net_salary), 0) as total FROM salary_payments WHERE 1=1';
+            const params = [];
+            if (startDate) { sql += ' AND created_at >= ?'; params.push(startDate); }
+            if (endDate) { sql += ' AND created_at <= ?'; params.push(endDate + ' 23:59:59'); }
+            const r = this.db.get(sql, params);
+            return r?.total || 0;
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
     delete(id) {
         try {
             const payment = this.db.get('SELECT * FROM salary_payments WHERE id = ?', [id]);
@@ -1426,6 +1511,128 @@ class DeductionsRepo {
     }
 }
 
+class RentRepo {
+    constructor(db) { this.db = db; }
+
+    getAll() {
+        return this.db.all(`
+            SELECT rp.*, a.name as payment_account_name
+            FROM rent_payments rp
+            LEFT JOIN accounts a ON rp.payment_account_id = a.id
+            ORDER BY rp.created_at DESC
+        `);
+    }
+
+    getTotal(startDate, endDate) {
+        try {
+            let sql = 'SELECT COALESCE(SUM(amount), 0) as total FROM rent_payments WHERE 1=1';
+            const params = [];
+            if (startDate) { sql += ' AND created_at >= ?'; params.push(startDate); }
+            if (endDate) { sql += ' AND created_at <= ?'; params.push(endDate + ' 23:59:59'); }
+            const r = this.db.get(sql, params);
+            return r?.total || 0;
+        } catch (e) { return 0; }
+    }
+
+    pay(payment) {
+        const n = (v) => v === undefined ? null : v;
+        try {
+            const count = this.db.get('SELECT COUNT(*) as count FROM rent_payments').count;
+            const payNum = `RENT-${String(count + 1).padStart(6, '0')}`;
+            const amount = parseFloat(payment.amount) || 0;
+            if (amount <= 0) return { success: false, error: 'المبلغ يجب أن يكون أكبر من صفر' };
+
+            // Get payment accounts
+            const cashAccount = this.db.get("SELECT id FROM accounts WHERE code = '111'");
+            const bankAccount = this.db.get("SELECT id FROM accounts WHERE code = '112'");
+            let paymentAccountId = n(payment.payment_account_id);
+            if (!paymentAccountId) {
+                paymentAccountId = payment.payment_method === 'bank' ? bankAccount?.id : cashAccount?.id;
+            }
+
+            // Get rent expense account
+            let rentAccount = this.db.get("SELECT id FROM accounts WHERE code = '53'");
+            if (!rentAccount) {
+                const expParent = this.db.get("SELECT id FROM accounts WHERE code = '5'");
+                this.db.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
+                    ['53', 'مصروفات الإيجار', expParent?.id || null, 'expense', 'debit']);
+                rentAccount = this.db.get("SELECT id FROM accounts WHERE code = '53'");
+            }
+
+            // Create journal entry: Debit rent expense, Credit cash/bank
+            let jeNum;
+            let jeAttempt = 0;
+            do {
+                const maxJe = this.db.get("SELECT COALESCE(MAX(CAST(REPLACE(entry_number,'JE-','') AS INTEGER)),0) as mx FROM journal_entries");
+                const nextNum = (maxJe?.mx || 0) + 1 + jeAttempt;
+                jeNum = `JE-${String(nextNum).padStart(6, '0')}`;
+                const jeExists = this.db.get('SELECT id FROM journal_entries WHERE entry_number = ?', [jeNum]);
+                if (!jeExists) break;
+                jeAttempt++;
+            } while (jeAttempt < 100);
+
+            const desc = payment.description || 'دفعة إيجار';
+            const jeDesc = `قيد إيجار - ${payment.month} - ${desc}`;
+            const jeR = this.db.run(
+                "INSERT INTO journal_entries (entry_number, date, description, reference, created_by) VALUES (?, ?, ?, ?, ?)",
+                [jeNum, payment.date || new Date().toISOString().split('T')[0], jeDesc, payNum, n(payment.created_by)]
+            );
+            const jeId = jeR.lastInsertRowid;
+
+            // Line 1: Debit rent expense account
+            if (rentAccount) {
+                this.db.run(
+                    "INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?, ?, ?, ?, ?)",
+                    [jeId, rentAccount.id, amount, 0, `إيجار ${payment.month} - ${desc}`]
+                );
+                this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [amount, rentAccount.id]);
+            }
+
+            // Line 2: Credit cash/bank account
+            if (paymentAccountId) {
+                this.db.run(
+                    "INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?, ?, ?, ?, ?)",
+                    [jeId, paymentAccountId, 0, amount, `صرف إيجار ${payment.month}`]
+                );
+                this.db.run('UPDATE accounts SET balance = balance - ? WHERE id = ?', [amount, paymentAccountId]);
+            }
+
+            // Save rent payment record
+            const r = this.db.run(
+                "INSERT INTO rent_payments (payment_number, month, amount, description, payment_method, payment_account_id, journal_entry_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [payNum, payment.month, amount, desc, n(payment.payment_method) || 'cash', n(paymentAccountId), jeId, n(payment.notes), n(payment.created_by)]
+            );
+
+            return { success: true, id: r.lastInsertRowid, payment_number: payNum };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    delete(id) {
+        try {
+            const payment = this.db.get('SELECT * FROM rent_payments WHERE id = ?', [id]);
+            if (!payment) return { success: false, error: 'السجل غير موجود' };
+
+            // Reverse journal entry
+            if (payment.journal_entry_id) {
+                const lines = this.db.all('SELECT * FROM journal_entry_lines WHERE entry_id = ?', [payment.journal_entry_id]);
+                for (const line of lines) {
+                    const change = (line.credit || 0) - (line.debit || 0);
+                    this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [change, line.account_id]);
+                }
+                this.db.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [payment.journal_entry_id]);
+                this.db.run('DELETE FROM journal_entries WHERE id = ?', [payment.journal_entry_id]);
+            }
+
+            this.db.run('DELETE FROM rent_payments WHERE id = ?', [id]);
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+}
+
 class SystemRepo {
     constructor(db) { this.db = db; }
 
@@ -1494,5 +1701,6 @@ class SystemRepo {
         }
     }
 }
+
 
 module.exports = new AppDatabase();

@@ -75,7 +75,7 @@ const roleColor = r => r === 'admin' ? '#ef4444' : r === 'accountant' ? '#6366f1
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Settings() {
-    const { user, t } = useAuth();
+    const { user, updateUser, t } = useAuth();
 
     const roleName = r => r === 'admin' ? (t('admin_role') || 'Admin') : r === 'accountant' ? (t('accountant_role') || 'Accountant') : (t('user_role') || 'User');
 
@@ -98,6 +98,7 @@ export default function Settings() {
         { m: 'users', l: t('users') || 'Users', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'permissions', l: t('permissions') || 'Permissions', a: ['view', 'edit'] },
         { m: 'database', l: t('database_management') || 'Database', a: ['view'] },
+        { m: 'financial_summary', l: t('financial_summary') || 'Financial Summary', a: ['view'] },
     ];
 
     const PERM_KEYS = [
@@ -124,6 +125,9 @@ export default function Settings() {
     const [upState, setUpState] = useState({});
     const [upHasInd, setUpHasInd] = useState(false);
     const [upLoading, setUpLoading] = useState(false);
+    const [permMode, setPermMode] = useState('role'); // 'role' | 'user'
+    const [permSearch, setPermSearch] = useState('');
+    const [selRole, setSelRole] = useState('accountant'); // selected role in role mode
     const upUserIdRef = useRef(null); // tracks which user we're loading for (prevents race conditions)
     const dropRef = useRef(null);
 
@@ -150,13 +154,11 @@ export default function Settings() {
         { id: 'print_identity', l: t('visual_identity') || 'Visual Identity', icon: Palette },
         ...(isAdmin ? [
             { id: 'users', l: t('users') || 'Users', icon: Users },
-            { id: 'permissions', l: t('role_permissions') || 'Role Permissions', icon: Shield },
-            { id: 'user_permissions', l: t('individual_permissions') || 'Individual Permissions', icon: Users },
+            { id: 'permissions', l: t('permissions') || 'Permissions', icon: Shield },
         ] : []),
         { id: 'database', l: t('database') || 'Database', icon: Database },
     ];
 
-    // ── Load data ──────────────────────────────────────────────────────────────
     useEffect(() => { loadData(); }, []);
     useEffect(() => { if (sec === 'permissions' && !permLoaded) loadPerms(); }, [sec]);
 
@@ -206,8 +208,13 @@ export default function Settings() {
 
     const loadPerms = async () => {
         try {
-            const [a, u] = await Promise.all([window.api.permissions.getByRole('accountant'), window.api.permissions.getByRole('user')]);
-            setPermState({ accountant: a || {}, user: u || {} }); setPermLoaded(true);
+            const [a, u, ad] = await Promise.all([
+                window.api.permissions.getByRole('accountant'),
+                window.api.permissions.getByRole('user'),
+                window.api.permissions.getByRole('admin')
+            ]);
+            setPermState({ accountant: a || {}, user: u || {}, admin: ad || {} });
+            setPermLoaded(true);
         } catch (e) { console.error(e); }
     };
 
@@ -218,11 +225,19 @@ export default function Settings() {
     const savePerms = async () => {
         setSaving(true);
         try {
-            await Promise.all([
-                window.api.permissions.savePermissions('accountant', permState.accountant),
-                window.api.permissions.savePermissions('user', permState.user)
-            ]);
+            const rolesToSave = selRole === 'admin'
+                ? [['admin', permState.admin]]
+                : [['accountant', permState.accountant], ['user', permState.user]];
+            await Promise.all(rolesToSave.map(([r, p]) => window.api.permissions.savePermissions(r, p)));
             toast.success(t('savedSuccess') || 'Permissions saved successfully');
+
+            // Refresh current user's session permissions so changes take effect immediately
+            if (user && rolesToSave.some(([r]) => r === user.role)) {
+                const freshPerms = await window.api.permissions.getByRole(user.role);
+                if (freshPerms && Object.keys(freshPerms).length > 0) {
+                    updateUser({ ...user, permissions: freshPerms });
+                }
+            }
         } catch { toast.error(t('errorOccurred') || 'An error occurred'); }
         setSaving(false);
     };
@@ -627,10 +642,12 @@ export default function Settings() {
                 {/* ══ 5. USERS ════════════════════════════════════════════════════════ */}
                 {sec === 'users' && <>
                     <Card title={t('user_management') || 'User Management'} icon={Users} action={
-                        <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff', padding: '7px 14px' }}
-                            onClick={() => { setEditingUser(null); setUserForm({ username: '', password: '', full_name: '', role: 'user' }); setShowPw(false); setShowUserModal(true); }}>
-                            <Plus size={14} /> {t('new_user') || 'New User'}
-                        </button>
+                        user?.id === 1 ? (
+                            <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff', padding: '7px 14px' }}
+                                onClick={() => { setEditingUser(null); setUserForm({ username: '', password: '', full_name: '', role: 'user' }); setShowPw(false); setShowUserModal(true); }}>
+                                <Plus size={14} /> {t('new_user') || 'New User'}
+                            </button>
+                        ) : null
                     }>
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
@@ -668,21 +685,28 @@ export default function Settings() {
                                         <td style={{ padding: '12px' }}>
                                             {u.id === 1
                                                 ? <span style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>{t('protected') || 'Protected'}</span>
-                                                : <Tog on={!!u.is_active} onChange={async () => {
+                                                : user?.id === 1 ? <Tog on={!!u.is_active} onChange={async () => {
                                                     await window.api.users.update({ ...u, is_active: u.is_active ? 0 : 1 });
                                                     window.api.users.getAll().then(setUsers);
-                                                }} />}
+                                                }} /> : <span style={{ fontSize: '.75rem', color: u.is_active ? 'var(--success)' : 'var(--text-muted)' }}>{u.is_active ? (t('active') || 'نشط') : (t('inactive') || 'غير نشط')}</span>}
                                         </td>
                                         <td style={{ padding: '12px' }}>
                                             <div style={{ display: 'flex', gap: 6 }}>
-                                                <button style={{ ...btnStyle, padding: '5px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
-                                                    onClick={() => { setEditingUser(u); setUserForm({ username: u.username, password: '', full_name: u.full_name || '', role: u.role }); setShowPw(false); setShowUserModal(true); }}>
-                                                    <Edit2 size={13} />
-                                                </button>
-                                                {u.id !== 1 && <button style={{ ...btnStyle, padding: '5px 10px', background: 'rgba(239,68,68,0.1)', border: 'none', color: 'var(--danger)' }}
-                                                    onClick={async () => { if (confirm(t('delete_user_confirm') || 'Delete user?')) { await window.api.users.delete(u.id); window.api.users.getAll().then(setUsers); } }}>
-                                                    <Trash2 size={13} />
-                                                </button>}
+                                                {user?.id === 1 && (
+                                                    <button style={{ ...btnStyle, padding: '5px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                                                        onClick={() => { setEditingUser(u); setUserForm({ username: u.username, password: '', full_name: u.full_name || '', role: u.role }); setShowPw(false); setShowUserModal(true); }}>
+                                                        <Edit2 size={13} />
+                                                    </button>
+                                                )}
+                                                {user?.id === 1 && u.id !== 1 && (
+                                                    <button style={{ ...btnStyle, padding: '5px 10px', background: 'rgba(239,68,68,0.1)', border: 'none', color: 'var(--danger)' }}
+                                                        onClick={async () => { if (confirm(t('delete_user_confirm') || 'Delete user?')) { await window.api.users.delete(u.id); window.api.users.getAll().then(setUsers); } }}>
+                                                        <Trash2 size={13} />
+                                                    </button>
+                                                )}
+                                                {user?.id !== 1 && (
+                                                    <span style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>{t('no_permission') || 'لا تملك صلاحية'}</span>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -692,81 +716,46 @@ export default function Settings() {
                     </Card>
                 </>}
 
-                {/* ══ 6. ROLE PERMISSIONS ═════════════════════════════════════════════ */}
+                {/* ══ 6. UNIFIED PERMISSIONS ══════════════════════════════════════════ */}
                 {sec === 'permissions' && <>
-                    {!permLoaded && <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>{t('loading') || 'Loading...'}</div>}
-                    {permLoaded && ['accountant', 'user'].map(role => (
-                        <Card key={role} title={`${t('role_permissions') || 'Role Permissions'}: ${roleName(role)}`} icon={Shield}>
-                            <div style={{ overflowX: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
-                                    <thead>
-                                        <tr>
-                                            <th style={{ ...thStyle(null), textAlign: 'right', padding: '9px 12px' }}>{t('module') || 'Module'}</th>
-                                            {PERM_KEYS.map(pk => <th key={pk.key} style={thStyle(70)}>{pk.label}</th>)}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {PERM_MODS.map((m, i) => (
-                                            <tr key={m.m} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
-                                                <td style={{ padding: '9px 12px', fontWeight: 500, fontSize: '.875rem' }}>{m.l}</td>
-                                                {PERM_KEYS.map(pk => (
-                                                    <td key={pk.key} style={{ padding: 8, textAlign: 'center' }}>
-                                                        <PermCell has={!!permState[role]?.[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
-                                                            onToggle={() => togglePerm(role, m.m, pk.key)} />
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </Card>
-                    ))}
-                    {permLoaded && <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving} onClick={savePerms}>
-                            <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_role_permissions') || 'Save Role Permissions')}
-                        </button>
-                    </div>}
-                </>}
+                    {/* Mode switcher */}
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 18, background: 'var(--bg-secondary)', padding: 6, borderRadius: 12, border: '1px solid var(--border)' }}>
+                        {[{ id: 'role', label: t('role_permissions') || 'Role Permissions', icon: Shield }, { id: 'user', label: t('individual_permissions') || 'Individual Permissions', icon: Users }].map(m => (
+                            <button key={m.id} onClick={() => setPermMode(m.id)} style={{
+                                flex: 1, padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                                fontSize: '.875rem', fontWeight: permMode === m.id ? 700 : 400, transition: 'all .15s',
+                                background: permMode === m.id ? 'var(--primary)' : 'transparent',
+                                color: permMode === m.id ? '#fff' : 'var(--text-secondary)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
+                            }}>
+                                <m.icon size={15} /> {m.label}
+                            </button>
+                        ))}
+                    </div>
 
-                {/* ══ 7. USER PERMISSIONS ════════════════════════════════════════════ */}
-                {sec === 'user_permissions' && <>
-                    <Card title={t('select_user_permissions') || 'Select a user to customize permissions'} icon={Users}>
-                        <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
-                            {t('user_permissions_hint') || 'Individual permissions override role permissions. Admin always has full access.'}
-                        </p>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                            {users.filter(u => u.role !== 'admin').map(u => (
-                                <div key={u.id} onClick={() => { setSelUser(u); loadUserPerms(u); }}
-                                    style={{
-                                        padding: '11px 14px', borderRadius: 10, cursor: 'pointer', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 10,
-                                        border: selUser?.id === u.id ? '2px solid var(--primary)' : '1px solid var(--border)',
-                                        background: selUser?.id === u.id ? 'rgba(37,99,235,.07)' : 'var(--surface)'
-                                    }}>
-                                    <div style={{
-                                        width: 36, height: 36, borderRadius: '50%', background: roleColor(u.role), color: '#fff',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, flexShrink: 0
-                                    }}>
-                                        {(u.full_name || u.username || '?')[0]}
-                                    </div>
-                                    <div>
-                                        <div style={{ fontWeight: 600, fontSize: '.875rem' }}>{u.full_name || u.username}</div>
-                                        <div style={{ fontSize: '.73rem', color: 'var(--text-muted)' }}>{roleName(u.role)}</div>
-                                    </div>
-                                </div>
+                    {/* ── ROLE MODE ── */}
+                    {permMode === 'role' && <>
+                        {/* Role selector tabs */}
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                            {[['accountant', t('accountant_role') || 'Accountant'], ['user', t('user_role') || 'User']].map(([r, label]) => (
+                                <button key={r} onClick={() => { setSelRole(r); if (!permLoaded) loadPerms(); }} style={{
+                                    padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                                    fontSize: '.875rem', fontWeight: selRole === r ? 700 : 400, transition: 'all .15s',
+                                    background: selRole === r ? roleColor(r) : 'var(--bg-secondary)',
+                                    color: selRole === r ? '#fff' : 'var(--text-secondary)',
+                                    border: selRole === r ? 'none' : '1px solid var(--border)'
+                                }}>{label}</button>
                             ))}
-                            {users.filter(u => u.role !== 'admin').length === 0 && <p style={{ color: 'var(--text-muted)' }}>{t('no_users_found') || 'No users found'}</p>}
                         </div>
-                    </Card>
 
-                    {selUser && (
-                        <Card title={`${t('override_role_permissions') || 'Override Role Permissions'}: ${selUser.full_name || selUser.username}`} icon={Shield}
-                            action={upHasInd
-                                ? <span style={{ fontSize: '.72rem', background: 'rgba(16,185,129,.1)', color: 'var(--success)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('custom_permissions_badge') || 'Custom Permissions Active'}</span>
-                                : <span style={{ fontSize: '.72rem', background: 'var(--bg-secondary)', color: 'var(--text-muted)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('default_role_permissions_badge') || 'Using Role Permissions'}</span>}
-                        >
-                            {upLoading ? <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>{t('loading') || 'Loading...'}</div> : <>
-                                <div style={{ overflowX: 'auto', marginBottom: 14 }}>
+                        {!permLoaded && <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>{t('loading') || 'Loading...'}</div>}
+                        {permLoaded && (
+                            <Card title={`${t('role_permissions') || 'Role Permissions'}: ${roleName(selRole)}`} icon={Shield}
+                                action={
+                                    selRole === 'admin' ? <span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,.1)', color: '#ef4444', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('admin_role') || 'Admin'}</span> : null
+                                }
+                            >
+                                <div style={{ overflowX: 'auto' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
                                         <thead>
                                             <tr>
@@ -780,8 +769,8 @@ export default function Settings() {
                                                     <td style={{ padding: '9px 12px', fontWeight: 500, fontSize: '.875rem' }}>{m.l}</td>
                                                     {PERM_KEYS.map(pk => (
                                                         <td key={pk.key} style={{ padding: 8, textAlign: 'center' }}>
-                                                            <PermCell has={!!upState[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
-                                                                onToggle={() => setUpState(p => ({ ...p, [m.m]: { ...p[m.m], [pk.key]: !p[m.m]?.[pk.key] } }))} />
+                                                            <PermCell has={!!permState[selRole]?.[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
+                                                                onToggle={() => togglePerm(selRole, m.m, pk.key)} />
                                                         </td>
                                                     ))}
                                                 </tr>
@@ -789,18 +778,117 @@ export default function Settings() {
                                         </tbody>
                                     </table>
                                 </div>
-                                <div style={{ display: 'flex', gap: 10 }}>
-                                    <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving} onClick={saveUserPerms}>
-                                        <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_individual_permissions') || 'Save Individual Permissions')}
+                            </Card>
+                        )}
+                        {permLoaded && <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving} onClick={savePerms}>
+                                <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_role_permissions') || 'Save Role Permissions')}
+                            </button>
+                        </div>}
+                    </>}
+
+                    {/* ── INDIVIDUAL USER MODE ── */}
+                    {permMode === 'user' && <>
+                        <Card title={t('select_user_permissions') || 'Select a user to customize permissions'} icon={Users}>
+                            {/* Search bar */}
+                            <div style={{ position: 'relative', marginBottom: 14 }}>
+                                <input
+                                    placeholder={t('search_user_placeholder') || 'ابحث بالاسم...'}
+                                    value={permSearch}
+                                    onChange={e => setPermSearch(e.target.value)}
+                                    style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 10, fontSize: '.9rem', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                                />
+                                {permSearch && (
+                                    <button onClick={() => { setPermSearch(''); setSelUser(null); }}
+                                        style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, display: 'flex', alignItems: 'center' }}>
+                                        <X size={14} />
                                     </button>
-                                    {upHasInd && <button style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
-                                        disabled={saving} onClick={clearUserPerms}>
-                                        <RefreshCw size={13} /> {t('reset_to_role_permissions') || 'Reset to Role Permissions'}
-                                    </button>}
-                                </div>
-                            </>}
+                                )}
+                            </div>
+                            {/* User grid */}
+                            {(() => {
+                                const filtered = users.filter(u =>
+                                    !permSearch ||
+                                    u.full_name?.toLowerCase().includes(permSearch.toLowerCase()) ||
+                                    u.username?.toLowerCase().includes(permSearch.toLowerCase()) ||
+                                    roleName(u.role)?.toLowerCase().includes(permSearch.toLowerCase())
+                                );
+                                if (users.length === 0) return <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: '.875rem' }}>{t('loading') || 'جاري التحميل...'}</div>;
+                                if (filtered.length === 0) return <div style={{ textAlign: 'center', padding: 16, color: 'var(--text-muted)', fontSize: '.875rem' }}>{t('no_results') || 'لا توجد نتائج'}</div>;
+                                return (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+                                        {filtered.map(u => {
+                                            const selected = selUser?.id === u.id;
+                                            return (
+                                                <div key={u.id} onClick={() => { setSelUser(u); loadUserPerms(u); setPermSearch(''); }}
+                                                    style={{
+                                                        padding: '12px 14px', borderRadius: 12, cursor: 'pointer', transition: 'all .15s',
+                                                        display: 'flex', alignItems: 'center', gap: 10,
+                                                        border: selected ? `2px solid var(--primary)` : '1px solid var(--border)',
+                                                        background: selected ? 'rgba(37,99,235,.08)' : 'var(--surface)',
+                                                    }}>
+                                                    <div style={{ width: 38, height: 38, borderRadius: '50%', background: `linear-gradient(135deg, ${roleColor(u.role)}, ${roleColor(u.role)}88)`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flexShrink: 0, fontSize: '1rem' }}>
+                                                        {(u.full_name || u.username || '?')[0].toUpperCase()}
+                                                    </div>
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ fontWeight: 600, fontSize: '.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name || u.username}</div>
+                                                        <div style={{ fontSize: '.72rem', color: 'var(--text-muted)' }}>@{u.username}</div>
+                                                        <span style={{ fontSize: '.67rem', fontWeight: 700, padding: '1px 7px', borderRadius: 20, display: 'inline-block', marginTop: 2, background: roleColor(u.role) + '18', color: roleColor(u.role) }}>{roleName(u.role)}</span>
+                                                    </div>
+                                                    {selected && <Check size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })()}
                         </Card>
-                    )}
+
+                        {selUser && (
+                            <Card
+                                title={`${t('override_role_permissions') || 'Override Role Permissions'}: ${selUser.full_name || selUser.username}`}
+                                icon={Shield}
+                                action={upHasInd
+                                    ? <span style={{ fontSize: '.72rem', background: 'rgba(16,185,129,.1)', color: 'var(--success)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('custom_permissions_badge') || 'Custom Permissions Active'}</span>
+                                    : <span style={{ fontSize: '.72rem', background: 'var(--bg-secondary)', color: 'var(--text-muted)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('default_role_permissions_badge') || 'Using Role Permissions'}</span>}
+                            >
+                                {upLoading ? <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>{t('loading') || 'Loading...'}</div> : <>
+                                    <div style={{ overflowX: 'auto', marginBottom: 14 }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ ...thStyle(null), textAlign: 'right', padding: '9px 12px' }}>{t('module') || 'Module'}</th>
+                                                    {PERM_KEYS.map(pk => <th key={pk.key} style={thStyle(70)}>{pk.label}</th>)}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {PERM_MODS.map((m, i) => (
+                                                    <tr key={m.m} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
+                                                        <td style={{ padding: '9px 12px', fontWeight: 500, fontSize: '.875rem' }}>{m.l}</td>
+                                                        {PERM_KEYS.map(pk => (
+                                                            <td key={pk.key} style={{ padding: 8, textAlign: 'center' }}>
+                                                                <PermCell has={!!upState[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
+                                                                    onToggle={() => setUpState(p => ({ ...p, [m.m]: { ...p[m.m], [pk.key]: !p[m.m]?.[pk.key] } }))} />
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 10 }}>
+                                        <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving} onClick={saveUserPerms}>
+                                            <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_individual_permissions') || 'Save Individual Permissions')}
+                                        </button>
+                                        {upHasInd && <button style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                                            disabled={saving} onClick={clearUserPerms}>
+                                            <RefreshCw size={13} /> {t('reset_to_role_permissions') || 'Reset to Role Permissions'}
+                                        </button>}
+                                    </div>
+                                </>}
+                            </Card>
+                        )}
+                    </>}
                 </>}
 
                 {/* ══ 8. DATABASE ════════════════════════════════════════════════════ */}
