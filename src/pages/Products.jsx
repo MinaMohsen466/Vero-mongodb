@@ -302,7 +302,10 @@ function Products() {
                         </div>
                         <div className="form-group">
                             <label className="form-label">{t('prod_category')}</label>
-                            <input type="text" className="form-input" value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} />
+                            <input type="text" list="categories-list" className="form-input" value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} />
+                            <datalist id="categories-list">
+                                {categories.map(c => <option key={c} value={c} />)}
+                            </datalist>
                         </div>
                     </div>
                     <div className="form-row">

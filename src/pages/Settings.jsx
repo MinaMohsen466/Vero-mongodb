@@ -93,12 +93,16 @@ export default function Settings() {
         { m: 'journal_entries', l: t('journal_entries') || 'Journal Entries', a: ['view', 'create', 'delete'] },
         { m: 'hr', l: t('hr') || 'HR', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'pos', l: t('pos') || 'POS', a: ['view', 'create'] },
+        { m: 'offers', l: t('offers') || 'Offers & Coupons', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'reports', l: t('reports') || 'Reports', a: ['view'] },
         { m: 'settings', l: t('settings') || 'Settings', a: ['view', 'edit'] },
         { m: 'users', l: t('users') || 'Users', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'permissions', l: t('permissions') || 'Permissions', a: ['view', 'edit'] },
         { m: 'database', l: t('database_management') || 'Database', a: ['view'] },
         { m: 'financial_summary', l: t('financial_summary') || 'Financial Summary', a: ['view'] },
+        { m: 'stock_alerts', l: t('stock_alerts') || 'Stock Alerts', a: ['view'] },
+        { m: 'customer_receivables', l: t('customer_receivables') || 'Customer Receivables', a: ['view'] },
+        { m: 'dashboard_charts', l: t('charts') || 'Charts', a: ['view'] },
     ];
 
     const PERM_KEYS = [
@@ -457,16 +461,9 @@ export default function Settings() {
                             </Fld>
                         </div>
                     </Card>
-
-                    <Card title={t('dashboard_options') || 'Dashboard Options'} icon={Ico}>
-                        <TRow label={t('show_financial_summary') || 'Show Financial Summary'} desc={t('desc_financial_summary') || 'Total sales and purchases'} value={gen.show_financial_summary} onChange={v => setGen(f => ({ ...f, show_financial_summary: v }))} />
-                        <TRow label={t('stock_alerts') || 'Stock Alerts'} desc={t('desc_stock_alerts') || 'Products that reached minimum stock limit'} value={gen.show_low_stock_products} onChange={v => setGen(f => ({ ...f, show_low_stock_products: v }))} />
-                        <TRow label={t('customer_receivables') || 'Customer Receivables'} desc={t('desc_customer_receivables') || 'Customers with outstanding balances'} value={gen.show_customer_receivables} onChange={v => setGen(f => ({ ...f, show_customer_receivables: v }))} />
-                        <TRow label={t('charts') || 'Charts'} desc={t('desc_charts') || 'Graphs for sales and purchases volume'} value={gen.show_sales_purchases_charts} onChange={v => setGen(f => ({ ...f, show_sales_purchases_charts: v }))} />
+                    <Card title={t('sales_options') || 'Sales Options'} icon={Ico}>
                         <TRow label={t('allow_negative_stock') || 'Allow Negative Stock'} desc={t('desc_negative_stock') || 'Allows completing sales even when stock is depleted'} value={gen.allow_negative_stock} onChange={v => setGen(f => ({ ...f, allow_negative_stock: v }))} />
-                    </Card>
-
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    </Card>                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving}
                             onClick={async () => {
                                 setSaving(true);
@@ -808,10 +805,12 @@ export default function Settings() {
                             {/* User grid */}
                             {(() => {
                                 const filtered = users.filter(u =>
-                                    !permSearch ||
-                                    u.full_name?.toLowerCase().includes(permSearch.toLowerCase()) ||
-                                    u.username?.toLowerCase().includes(permSearch.toLowerCase()) ||
-                                    roleName(u.role)?.toLowerCase().includes(permSearch.toLowerCase())
+                                    u.role !== 'admin' && (
+                                        !permSearch ||
+                                        u.full_name?.toLowerCase().includes(permSearch.toLowerCase()) ||
+                                        u.username?.toLowerCase().includes(permSearch.toLowerCase()) ||
+                                        roleName(u.role)?.toLowerCase().includes(permSearch.toLowerCase())
+                                    )
                                 );
                                 if (users.length === 0) return <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: '.875rem' }}>{t('loading') || 'جاري التحميل...'}</div>;
                                 if (filtered.length === 0) return <div style={{ textAlign: 'center', padding: 16, color: 'var(--text-muted)', fontSize: '.875rem' }}>{t('no_results') || 'لا توجد نتائج'}</div>;

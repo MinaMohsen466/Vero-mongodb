@@ -172,6 +172,25 @@ contextBridge.exposeInMainWorld('api', {
         invoice: (invoiceHtml) => ipcRenderer.invoke('print:invoice', invoiceHtml)
     },
 
+    // Coupons
+    coupons: {
+        getAll: () => ipcRenderer.invoke('coupons:getAll'),
+        create: (data) => ipcRenderer.invoke('coupons:create', data),
+        update: (data) => ipcRenderer.invoke('coupons:update', data),
+        delete: (id) => ipcRenderer.invoke('coupons:delete', id),
+        validate: (code) => ipcRenderer.invoke('coupons:validate', code),
+        incrementUse: (id) => ipcRenderer.invoke('coupons:incrementUse', id)
+    },
+
+    // Offers
+    offers: {
+        getAll: () => ipcRenderer.invoke('offers:getAll'),
+        getActive: () => ipcRenderer.invoke('offers:getActive'),
+        create: (data) => ipcRenderer.invoke('offers:create', data),
+        update: (data) => ipcRenderer.invoke('offers:update', data),
+        delete: (id) => ipcRenderer.invoke('offers:delete', id)
+    },
+
     // File utils
     file: {
         readAsBase64: (filePath) => ipcRenderer.invoke('file:readAsBase64', filePath),

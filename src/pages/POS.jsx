@@ -112,6 +112,11 @@ function POS() {
     const [discount, setDiscount] = useState(0);
     const [note, setNote] = useState('');
 
+    // Offers & Coupons
+    const [activeOffers, setActiveOffers] = useState([]);
+    const [couponCode, setCouponCode] = useState('');
+    const [appliedCoupon, setAppliedCoupon] = useState(null);
+
     // UI
     const [searchQuery, setSearchQuery] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
@@ -207,16 +212,18 @@ function POS() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [prods, custs, sett] = await Promise.all([
+            const [prods, custs, sett, offers] = await Promise.all([
                 window.api.products.getAll(),
                 window.api.customers.getAll(),
-                window.api.settings.getAll()
+                window.api.settings.getAll(),
+                window.api.offers.getActive()
             ]);
             const active = (prods || []).filter(p => p.is_active);
             setAllProducts(active);
             setProducts(active);
             setCustomers(custs || []);
             setSettings(sett || {});
+            setActiveOffers(offers || []);
         } catch (e) { console.error(e); }
         setLoading(false);
     };
@@ -240,14 +247,16 @@ function POS() {
 
     const addToCart = useCallback((product) => {
         const fresh = allProducts.find(p => p.id === product.id) || product;
-        if (fresh.stock_quantity <= 0) {
+        const allowNegative = settings.general?.allow_negative_stock === 'yes';
+        
+        if (!allowNegative && fresh.stock_quantity <= 0) {
             toast.error(t('product_out_of_stock') || 'Product is out of stock');
             return;
         }
         setCart(prev => {
             const existing = prev.find(i => i.id === fresh.id);
             if (existing) {
-                if (existing.qty >= fresh.stock_quantity) {
+                if (!allowNegative && existing.qty >= fresh.stock_quantity) {
                     toast.error(t('not_enough_stock') || 'Not enough stock');
                     return prev;
                 }
@@ -257,26 +266,83 @@ function POS() {
                 );
             }
             return [...prev, {
-                id: fresh.id, name: fresh.name, code: fresh.code,
+                id: fresh.id, name: fresh.name, code: fresh.code, category: fresh.category,
                 price: fresh.sale_price || 0, stock: fresh.stock_quantity,
                 qty: 1, total: fresh.sale_price || 0
             }];
         });
-    }, [allProducts]);
+    }, [allProducts, settings, t]);
 
     const updateQty = (id, delta) => {
         setCart(prev => prev.map(i => {
             if (i.id !== id) return i;
-            const newQty = Math.max(1, Math.min(i.stock, i.qty + delta));
+            const allowNegative = settings.general?.allow_negative_stock === 'yes';
+            const newQty = allowNegative 
+                ? Math.max(1, i.qty + delta) 
+                : Math.max(1, Math.min(i.stock, i.qty + delta));
+                
+            if (!allowNegative && i.qty + delta > i.stock && delta > 0) {
+                toast.error(t('not_enough_stock') || 'Not enough stock');
+            }
+            
             return { ...i, qty: newQty, total: newQty * i.price };
         }));
     };
 
     const removeFromCart = (id) => setCart(prev => prev.filter(i => i.id !== id));
-    const clearCart = () => { setCart([]); setSelectedCustomer(null); setDiscount(0); setNote(''); };
+    const clearCart = () => { setCart([]); setSelectedCustomer(null); setDiscount(0); setNote(''); setCouponCode(''); setAppliedCoupon(null); };
 
-    const subtotal = cart.reduce((s, i) => s + i.total, 0);
-    const discountAmount = Math.min(subtotal, parseFloat(discount) || 0);
+    // Cart Calculation logic handles BOGO, Fixed, Percentage offers
+    let enrichedCart = [];
+    let calcSubtotal = 0;
+    
+    cart.forEach(item => {
+        let finalPrice = parseFloat(item.price);
+        let finalTotal = finalPrice * item.qty;
+        let appliedOffer = null;
+        let bogoFreeQty = 0;
+
+        const offer = activeOffers.find(o => 
+            o.target_type === 'all' || 
+            (o.target_type === 'product' && String(o.target_id) === String(item.id)) ||
+            (o.target_type === 'category' && o.target_id === item.category)
+        );
+
+        if (offer) {
+            appliedOffer = offer;
+            if (offer.offer_type === 'percentage') {
+                const discAmt = finalPrice * (parseFloat(offer.discount_value) / 100);
+                finalPrice = finalPrice - discAmt;
+                finalTotal = finalPrice * item.qty;
+            } else if (offer.offer_type === 'fixed') {
+                finalPrice = Math.max(0, finalPrice - parseFloat(offer.discount_value));
+                finalTotal = finalPrice * item.qty;
+            } else if (offer.offer_type === 'bogo') {
+                const bundleSize = offer.buy_qty + offer.get_qty;
+                const bundles = Math.floor(item.qty / bundleSize);
+                bogoFreeQty = bundles * offer.get_qty;
+                finalTotal = finalPrice * (item.qty - bogoFreeQty);
+            }
+        }
+
+        calcSubtotal += finalTotal;
+        enrichedCart.push({ ...item, finalPrice, finalTotal, appliedOffer, bogoFreeQty, originalTotal: item.price * item.qty });
+    });
+
+    let couponDiscountAmount = 0;
+    if (appliedCoupon) {
+        if (appliedCoupon.discount_type === 'percentage') {
+            couponDiscountAmount = calcSubtotal * (parseFloat(appliedCoupon.discount_value) / 100);
+        } else {
+            couponDiscountAmount = parseFloat(appliedCoupon.discount_value);
+        }
+    }
+
+    const manualDiscAmount = parseFloat(discount) || 0;
+    const totalDiscountAmount = couponDiscountAmount + manualDiscAmount;
+    
+    const subtotal = calcSubtotal;
+    const discountAmount = Math.min(subtotal, totalDiscountAmount);
     const total = subtotal - discountAmount;
     const change = parseFloat(amountPaid) - total;
 
@@ -301,6 +367,19 @@ function POS() {
         setShowPayModal(true);
     };
 
+    const handleApplyCoupon = async () => {
+        if (!couponCode) { setAppliedCoupon(null); return; }
+        const result = await window.api.coupons.validate(couponCode);
+        if (result.valid) {
+            setAppliedCoupon(result.coupon);
+            toast.success(t('coupon_applied_success') || 'Coupon applied successfully!');
+        } else {
+            toast.error(result.error);
+            setAppliedCoupon(null);
+            setCouponCode('');
+        }
+    };
+
     const handleCheckout = async () => {
         if (cart.length === 0) return;
         setSaving(true);
@@ -317,19 +396,22 @@ function POS() {
                 payment_method: isCredit ? 'credit' : payMethod,
                 notes: note || t('pos') || 'Point of Sale',
                 created_by: user?.id || null,
-                items: cart.map(i => ({
+                items: enrichedCart.map(i => ({
                     product_id: i.id, description: i.name,
                     quantity: i.qty, unit_price: i.price,
-                    discount: 0, tax: 0, total: i.total
+                    discount: i.originalTotal - i.finalTotal, tax: 0, total: i.finalTotal
                 }))
             };
             const result = await window.api.invoices.create(invoiceData);
             if (result.success) {
+                if (appliedCoupon) {
+                    await window.api.coupons.incrementUse(appliedCoupon.id);
+                }
                 const receipt = {
                     number: result.invoice_number,
                     date: invoiceData.date,
                     customer: selectedCustomer?.name || t('cash_customer') || 'Cash Customer',
-                    items: [...cart], subtotal, discountAmount, total,
+                    items: [...enrichedCart], subtotal, discountAmount, total,
                     payMethod, amountPaid: parseFloat(amountPaid) || total,
                     change: Math.max(0, (parseFloat(amountPaid) || total) - total),
                     company: settings.company?.company_name || t('my_company') || 'My Company'
@@ -554,16 +636,24 @@ function POS() {
                             <ShoppingCart size={44} style={{ opacity: 0.2, marginBottom: '10px' }} />
                             <p style={{ fontSize: '0.85rem' }}>{t('start_choosing_products') || 'Start choosing products'}</p>
                         </div>
-                    ) : cart.map(item => (
+                    ) : enrichedCart.map(item => (
                         <div key={item.id} style={{
-                            display: 'flex', alignItems: 'center', gap: '5px',
+                            display: 'flex', alignItems: 'flex-start', gap: '5px',
                             padding: '6px 7px', borderRadius: '8px', marginBottom: '4px',
-                            background: 'var(--bg-secondary)', border: '1px solid var(--border)'
+                            background: item.appliedOffer ? 'rgba(16, 185, 129, 0.05)' : 'var(--bg-secondary)', 
+                            border: item.appliedOffer ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border)'
                         }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                                <p style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
+                                <p style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {item.name}
+                                    {item.appliedOffer && (
+                                        <span style={{ marginLeft: 5, fontSize: '0.65rem', background: '#10B981', color: 'white', padding: '1px 4px', borderRadius: 4 }}>
+                                            {item.bogoFreeQty > 0 ? `${t('bogo_applied_badge')} ${item.bogoFreeQty}` : t('offer_applied_badge')}
+                                        </span>
+                                    )}
+                                </p>
                                 {/* Editable price */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                                     <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{t('price') || 'Price'}:</span>
                                     <input
                                         type="number"
@@ -575,20 +665,23 @@ function POS() {
                                             const newPrice = parseFloat(e.target.value) || 0;
                                             setCart(prev => prev.map(i =>
                                                 i.id === item.id
-                                                    ? { ...i, price: newPrice, total: newPrice * i.qty }
+                                                    ? { ...i, price: newPrice }
                                                     : i
                                             ));
                                         }}
                                         style={{
-                                            width: '72px', padding: '1px 5px', fontSize: '0.72rem',
+                                            width: '60px', padding: '1px 5px', fontSize: '0.72rem',
                                             border: '1px solid var(--border)', borderRadius: '5px',
                                             background: 'var(--bg-primary)', color: 'var(--text-primary)',
-                                            outline: 'none'
+                                            outline: 'none', textDecoration: item.finalPrice < item.price ? 'line-through' : 'none', opacity: item.finalPrice < item.price ? 0.6 : 1
                                         }}
                                     />
+                                    {item.finalPrice < item.price && (
+                                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--primary)' }}>{formatCurrency(item.finalPrice)}</span>
+                                    )}
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '2px', paddingTop: 2 }}>
                                 <button onClick={() => updateQty(item.id, -1)} style={{ width: '22px', height: '22px', borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
                                     <Minus size={10} />
                                 </button>
@@ -597,10 +690,12 @@ function POS() {
                                     <Plus size={10} />
                                 </button>
                             </div>
-                            <div style={{ textAlign: 'left', minWidth: '58px' }}>
-                                <p style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--primary)', margin: 0 }}>{formatCurrency(item.total)}</p>
+                            <div style={{ textAlign: 'left', minWidth: '58px', paddingTop: 2 }}>
+                                <p style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--primary)', margin: 0 }}>
+                                    {formatCurrency(item.finalTotal)}
+                                </p>
                             </div>
-                            <button onClick={() => removeFromCart(item.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0 }}>
+                            <button onClick={() => removeFromCart(item.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0, marginTop: 2 }}>
                                 <Trash2 size={12} />
                             </button>
                         </div>
@@ -623,6 +718,36 @@ function POS() {
                             style={{ flex: 1, padding: '4px 8px', fontSize: '0.83rem', textAlign: 'left' }}
                         />
                     </div>
+                    
+                    {/* Coupon Input */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+                        <span style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', width: 60 }}>{t('coupon') || 'Coupon'}</span>
+                        <div style={{ display: 'flex', flex: 1, gap: 4 }}>
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder={t('coupon_code_placeholder') || 'Code...'}
+                                value={couponCode}
+                                onChange={e => setCouponCode(e.target.value)}
+                                disabled={!!appliedCoupon}
+                                style={{ flex: 1, padding: '4px 8px', fontSize: '0.83rem', letterSpacing: 1, textTransform: 'uppercase' }}
+                            />
+                            {!appliedCoupon ? (
+                                <button type="button" onClick={handleApplyCoupon} style={{ padding: '4px 8px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6, fontSize: '0.8rem', cursor: 'pointer' }}>
+                                    {t('apply_coupon') || 'Apply'}
+                                </button>
+                            ) : (
+                                <button type="button" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} style={{ padding: '4px 8px', background: 'var(--error, #ef4444)', color: '#fff', border: 'none', borderRadius: 6, fontSize: '0.8rem', cursor: 'pointer' }}>
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    {appliedCoupon && (
+                        <div style={{ fontSize: '0.75rem', color: '#10b981', textAlign: 'right', marginBottom: 5 }}>
+                            ✓ {t('coupon_applied_success') || 'Coupon Active'} (-{couponDiscountAmount.toFixed(3)})
+                        </div>
+                    )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', paddingTop: '8px', borderTop: '2px solid var(--border)' }}>
                         <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{t('final_total') || 'Total'}</span>
                         <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)' }}>{formatCurrency(total)}</span>

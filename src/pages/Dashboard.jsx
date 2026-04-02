@@ -148,7 +148,7 @@ function Dashboard() {
             </div>
 
             {/* Financial Summary */}
-            {settings.general?.show_financial_summary !== 'no' && (user?.role === 'admin' || user?.permissions?.financial_summary?.can_view) && (
+            {(user?.role === 'admin' || user?.permissions?.financial_summary?.can_view) && (
                 <div style={{ marginBottom: '24px' }}>
                     <div style={{
                         display: 'flex',
@@ -210,7 +210,7 @@ function Dashboard() {
             )}
 
             {/* Charts Section */}
-            {settings.general?.show_sales_purchases_charts !== 'no' && (
+            {(user?.role === 'admin' || user?.permissions?.dashboard_charts?.can_view) && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '24px' }}>
                     <div className="card">
                         <div className="card-header" style={{ paddingBottom: '16px', borderBottom: '1px solid var(--border)' }}>
@@ -350,7 +350,7 @@ function Dashboard() {
             {/* Additional Sections */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '16px', marginTop: '24px' }}>
                 {/* Low Stock Products */}
-                {settings.general?.show_low_stock_products !== 'no' && (
+                {(user?.role === 'admin' || user?.permissions?.stock_alerts?.can_view) && (
                     <div className="card" style={{ borderTop: '4px solid var(--warning)' }}>
                         <div className="card-header" style={{ paddingBottom: '16px', borderBottom: '1px solid var(--border)' }}>
                             <h4 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.1rem', fontWeight: 600, color: 'var(--warning)' }}>
@@ -395,7 +395,7 @@ function Dashboard() {
                 )}
 
                 {/* Customer Receivables */}
-                {settings.general?.show_customer_receivables !== 'no' && (
+                {(user?.role === 'admin' || user?.permissions?.customer_receivables?.can_view) && (
                     <div className="card" style={{ borderTop: '4px solid var(--danger)' }}>
                         <div className="card-header" style={{ paddingBottom: '16px', borderBottom: '1px solid var(--border)' }}>
                             <h4 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.1rem', fontWeight: 600, color: 'var(--danger)' }}>

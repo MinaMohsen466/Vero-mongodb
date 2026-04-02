@@ -130,6 +130,20 @@ ipcMain.handle('reports:salesReport', async (event, { startDate, endDate }) => d
 ipcMain.handle('reports:purchasesReport', async (event, { startDate, endDate }) => db.reports.purchasesReport(startDate, endDate));
 
 // --- Settings ---
+// --- Offers & Coupons ---
+ipcMain.handle('coupons:getAll', async () => db.coupons.getAll());
+ipcMain.handle('coupons:create', async (event, data) => db.coupons.create(data));
+ipcMain.handle('coupons:update', async (event, data) => db.coupons.update(data));
+ipcMain.handle('coupons:delete', async (event, id) => db.coupons.delete(id));
+ipcMain.handle('coupons:validate', async (event, code) => db.coupons.validate(code));
+ipcMain.handle('coupons:incrementUse', async (event, id) => db.coupons.incrementUse(id));
+
+ipcMain.handle('offers:getAll', async () => db.offers.getAll());
+ipcMain.handle('offers:getActive', async () => db.offers.getActive());
+ipcMain.handle('offers:create', async (event, data) => db.offers.create(data));
+ipcMain.handle('offers:update', async (event, data) => db.offers.update(data));
+ipcMain.handle('offers:delete', async (event, id) => db.offers.delete(id));
+
 ipcMain.handle('settings:get', async (event, key) => db.settings.get(key));
 ipcMain.handle('settings:getAll', async () => db.settings.getAll());
 ipcMain.handle('settings:set', async (event, { category, key, value }) => db.settings.set(category, key, value));
@@ -145,6 +159,8 @@ ipcMain.handle('settings:changeDbPath', async (event, newFolderPath) => {
 });
 ipcMain.handle('settings:restore', async (event, filePath) => db.restore(filePath));
 ipcMain.handle('settings:optimizeDb', async () => db.vacuum());
+
+
 
 // Get database file size
 ipcMain.handle('settings:getDbSize', async () => {

@@ -104,6 +104,8 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS employee_deductions (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL, month TEXT NOT NULL, amount REAL NOT NULL, reason TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
       CREATE TABLE IF NOT EXISTS salary_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_number TEXT UNIQUE NOT NULL, employee_id INTEGER NOT NULL, month TEXT NOT NULL, base_salary REAL DEFAULT 0, deductions REAL DEFAULT 0, net_salary REAL DEFAULT 0, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, journal_entry_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
       CREATE TABLE IF NOT EXISTS rent_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_number TEXT UNIQUE NOT NULL, month TEXT NOT NULL, amount REAL NOT NULL, description TEXT, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, journal_entry_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS coupons (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, discount_type TEXT NOT NULL, discount_value REAL NOT NULL, max_uses INTEGER DEFAULT 0, current_uses INTEGER DEFAULT 0, valid_from TEXT, valid_to TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS offers (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, offer_type TEXT NOT NULL, discount_value REAL DEFAULT 0, target_type TEXT NOT NULL, target_id TEXT, buy_qty INTEGER DEFAULT 0, get_qty INTEGER DEFAULT 0, valid_from TEXT, valid_to TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     `);
 
         /// Migration for existing databases - add missing columns
@@ -1702,5 +1704,85 @@ class SystemRepo {
     }
 }
 
+class CouponsRepo {
+    constructor(dbHandler) { this.db = dbHandler; }
 
-module.exports = new AppDatabase();
+    getAll() {
+        return this.db.all("SELECT * FROM coupons ORDER BY id DESC");
+    }
+
+    create(data) {
+        return this.db.run(
+            "INSERT INTO coupons (code, discount_type, discount_value, max_uses, current_uses, valid_from, valid_to, is_active) VALUES (?, ?, ?, ?, 0, ?, ?, ?)",
+            [data.code.toUpperCase(), data.discount_type, data.discount_value, data.max_uses || 0, data.valid_from || null, data.valid_to || null, data.is_active !== undefined ? data.is_active : 1]
+        );
+    }
+
+    update(data) {
+        return this.db.run(
+            "UPDATE coupons SET code = ?, discount_type = ?, discount_value = ?, max_uses = ?, valid_from = ?, valid_to = ?, is_active = ? WHERE id = ?",
+            [data.code.toUpperCase(), data.discount_type, data.discount_value, data.max_uses, data.valid_from || null, data.valid_to || null, data.is_active, data.id]
+        );
+    }
+
+    delete(id) {
+        return this.db.run("DELETE FROM coupons WHERE id = ?", [id]);
+    }
+
+    validate(code) {
+        const coupon = this.db.get("SELECT * FROM coupons WHERE code = ? COLLATE NOCASE", [code]);
+        if (!coupon) return { valid: false, error: 'الكوبون غير موجود' };
+        if (!coupon.is_active) return { valid: false, error: 'الكوبون غير مفعل' };
+        
+        if (coupon.max_uses > 0 && coupon.current_uses >= coupon.max_uses) {
+            return { valid: false, error: 'تم تجاوز الحد الأقصى لاستخدام الكوبون' };
+        }
+        
+        const now = new Date().toISOString().split('T')[0];
+        if (coupon.valid_from && now < coupon.valid_from) return { valid: false, error: 'تاريخ بداية الكوبون لم يحن بعد' };
+        if (coupon.valid_to && now > coupon.valid_to) return { valid: false, error: 'الكوبون منتهي الصلاحية' };
+        
+        return { valid: true, coupon };
+    }
+
+    incrementUse(id) {
+        this.db.run("UPDATE coupons SET current_uses = current_uses + 1 WHERE id = ?", [id]);
+    }
+}
+
+class OffersRepo {
+    constructor(dbHandler) { this.db = dbHandler; }
+
+    getAll() {
+        return this.db.all("SELECT * FROM offers ORDER BY id DESC");
+    }
+
+    getActive() {
+        const now = new Date().toISOString().split('T')[0];
+        return this.db.all("SELECT * FROM offers WHERE is_active = 1 AND (valid_from IS NULL OR valid_from <= ?) AND (valid_to IS NULL OR valid_to >= ?)", [now, now]);
+    }
+
+    create(data) {
+        return this.db.run(
+            "INSERT INTO offers (title, offer_type, discount_value, target_type, target_id, buy_qty, get_qty, valid_from, valid_to, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [data.title, data.offer_type, data.discount_value || 0, data.target_type, data.target_id || null, data.buy_qty || 0, data.get_qty || 0, data.valid_from || null, data.valid_to || null, data.is_active !== undefined ? data.is_active : 1]
+        );
+    }
+
+    update(data) {
+        return this.db.run(
+            "UPDATE offers SET title = ?, offer_type = ?, discount_value = ?, target_type = ?, target_id = ?, buy_qty = ?, get_qty = ?, valid_from = ?, valid_to = ?, is_active = ? WHERE id = ?",
+            [data.title, data.offer_type, data.discount_value || 0, data.target_type, data.target_id || null, data.buy_qty || 0, data.get_qty || 0, data.valid_from || null, data.valid_to || null, data.is_active, data.id]
+        );
+    }
+
+    delete(id) {
+        return this.db.run("DELETE FROM offers WHERE id = ?", [id]);
+    }
+}
+
+const dbInstance = new AppDatabase();
+dbInstance.coupons = new CouponsRepo(dbInstance);
+dbInstance.offers = new OffersRepo(dbInstance);
+
+module.exports = dbInstance;

@@ -71,7 +71,7 @@ function SearchableSelect({ options = [], value, onChange, placeholder, emptyLab
                 onClick={handleTriggerClick}
                 style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '8px',
+                    padding: '8px 12px', borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border)', borderRadius: '8px',
                     background: disabled ? 'var(--bg-secondary)' : 'var(--bg-primary)',
                     cursor: disabled ? 'not-allowed' : 'pointer', minHeight: '42px',
                     color: selectedOption ? 'var(--text-primary)' : 'var(--text-muted)',

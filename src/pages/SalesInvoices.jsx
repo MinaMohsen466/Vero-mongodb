@@ -29,6 +29,10 @@ function SalesInvoices() {
     const [editMode, setEditMode] = useState(false);
     const [editingId, setEditingId] = useState(null);
 
+    const [activeOffers, setActiveOffers] = useState([]);
+    const [couponCode, setCouponCode] = useState('');
+    const [appliedCoupon, setAppliedCoupon] = useState(null);
+
     const emptyForm = () => ({
         customer_id: '', date: new Date().toISOString().split('T')[0], due_date: '', notes: '',
         status: 'paid', payment_method: 'cash', payment_account_id: '',
@@ -63,26 +67,83 @@ function SalesInvoices() {
 
     const loadData = async () => {
         try {
-            const [invoicesData, customersData, productsData, settingsData, accountsData] = await Promise.all([
+            const [invoicesData, customersData, productsData, settingsData, accountsData, offersData] = await Promise.all([
                 window.api.invoices.getAll('sales'),
                 window.api.customers.getAll(),
                 window.api.products.getAll(),
                 window.api.settings.getAll(),
-                window.api.accounts.getBankAccounts ? window.api.accounts.getBankAccounts() : Promise.resolve([])
+                window.api.accounts.getBankAccounts ? window.api.accounts.getBankAccounts() : Promise.resolve([]),
+                window.api.offers.getActive()
             ]);
             setInvoices(invoicesData || []);
             setCustomers(customersData || []);
             setProducts(productsData || []);
             setSettings(settingsData || {});
             setBankAccounts(accountsData || []);
+            setActiveOffers(offersData || []);
         } catch (e) { console.error('Error loading data:', e); }
         setLoading(false);
     };
 
-    const calculateItemTotal = (item) => (item.quantity * item.unit_price) - (item.discount || 0);
+    const calculateItemTotal = (item) => {
+        let finalPrice = parseFloat(item.unit_price) || 0;
+        let qty = parseFloat(item.quantity) || 0;
+        let finalTotal = finalPrice * qty;
+        let discountManual = parseFloat(item.discount) || 0;
+        let appliedOffer = null;
+        let bogoFreeQty = 0;
+
+        const product = products.find(p => p.id === parseInt(item.product_id));
+        const category = product ? product.category : null;
+
+        const offer = activeOffers.find(o => 
+            o.target_type === 'all' || 
+            (o.target_type === 'product' && String(o.target_id) === String(item.product_id)) ||
+            (o.target_type === 'category' && o.target_id === category)
+        );
+
+        if (offer) {
+            appliedOffer = offer;
+            if (offer.offer_type === 'percentage') {
+                const discAmt = finalPrice * (parseFloat(offer.discount_value) / 100);
+                finalPrice = finalPrice - discAmt;
+                finalTotal = finalPrice * qty;
+            } else if (offer.offer_type === 'fixed') {
+                finalPrice = Math.max(0, finalPrice - parseFloat(offer.discount_value));
+                finalTotal = finalPrice * qty;
+            } else if (offer.offer_type === 'bogo') {
+                const bundleSize = offer.buy_qty + offer.get_qty;
+                const bundles = Math.floor(qty / bundleSize);
+                bogoFreeQty = bundles * offer.get_qty;
+                finalTotal = finalPrice * (qty - bogoFreeQty);
+            }
+        }
+
+        const totalAfterManualDiscount = Math.max(0, finalTotal - discountManual);
+
+        return {
+            finalPrice,
+            finalTotal: totalAfterManualDiscount,
+            appliedOffer,
+            bogoFreeQty,
+            discountCalculated: (item.unit_price * qty) - totalAfterManualDiscount
+        };
+    };
+
     const calculateTotals = () => {
-        const subtotal = formData.items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
-        return { subtotal, total: subtotal };
+        const subtotal = formData.items.reduce((sum, item) => sum + calculateItemTotal(item).finalTotal, 0);
+        let couponDiscountAmount = 0;
+        if (appliedCoupon) {
+            if (appliedCoupon.discount_type === 'percentage') {
+                couponDiscountAmount = subtotal * (parseFloat(appliedCoupon.discount_value) / 100);
+            } else {
+                couponDiscountAmount = parseFloat(appliedCoupon.discount_value);
+            }
+        }
+        
+        const actualTotalDiscount = Math.min(subtotal, couponDiscountAmount);
+        const finalTotal = subtotal - actualTotalDiscount;
+        return { subtotal, total: finalTotal, couponDiscountAmount: actualTotalDiscount };
     };
 
     const handleProductChange = (index, productId) => {
@@ -93,15 +154,15 @@ function SalesInvoices() {
             product_id: productId,
             description: product?.name || '',
             unit_price: product?.sale_price || 0,
-            total: calculateItemTotal({ ...newItems[index], unit_price: product?.sale_price || 0 })
         };
+        newItems[index].total = calculateItemTotal(newItems[index]).finalTotal;
         setFormData({ ...formData, items: newItems });
     };
 
     const handleItemChange = (index, field, value) => {
         const newItems = [...formData.items];
         newItems[index] = { ...newItems[index], [field]: value };
-        newItems[index].total = calculateItemTotal(newItems[index]);
+        newItems[index].total = calculateItemTotal(newItems[index]).finalTotal;
         setFormData({ ...formData, items: newItems });
     };
 
@@ -127,6 +188,19 @@ function SalesInvoices() {
             }
         }
         return true;
+    };
+
+    const handleApplyCoupon = async () => {
+        if (!couponCode) { setAppliedCoupon(null); return; }
+        const result = await window.api.coupons.validate(couponCode);
+        if (result.valid) {
+            setAppliedCoupon(result.coupon);
+            toast.success(t('coupon_applied_success') || 'Coupon applied successfully!');
+        } else {
+            toast.error(result.error);
+            setAppliedCoupon(null);
+            setCouponCode('');
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -168,7 +242,7 @@ function SalesInvoices() {
                 due_date: formData.due_date || null,
                 notes: formData.notes,
                 subtotal: totals.subtotal,
-                discount: 0,
+                discount: totals.couponDiscountAmount,
                 tax: 0,
                 total: totals.total,
                 status: formData.status,
@@ -179,9 +253,9 @@ function SalesInvoices() {
                     description: item.description,
                     quantity: parseFloat(item.quantity) || 0,
                     unit_price: parseFloat(item.unit_price) || 0,
-                    discount: parseFloat(item.discount) || 0,
+                    discount: calculateItemTotal(item).discountCalculated,
                     tax: 0,
-                    total: parseFloat(item.total) || 0
+                    total: calculateItemTotal(item).finalTotal
                 }))
             };
 
@@ -194,6 +268,9 @@ function SalesInvoices() {
             }
 
             if (result.success) {
+                if (appliedCoupon && !editMode) {
+                    await window.api.coupons.incrementUse(appliedCoupon.id);
+                }
                 toast.success(t('savedSuccess') || (editMode ? 'Invoice updated successfully' : 'Invoice saved successfully'));
                 await loadData();
                 closeModal();
@@ -550,7 +627,14 @@ function SalesInvoices() {
                                                 <td><input type="text" className="form-input" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} style={{ margin: 0 }} /></td>
                                                 <td><input type="number" className="form-input" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} min="1" step="1" style={{ margin: 0 }} /></td>
                                                 <td><input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.25" style={{ margin: 0 }} /></td>
-                                                <td className="font-bold">{formatCurrency(calculateItemTotal(item))}</td>
+                                                <td className="font-bold">
+                                                    {formatCurrency(calculateItemTotal(item).finalTotal)}
+                                                    {calculateItemTotal(item).appliedOffer && (
+                                                        <span style={{ display: 'block', fontSize: '0.65rem', background: '#10B981', color: 'white', padding: '1px 4px', borderRadius: 4, marginTop: 2, width: 'fit-content' }}>
+                                                            {calculateItemTotal(item).bogoFreeQty > 0 ? `${t('bogo_applied_badge') || 'BOGO Free'} ${calculateItemTotal(item).bogoFreeQty}` : (t('offer_applied_badge') || 'Offer Active')}
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td><button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => removeItem(index)}><X size={16} /></button></td>
                                             </tr>
                                         );
@@ -559,7 +643,39 @@ function SalesInvoices() {
                             </table>
                         </div>
                         <button type="button" className="btn btn-secondary" onClick={addItem} style={{ marginTop: '10px' }}><Plus size={16} /> {t('inv_addItem')}</button>
-                        <div style={{ marginTop: '20px', textAlign: 'left', fontSize: '1.2rem', fontWeight: 'bold' }}>{t('inv_total')}: {formatCurrency(calculateTotals().total)}</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '300px' }}>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{t('coupon') || 'Coupon'}:</span>
+                                <div style={{ display: 'flex', flex: 1, gap: 4 }}>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        placeholder={t('coupon_code_placeholder') || 'Code...'}
+                                        value={couponCode}
+                                        onChange={e => setCouponCode(e.target.value)}
+                                        disabled={!!appliedCoupon}
+                                        style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem', letterSpacing: 1, textTransform: 'uppercase', margin: 0 }}
+                                    />
+                                    {!appliedCoupon ? (
+                                        <button type="button" onClick={handleApplyCoupon} style={{ padding: '4px 10px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6, fontSize: '0.85rem', cursor: 'pointer' }}>
+                                            {t('apply_coupon') || 'Apply'}
+                                        </button>
+                                    ) : (
+                                        <button type="button" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} style={{ padding: '4px 8px', background: 'var(--error, #ef4444)', color: '#fff', border: 'none', borderRadius: 6, fontSize: '0.85rem', cursor: 'pointer' }}>
+                                            <X size={14} />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <div style={{ textAlign: 'left' }}>
+                                {appliedCoupon && (
+                                    <div style={{ fontSize: '0.85rem', color: '#10b981', marginBottom: 5 }}>
+                                        ✓ {t('coupon_applied_success') || 'Coupon Active'} (-{calculateTotals().couponDiscountAmount.toFixed(3)})
+                                    </div>
+                                )}
+                                <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{t('inv_total')}: {formatCurrency(calculateTotals().total)}</div>
+                            </div>
+                        </div>
                     </div>
                     <div className="form-group mt-4"><label className="form-label">{t('notes')}</label><textarea className="form-textarea" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} style={{ minHeight: '60px' }} /></div>
                 </form>

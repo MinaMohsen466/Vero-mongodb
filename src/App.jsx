@@ -30,6 +30,7 @@ import HR from './pages/HR';
 import POS from './pages/POS';
 import SetupWizard from './pages/SetupWizard';
 import Installments from './pages/Installments';
+import OffersAndCoupons from './pages/OffersAndCoupons';
 import ShortcutsHelpPanel from './components/ShortcutsHelpPanel';
 import { useShortcuts } from './hooks/useShortcuts';
 
@@ -233,6 +234,7 @@ function App() {
             case 'cashbank': return <CashBank />;
             case 'hr': return <HR />;
             case 'pos': return <POS />;
+            case 'offers': return <OffersAndCoupons />;
             default: return <Dashboard />;
         }
     };
