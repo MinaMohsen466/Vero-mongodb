@@ -92,6 +92,7 @@ export default function Settings() {
         { m: 'cash_bank', l: t('cash_bank') || 'Cash & Bank', a: ['view', 'create'] },
         { m: 'journal_entries', l: t('journal_entries') || 'Journal Entries', a: ['view', 'create', 'delete'] },
         { m: 'hr', l: t('hr') || 'HR', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'expenses', l: t('expenses') || 'Expenses', a: ['view', 'create', 'delete'] },
         { m: 'pos', l: t('pos') || 'POS', a: ['view', 'create'] },
         { m: 'offers', l: t('offers') || 'Offers & Coupons', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'reports', l: t('reports') || 'Reports', a: ['view'] },
@@ -139,7 +140,7 @@ export default function Settings() {
     const [gen, setGen] = useState({
         currency: t('default_currency') || 'Kuwaiti Dinar', currency_symbol: t('currency_kd') || 'KD', tax_rate: '0', decimal_places: '3',
         allow_negative_stock: 'no', show_financial_summary: 'yes', show_low_stock_products: 'yes', show_customer_receivables: 'yes',
-        show_sales_purchases_charts: 'yes', language: 'en'
+        show_sales_purchases_charts: 'yes', language: 'en', enable_product_color: 'no'
     });
     const [inv, setInv] = useState({
         invoice_title_sales: t('sales_invoice') || 'Sales Invoice', invoice_title_purchase: t('purchase_invoice') || 'Purchase Invoice',
@@ -159,12 +160,32 @@ export default function Settings() {
         ...(isAdmin ? [
             { id: 'users', l: t('users') || 'Users', icon: Users },
             { id: 'permissions', l: t('permissions') || 'Permissions', icon: Shield },
+            { id: 'activity_log', l: t('activity_log') || 'Activity Log', icon: FileText },
         ] : []),
         { id: 'database', l: t('database') || 'Database', icon: Database },
     ];
 
+
+
+    // ─── Activity Log State ───────────────────────────────────────────────────
+    const [activityLogs, setActivityLogs] = useState([]);
+    const [logLoading, setLogLoading] = useState(false);
+    const [logFilters, setLogFilters] = useState({ module: '', action: '', user_name: '', startDate: '', endDate: '' });
+
     useEffect(() => { loadData(); }, []);
     useEffect(() => { if (sec === 'permissions' && !permLoaded) loadPerms(); }, [sec]);
+    useEffect(() => { if (sec === 'activity_log') loadActivityLog(); }, [sec]);
+
+    const loadActivityLog = async (filters = logFilters) => {
+        setLogLoading(true);
+        try {
+            const logs = await window.api.activityLog.getAll(filters);
+            setActivityLogs(logs || []);
+        } catch (e) { console.error(e); }
+        setLogLoading(false);
+    };
+
+
 
     const loadData = async () => {
         try {
@@ -463,6 +484,7 @@ export default function Settings() {
                     </Card>
                     <Card title={t('sales_options') || 'Sales Options'} icon={Ico}>
                         <TRow label={t('allow_negative_stock') || 'Allow Negative Stock'} desc={t('desc_negative_stock') || 'Allows completing sales even when stock is depleted'} value={gen.allow_negative_stock} onChange={v => setGen(f => ({ ...f, allow_negative_stock: v }))} />
+                        <TRow label={t('enable_product_color') || 'Enable Product Color Field'} desc={t('desc_product_color') || 'Add color field for paint products (Drum, Gallon, Liter)'} value={gen.enable_product_color} onChange={v => setGen(f => ({ ...f, enable_product_color: v }))} />
                     </Card>                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving}
                             onClick={async () => {
@@ -889,6 +911,151 @@ export default function Settings() {
                         )}
                     </>}
                 </>}
+
+                {/* ══ 7b. ACTIVITY LOG ════════════════════════════════════════════════ */}
+                {sec === 'activity_log' && isAdmin && (() => {
+                    const actionColors = { create: '#10b981', update: '#f59e0b', delete: '#ef4444', login: '#3b82f6' };
+                    const actionLabels = { create: t('log_action_create') || 'إنشاء', update: t('log_action_update') || 'تعديل', delete: t('log_action_delete') || 'حذف', login: t('log_action_login') || 'دخول' };
+                    const moduleLabels = {
+                        customers: t('log_module_customers') || 'العملاء',
+                        suppliers: t('log_module_suppliers') || 'الموردون',
+                        products: t('log_module_products') || 'المنتجات',
+                        sales_invoices: t('log_module_sales_invoices') || 'فواتير المبيعات',
+                        purchase_invoices: t('log_module_purchase_invoices') || 'فواتير المشتريات',
+                        vouchers: t('log_module_vouchers') || 'السندات',
+                        journal_entries: t('log_module_journal_entries') || 'القيود',
+                        employees: t('log_module_employees') || 'الموظفون',
+                        salaries: t('log_module_salaries') || 'الرواتب',
+                        users: t('log_module_users') || 'المستخدمون',
+                        accounts: t('log_module_accounts') || 'الحسابات',
+                        coupons: t('log_module_coupons') || 'الكوبونات',
+                        offers: t('log_module_offers') || 'العروض',
+                        leaves: t('log_module_leaves') || 'الإجازات',
+                        deductions: t('log_module_deductions') || 'الاستقطاعات',
+                        rent: t('log_module_rent') || 'الإيجار',
+                    };
+                    const allModules = [...new Set(Object.keys(moduleLabels))];
+
+                    return (
+                        <>
+                            {/* Header + Filters */}
+                            <Card title={t('activity_log_title') || 'سجل نشاط المستخدمين'} icon={FileText} action={
+                                <button
+                                    onClick={() => loadActivityLog(logFilters)}
+                                    style={{ ...btnStyle, background: 'var(--primary)', color: '#fff', padding: '7px 14px', gap: 6 }}
+                                >
+                                    <RefreshCw size={13} /> {t('log_refresh') || 'تحديث'}
+                                </button>
+                            }>
+                                {/* Filter Row */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: 10, marginBottom: 16 }}>
+                                    <input
+                                        placeholder={t('log_filter_user') || 'فلترة بالمستخدم...'}
+                                        value={logFilters.user_name}
+                                        onChange={e => setLogFilters(f => ({ ...f, user_name: e.target.value }))}
+                                        style={{ ...inp, margin: 0 }}
+                                    />
+                                    <select
+                                        value={logFilters.module}
+                                        onChange={e => setLogFilters(f => ({ ...f, module: e.target.value }))}
+                                        style={{ ...inp, margin: 0 }}
+                                    >
+                                        <option value="">{t('log_all_modules') || 'جميع الوحدات'}</option>
+                                        {allModules.map(m => <option key={m} value={m}>{moduleLabels[m]}</option>)}
+                                    </select>
+                                    <select
+                                        value={logFilters.action}
+                                        onChange={e => setLogFilters(f => ({ ...f, action: e.target.value }))}
+                                        style={{ ...inp, margin: 0 }}
+                                    >
+                                        <option value="">{t('log_all_actions') || 'جميع الأنواع'}</option>
+                                        {Object.entries(actionLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                    </select>
+                                    <input type="date" value={logFilters.startDate} onChange={e => setLogFilters(f => ({ ...f, startDate: e.target.value }))} style={{ ...inp, margin: 0 }} />
+                                    <input type="date" value={logFilters.endDate} onChange={e => setLogFilters(f => ({ ...f, endDate: e.target.value }))} style={{ ...inp, margin: 0 }} />
+                                    <button
+                                        onClick={() => {
+                                            const newF = { module: '', action: '', user_name: '', startDate: '', endDate: '' };
+                                            setLogFilters(newF);
+                                            loadActivityLog(newF);
+                                        }}
+                                        style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </div>
+
+                                {/* Apply button */}
+                                <div style={{ marginBottom: 14 }}>
+                                    <button
+                                        onClick={() => loadActivityLog(logFilters)}
+                                        style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                                    >
+                                        <Eye size={14} /> {t('filter') || 'تصفية'}
+                                    </button>
+                                </div>
+
+                                {/* Table */}
+                                {logLoading ? (
+                                    <div style={{ textAlign: 'center', padding: 30 }}><div className="spinner" /></div>
+                                ) : activityLogs.length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: '.875rem' }}>
+                                        {t('log_no_logs') || 'لا توجد سجلات بعد'}
+                                    </div>
+                                ) : (
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.83rem' }}>
+                                            <thead>
+                                                <tr style={{ background: 'var(--bg-secondary)' }}>
+                                                    <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{t('date') || 'التاريخ'}</th>
+                                                    <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>{t('user') || 'المستخدم'}</th>
+                                                    <th style={{ padding: '9px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>{t('log_filter_action') || 'النوع'}</th>
+                                                    <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>{t('log_filter_module') || 'الوحدة'}</th>
+                                                    <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>{t('log_entity_ref') || 'المرجع'}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {activityLogs.map((log, i) => {
+                                                    const color = actionColors[log.action] || '#6b7280';
+                                                    const label = actionLabels[log.action] || log.action;
+                                                    const modLabel = moduleLabels[log.module] || log.module;
+                                                    const dt = new Date(log.created_at);
+                                                    const dateStr = isNaN(dt) ? log.created_at : dt.toLocaleDateString('ar', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                                                    const timeStr = isNaN(dt) ? '' : dt.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
+                                                    return (
+                                                        <tr key={log.id} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
+                                                            <td style={{ padding: '9px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                                                <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{dateStr}</div>
+                                                                <div style={{ fontSize: '.75rem' }}>{timeStr}</div>
+                                                            </td>
+                                                            <td style={{ padding: '9px 12px' }}>
+                                                                <div style={{ fontWeight: 600 }}>{log.user_name}</div>
+                                                                {log.user_id && <div style={{ fontSize: '.72rem', color: 'var(--text-muted)' }}>ID: {log.user_id}</div>}
+                                                            </td>
+                                                            <td style={{ padding: '9px 12px', textAlign: 'center' }}>
+                                                                <span style={{
+                                                                    display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontWeight: 700, fontSize: '.75rem',
+                                                                    background: color + '18', color
+                                                                }}>{label}</span>
+                                                            </td>
+                                                            <td style={{ padding: '9px 12px', color: 'var(--text-secondary)', fontWeight: 500 }}>{modLabel}</td>
+                                                            <td style={{ padding: '9px 12px', color: 'var(--text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.entity_ref}>
+                                                                {log.entity_ref || '—'}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                        <div style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '.78rem', borderTop: '1px solid var(--border)' }}>
+                                            {activityLogs.length} {t('records') || 'سجل'}
+                                        </div>
+                                    </div>
+                                )}
+                            </Card>
+                        </>
+                    );
+                })()}
 
                 {/* ══ 8. DATABASE ════════════════════════════════════════════════════ */}
                 {sec === 'database' && (isAdmin || user?.permissions?.database?.can_view) && <>

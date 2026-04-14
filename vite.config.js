@@ -7,7 +7,21 @@ export default defineConfig({
   base: './',
   build: {
     outDir: 'dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    minify: 'esbuild',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom'],
+          lucide: ['lucide-react'],
+          toast: ['react-hot-toast'],
+          recharts: ['recharts']
+        }
+      }
+    },
+    chunkSizeWarningLimit: 500,
+    sourcemap: false,
+    target: 'es2020'
   },
   resolve: {
     alias: {
@@ -16,6 +30,10 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    strictPort: true
+    strictPort: true,
+    hmr: true
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'lucide-react', 'react-hot-toast', 'recharts']
   }
 });

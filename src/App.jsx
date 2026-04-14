@@ -1,9 +1,4 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
-import {
-    Home, Users, Truck, ShoppingCart, ShoppingBag, FileText,
-    CreditCard, BookOpen, BarChart3, Settings, LogOut, Menu,
-    ChevronLeft, Search, Moon, Sun, Building2
-} from 'lucide-react';
+import React, { useState, useEffect, createContext, useContext, lazy, Suspense, useCallback, useMemo } from 'react';
 import translations from './translations';
 import { Toaster } from 'react-hot-toast';
 
@@ -11,28 +6,43 @@ import { Toaster } from 'react-hot-toast';
 const AuthContext = createContext(null);
 const useAuth = () => useContext(AuthContext);
 
-// Components
+// Helper function to check if a unit is a color unit (Paint container)
+export const isColorUnit = (unit) => {
+    if (!unit) return false;
+    const normalizedUnit = String(unit).toLowerCase().trim();
+    return ['drum', 'gallon', 'liter', 'drumlit', 'لتر', 'جالون', 'درام'].some(term => normalizedUnit.includes(term));
+};
+
+// Lazy load components
 import Layout from './components/Layout';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Customers from './pages/Customers';
-import Suppliers from './pages/Suppliers';
-import Products from './pages/Products';
-import ChartOfAccounts from './pages/ChartOfAccounts';
-import SalesInvoices from './pages/SalesInvoices';
-import PurchaseInvoices from './pages/PurchaseInvoices';
-import Vouchers from './pages/Vouchers';
-import JournalEntries from './pages/JournalEntries';
-import Reports from './pages/Reports';
-import SettingsPage from './pages/Settings';
-import CashBank from './pages/CashBank';
-import HR from './pages/HR';
-import POS from './pages/POS';
 import SetupWizard from './pages/SetupWizard';
-import Installments from './pages/Installments';
-import OffersAndCoupons from './pages/OffersAndCoupons';
 import ShortcutsHelpPanel from './components/ShortcutsHelpPanel';
 import { useShortcuts } from './hooks/useShortcuts';
+
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Customers = lazy(() => import('./pages/Customers'));
+const Suppliers = lazy(() => import('./pages/Suppliers'));
+const Products = lazy(() => import('./pages/Products'));
+const ChartOfAccounts = lazy(() => import('./pages/ChartOfAccounts'));
+const SalesInvoices = lazy(() => import('./pages/SalesInvoices'));
+const PurchaseInvoices = lazy(() => import('./pages/PurchaseInvoices'));
+const Vouchers = lazy(() => import('./pages/Vouchers'));
+const JournalEntries = lazy(() => import('./pages/JournalEntries'));
+const Reports = lazy(() => import('./pages/Reports'));
+const SettingsPage = lazy(() => import('./pages/Settings'));
+const CashBank = lazy(() => import('./pages/CashBank'));
+const HR = lazy(() => import('./pages/HR'));
+const POS = lazy(() => import('./pages/POS'));
+const Installments = lazy(() => import('./pages/Installments'));
+const OffersAndCoupons = lazy(() => import('./pages/OffersAndCoupons'));
+const Expenses = lazy(() => import('./pages/Expenses'));
+
+const LoadingScreen = () => (
+    <div className="loading" style={{ height: '100vh' }}>
+        <div className="spinner"></div>
+    </div>
+);
 
 export { AuthContext, useAuth };
 
@@ -45,10 +55,10 @@ function App() {
     const [isFirstRun, setIsFirstRun] = useState(false);
     const [showShortcutsPanel, setShowShortcutsPanel] = useState(false);
 
-    // Translation function
-    const t = (key) => {
+    // Memoize translation function
+    const t = useCallback((key) => {
         return translations[language]?.[key] || translations['ar']?.[key] || key;
-    };
+    }, [language]);
 
     useEffect(() => {
         const initApp = async () => {
@@ -59,18 +69,15 @@ function App() {
                 console.error("Error checking first run:", e);
             }
 
-            // Check for saved session
             const savedUser = localStorage.getItem('accapp_user');
             if (savedUser) {
                 setUser(JSON.parse(savedUser));
             }
 
-            // Check theme preference
             const savedTheme = localStorage.getItem('accapp_theme') || 'light';
             setTheme(savedTheme);
             document.documentElement.setAttribute('data-theme', savedTheme);
 
-            // Load language from settings
             try {
                 const settingsData = await window.api.settings.getAll();
                 const lang = settingsData?.general?.language || 'ar';
@@ -86,7 +93,6 @@ function App() {
 
         initApp();
 
-        // Listen for settings update to change language dynamically
         const handleSettingsUpdate = () => {
             window.api.settings.getAll().then(data => {
                 const lang = data?.general?.language || 'ar';
@@ -100,13 +106,12 @@ function App() {
         };
     }, []);
 
-    // Update dir/lang when language changes
     useEffect(() => {
         document.documentElement.setAttribute('dir', language === 'ar' ? 'rtl' : 'ltr');
         document.documentElement.setAttribute('lang', language);
     }, [language]);
 
-    const login = async (username, password) => {
+    const login = useCallback(async (username, password) => {
         try {
             const result = await window.api.users.login(username, password);
             if (result.success) {
@@ -118,25 +123,56 @@ function App() {
         } catch (error) {
             return { success: false, message: t('connectionError') };
         }
-    };
+    }, [t]);
 
-    const logout = () => {
+    const logout = useCallback(() => {
         setUser(null);
         localStorage.removeItem('accapp_user');
         setCurrentPage('dashboard');
-    };
+    }, []);
 
-    const updateUser = (newUserData) => {
+    const updateUser = useCallback((newUserData) => {
         setUser(newUserData);
         localStorage.setItem('accapp_user', JSON.stringify(newUserData));
-    };
+    }, []);
 
-    const toggleTheme = () => {
+    const toggleTheme = useCallback(() => {
         const newTheme = theme === 'light' ? 'dark' : 'light';
         setTheme(newTheme);
         localStorage.setItem('accapp_theme', newTheme);
         document.documentElement.setAttribute('data-theme', newTheme);
+    }, [theme]);
+
+    // Memoize renderPage function - BEFORE any conditionals
+    const pageMap = {
+        'dashboard': Dashboard,
+        'customers': Customers,
+        'suppliers': Suppliers,
+        'products': Products,
+        'accounts': ChartOfAccounts,
+        'sales': SalesInvoices,
+        'purchases': PurchaseInvoices,
+        'vouchers': Vouchers,
+        'journal': JournalEntries,
+        'reports': Reports,
+        'settings': SettingsPage,
+        'cashbank': CashBank,
+        'hr': HR,
+        'expenses': Expenses,
+        'pos': POS,
+        'installments': Installments,
+        'offers': OffersAndCoupons
     };
+
+    const renderPage = useCallback(() => {
+        const Page = pageMap[currentPage] || Dashboard;
+        return <Suspense fallback={<LoadingScreen />}><Page /></Suspense>;
+    }, [currentPage]);
+
+    // Create contextValue BEFORE any conditionals - MUST be called every render
+    const contextValue = useMemo(() => ({
+        user, login, logout, updateUser, theme, toggleTheme, t, language, setLanguage
+    }), [user, login, logout, updateUser, theme, toggleTheme, t, language, setLanguage]);
 
     useShortcuts({
         Help: () => {
@@ -146,34 +182,18 @@ function App() {
         GlobalNav: (key) => {
             if (!user) return;
             const navMap = {
-                '1': 'dashboard',
-                '2': 'sales',
-                '3': 'purchases',
-                '4': 'vouchers',
-                '5': 'reports',
-                '6': 'cashbank',
-                '7': 'hr',
-                '8': 'pos',
-                '9': 'settings'
+                '1': 'dashboard', '2': 'sales', '3': 'purchases', '4': 'vouchers',
+                '5': 'reports', '6': 'cashbank', '7': 'hr', '8': 'pos', '9': 'settings'
             };
             if (navMap[key]) {
                 const target = navMap[key];
-                // Check if user has permission for this section
                 const isAdmin = user?.role === 'admin';
                 const perms = user?.permissions || {};
-                
                 const moduleMap = {
-                    'dashboard': 'dashboard',
-                    'sales': 'sales_invoices',
-                    'purchases': 'purchase_invoices',
-                    'vouchers': 'receipt_vouchers',
-                    'reports': 'reports',
-                    'cashbank': 'cash_bank',
-                    'hr': 'hr',
-                    'pos': 'pos',
-                    'settings': 'settings'
+                    'dashboard': 'dashboard', 'sales': 'sales_invoices', 'purchases': 'purchase_invoices',
+                    'vouchers': 'receipt_vouchers', 'reports': 'reports', 'cashbank': 'cash_bank',
+                    'hr': 'hr', 'pos': 'pos', 'settings': 'settings'
                 };
-                
                 const mod = moduleMap[target];
                 if (isAdmin || !mod || perms[mod]?.can_view) {
                     setCurrentPage(target);
@@ -183,11 +203,7 @@ function App() {
     });
 
     if (loading) {
-        return (
-            <div className="loading" style={{ height: '100vh' }}>
-                <div className="spinner"></div>
-            </div>
-        );
+        return <LoadingScreen />;
     }
 
     if (isFirstRun) {
@@ -210,37 +226,17 @@ function App() {
     }
 
     if (!user) {
+        const loginContextValue = { user: null, login, logout, updateUser: null, t, language, setLanguage };
         return (
-            <AuthContext.Provider value={{ user, login, logout, updateUser, t, language, setLanguage }}>
+            <AuthContext.Provider value={loginContextValue}>
                 <Toaster position="top-center" reverseOrder={false} />
                 <Login onLogin={login} />
             </AuthContext.Provider>
         );
     }
 
-    const renderPage = () => {
-        switch (currentPage) {
-            case 'dashboard': return <Dashboard />;
-            case 'customers': return <Customers />;
-            case 'suppliers': return <Suppliers />;
-            case 'products': return <Products />;
-            case 'accounts': return <ChartOfAccounts />;
-            case 'sales': return <SalesInvoices />;
-            case 'purchases': return <PurchaseInvoices />;
-            case 'vouchers': return <Vouchers />;
-            case 'journal': return <JournalEntries />;
-            case 'reports': return <Reports />;
-            case 'settings': return <SettingsPage />;
-            case 'cashbank': return <CashBank />;
-            case 'hr': return <HR />;
-            case 'pos': return <POS />;
-            case 'offers': return <OffersAndCoupons />;
-            default: return <Dashboard />;
-        }
-    };
-
     return (
-        <AuthContext.Provider value={{ user, login, logout, updateUser, theme, toggleTheme, t, language, setLanguage }}>
+        <AuthContext.Provider value={contextValue}>
             <Toaster position="top-center" reverseOrder={false} />
             <Layout currentPage={currentPage} setCurrentPage={setCurrentPage} onHelpClick={() => setShowShortcutsPanel(true)}>
                 {renderPage()}

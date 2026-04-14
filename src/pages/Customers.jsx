@@ -127,7 +127,7 @@ function Customers() {
             (statusFilter === 'active' && c.is_active) ||
             (statusFilter === 'inactive' && !c.is_active);
         return matchesSearch && matchesStatus;
-    }).sort((a, b) => b.id - a.id);
+    }).sort((a, b) => (a.code || '').localeCompare((b.code || ''), undefined, {numeric: true, sensitivity: 'base'}));
 
     const formatCurrency = (amount) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (t('currency_kd') || 'KD');
 

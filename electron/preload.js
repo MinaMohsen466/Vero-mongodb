@@ -49,7 +49,8 @@ contextBridge.exposeInMainWorld('api', {
         getAll: () => ipcRenderer.invoke('products:getAll'),
         create: (product) => ipcRenderer.invoke('products:create', product),
         update: (product) => ipcRenderer.invoke('products:update', product),
-        delete: (id) => ipcRenderer.invoke('products:delete', id)
+        delete: (id) => ipcRenderer.invoke('products:delete', id),
+        getMovements: (id, startDate, endDate) => ipcRenderer.invoke('products:getMovements', { id, startDate, endDate })
     },
 
     // Invoices
@@ -153,12 +154,12 @@ contextBridge.exposeInMainWorld('api', {
         delete: (id) => ipcRenderer.invoke('deductions:delete', id)
     },
 
-    // HR: Rent
-    rent: {
-        getAll: () => ipcRenderer.invoke('rent:getAll'),
-        pay: (payment) => ipcRenderer.invoke('rent:pay', payment),
-        delete: (id) => ipcRenderer.invoke('rent:delete', id),
-        getTotal: (startDate, endDate) => ipcRenderer.invoke('rent:getTotal', { startDate, endDate })
+    // Expenses
+    expenses: {
+        getAll: () => ipcRenderer.invoke('expenses:getAll'),
+        create: (payment) => ipcRenderer.invoke('expenses:create', payment),
+        delete: (id) => ipcRenderer.invoke('expenses:delete', id),
+        getTotal: (startDate, endDate, category) => ipcRenderer.invoke('expenses:getTotal', { startDate, endDate, category })
     },
 
     // Dialog
@@ -196,5 +197,11 @@ contextBridge.exposeInMainWorld('api', {
         readAsBase64: (filePath) => ipcRenderer.invoke('file:readAsBase64', filePath),
         copyLogo: (srcPath) => ipcRenderer.invoke('file:copyLogo', srcPath),
         saveText: (options) => ipcRenderer.invoke('file:saveText', options)
+    },
+
+    // Activity Log
+    activityLog: {
+        getAll: (filters) => ipcRenderer.invoke('activityLog:getAll', filters)
     }
 });
+

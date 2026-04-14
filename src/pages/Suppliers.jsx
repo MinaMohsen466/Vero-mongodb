@@ -126,7 +126,7 @@ function Suppliers() {
             (statusFilter === 'active' && s.is_active) ||
             (statusFilter === 'inactive' && !s.is_active);
         return matchesSearch && matchesStatus;
-    }).sort((a, b) => b.id - a.id);
+    }).sort((a, b) => (a.code || '').localeCompare((b.code || ''), undefined, {numeric: true, sensitivity: 'base'}));
 
     const formatCurrency = (amount) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (t('currency_kd') || 'KD');
 

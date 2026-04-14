@@ -3,7 +3,7 @@ import { Plus, Eye, Trash2, Search, ShoppingBag, Printer, X, Edit, Download } fr
 import Modal from '../components/Modal';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
 import SearchableSelect from '../components/SearchableSelect';
-import { useAuth } from '../App';
+import { useAuth, isColorUnit } from '../App';
 import { toast } from 'react-hot-toast';
 import { useShortcuts } from '../hooks/useShortcuts';
 
@@ -32,7 +32,7 @@ function PurchaseInvoices() {
     const emptyForm = () => ({
         supplier_id: '', date: new Date().toISOString().split('T')[0], due_date: '', notes: '',
         status: 'paid', payment_method: 'cash', payment_account_id: '',
-        items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0 }]
+        items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }]
     });
 
     const [formData, setFormData] = useState(emptyForm());
@@ -93,6 +93,7 @@ function PurchaseInvoices() {
             product_id: productId,
             description: product?.name || '',
             unit_price: product?.purchase_price || 0,
+            unit: product?.unit || '',
             total: calculateItemTotal({ ...newItems[index], unit_price: product?.purchase_price || 0 })
         };
         setFormData({ ...formData, items: newItems });
@@ -105,7 +106,7 @@ function PurchaseInvoices() {
         setFormData({ ...formData, items: newItems });
     };
 
-    const addItem = () => setFormData({ ...formData, items: [...formData.items, { product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0 }] });
+    const addItem = () => setFormData({ ...formData, items: [...formData.items, { product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }] });
     const removeItem = (index) => formData.items.length > 1 && setFormData({ ...formData, items: formData.items.filter((_, i) => i !== index) });
 
     const handleSubmit = async (e) => {
@@ -141,7 +142,9 @@ function PurchaseInvoices() {
                     unit_price: parseFloat(item.unit_price) || 0,
                     discount: parseFloat(item.discount) || 0,
                     tax: 0,
-                    total: parseFloat(item.total) || 0
+                    total: parseFloat(item.total) || 0,
+                    color: item.color || null,
+                    unit: item.unit || null
                 }))
             };
 
@@ -209,12 +212,14 @@ function PurchaseInvoices() {
                     quantity: Number(item.quantity) || 1,
                     unit_price: Number(item.unit_price) || 0,
                     discount: Number(item.discount) || 0,
-                    total: Number(item.total) || 0
+                    total: Number(item.total) || 0,
+                    color: item.color || '',
+                    unit: item.unit || ''
                 }));
                 console.log('[handleEdit] Mapped items:', mappedItems);
             } else {
                 console.log('[handleEdit] No items found, using empty row');
-                mappedItems = [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0 }];
+                mappedItems = [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }];
             }
 
             // First reset everything
@@ -466,9 +471,12 @@ function PurchaseInvoices() {
                         <div className="flex justify-between items-center mb-2"><h4>{t('inv_product')}</h4></div>
                         <div className="table-container">
                             <table>
-                                <thead><tr><th style={{ width: '200px' }}>{t('inv_product')}</th><th>{t('description')}</th><th style={{ width: '120px' }}>{t('inv_quantity')}</th><th style={{ width: '100px' }}>{t('inv_unitPrice')}</th><th style={{ width: '100px' }}>{t('inv_itemTotal')}</th><th style={{ width: '50px' }}></th></tr></thead>
+                                <thead><tr><th style={{ width: '200px' }}>{t('inv_product')}</th><th>{t('description')}</th><th style={{ width: '120px' }}>{t('inv_quantity')}</th><th style={{ width: '100px' }}>{t('inv_unitPrice')}</th>{settings?.general?.enable_product_color === 'yes' && <th style={{ width: '100px' }}>{t('color') || 'Color'}</th>}<th style={{ width: '100px' }}>{t('inv_itemTotal')}</th><th style={{ width: '50px' }}></th></tr></thead>
                                 <tbody>
-                                    {formData.items.map((item, index) => (
+                                    {formData.items.map((item, index) => {
+                                        const product = products.find(p => p.id === (item.product_id ? parseInt(item.product_id) : null));
+                                        const showColorField = settings?.general?.enable_product_color === 'yes' && isColorUnit(product?.unit);
+                                        return (
                                         <tr key={index}>
                                             <td style={{ minWidth: '200px' }}>
                                                 <SearchableSelect
@@ -482,10 +490,12 @@ function PurchaseInvoices() {
                                             <td><input type="text" className="form-input" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} style={{ margin: 0 }} /></td>
                                             <td><input type="number" className="form-input" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} min="1" step="1" style={{ margin: 0 }} /></td>
                                             <td><input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.25" style={{ margin: 0 }} /></td>
+                                            {showColorField && <td><input type="text" className="form-input" placeholder={t('color') || 'Color'} value={item.color || ''} onChange={(e) => handleItemChange(index, 'color', e.target.value)} style={{ margin: 0 }} /></td>}
                                             <td className="font-bold">{formatCurrency(calculateItemTotal(item))}</td>
                                             <td><button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => removeItem(index)}><X size={16} /></button></td>
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

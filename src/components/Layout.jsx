@@ -5,7 +5,7 @@ import UserProfilePanel from './UserProfilePanel';
 import {
     Home, Users, Truck, ShoppingCart, ShoppingBag, FileText,
     CreditCard, BookOpen, BarChart3, Settings, LogOut,
-    Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight, UserCheck, Menu, Monitor, Ticket, Tag
+    Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight, UserCheck, Menu, Monitor, Ticket, Tag, TrendingDown
 } from 'lucide-react';
 
 function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
@@ -39,6 +39,7 @@ function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
         { id: 'journal', labelKey: 'menu_journal', icon: BookOpen, permModule: 'journal_entries' },
         { type: 'section', labelKey: 'menu_section_other' },
         { id: 'hr', labelKey: 'menu_hr', icon: UserCheck, permModule: 'hr' },
+        { id: 'expenses', labelKey: 'menu_expenses', icon: TrendingDown, permModule: 'expenses' },
         { id: 'offers', labelKey: 'offers_and_coupons', icon: Ticket, permModule: 'offers' },
         { id: 'reports', labelKey: 'menu_reports', icon: BarChart3, permModule: 'reports' },
         { id: 'settings', labelKey: 'menu_settings', icon: Settings, permModule: 'settings' },

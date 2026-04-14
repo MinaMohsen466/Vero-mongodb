@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Tag, Ticket, Plus, Edit2, Trash2, Search, Calendar, Tag as TagIcon, Check, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Tag, Ticket, Plus, Edit2, Trash2, Search, Calendar, Check, X } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
@@ -8,21 +8,16 @@ function OffersAndCoupons() {
     const { user, t } = useAuth();
     const [activeTab, setActiveTab] = useState('offers');
     const [loading, setLoading] = useState(true);
-
     const [offers, setOffers] = useState([]);
     const [coupons, setCoupons] = useState([]);
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
-
     const [showModal, setShowModal] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
-
     const [formData, setFormData] = useState({});
 
-    useEffect(() => { loadData(); }, []);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
         try {
             const [_offers, _coupons, _products] = await Promise.all([
@@ -40,9 +35,11 @@ function OffersAndCoupons() {
             toast.error(t('errorOccurred') || 'An error occurred');
         }
         setLoading(false);
-    };
+    }, [t]);
 
-    const openModal = (item = null) => {
+    useEffect(() => { loadData(); }, [loadData]);
+
+    const openModal = useCallback((item = null) => {
         setEditingItem(item);
         if (activeTab === 'offers') {
             setFormData(item ? { ...item } : {
@@ -56,11 +53,14 @@ function OffersAndCoupons() {
             });
         }
         setShowModal(true);
-    };
+    }, [activeTab]);
 
-    const closeModal = () => { setShowModal(false); setEditingItem(null); };
+    const closeModal = useCallback(() => { 
+        setShowModal(false); 
+        setEditingItem(null); 
+    }, []);
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = useCallback(async (e) => {
         e.preventDefault();
         try {
             const data = { ...formData };
@@ -79,48 +79,51 @@ function OffersAndCoupons() {
                 else await window.api.coupons.create(data);
             }
             toast.success(t('savedSuccess') || 'Saved successfully');
-            loadData();
+            await loadData();
             closeModal();
         } catch (e) {
             console.error(e);
             toast.error(e.message || t('errorOccurred'));
         }
-    };
+    }, [formData, activeTab, editingItem, t, loadData, closeModal]);
 
-    const handleDelete = async (id) => {
+    const handleDelete = useCallback(async (id) => {
         if (!confirm(t('prod_deleteConfirm') || 'Are you sure?')) return;
         try {
             if (activeTab === 'offers') await window.api.offers.delete(id);
             else await window.api.coupons.delete(id);
             toast.success(t('deletedSuccess') || 'Deleted successfully');
-            loadData();
+            await loadData();
         } catch (e) {
             toast.error(t('errorOccurred') || 'Error occurred');
         }
-    };
+    }, [activeTab, t, loadData]);
 
-    const toggleStatus = async (item) => {
+    const toggleStatus = useCallback(async (item) => {
         try {
             const data = { ...item, is_active: item.is_active ? 0 : 1 };
             if (activeTab === 'offers') await window.api.offers.update(data);
             else await window.api.coupons.update(data);
-            loadData();
+            await loadData();
         } catch (e) {
             toast.error(t('errorOccurred'));
         }
-    };
+    }, [activeTab, t, loadData]);
 
-    const filteredList = (activeTab === 'offers' ? offers : coupons).filter(item => {
-        if (!searchQuery) return true;
-        const q = searchQuery.toLowerCase();
-        if (activeTab === 'offers') return item.title?.toLowerCase().includes(q);
-        return item.code?.toLowerCase().includes(q);
-    });
-
-    const getProductName = (id) => {
+    const getProductName = useCallback((id) => {
         const p = products.find(prod => prod.id.toString() === id?.toString());
         return p ? p.name : id;
-    };
+    }, [products]);
+
+    const filteredList = useMemo(() => {
+        const list = activeTab === 'offers' ? offers : coupons;
+        if (!searchQuery) return list;
+        const q = searchQuery.toLowerCase();
+        return list.filter(item => {
+            if (activeTab === 'offers') return item.title?.toLowerCase().includes(q);
+            return item.code?.toLowerCase().includes(q);
+        });
+    }, [activeTab, offers, coupons, searchQuery]);
 
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
 
@@ -140,7 +143,8 @@ function OffersAndCoupons() {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             style={{ paddingRight: '40px', width: '250px' }}
-                        /><Search size={18} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                        />
+                        <Search size={18} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     </div>
                 </div>
                 {!cannotCreate && (
@@ -151,10 +155,18 @@ function OffersAndCoupons() {
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-                <button onClick={() => setActiveTab('offers')} style={{ flex: 1, padding: 14, borderRadius: 12, border: 'none', background: activeTab === 'offers' ? 'var(--primary)' : 'var(--surface)', color: activeTab === 'offers' ? '#fff' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', fontWeight: 600, transition: 'all .2s' }}>
+                <button 
+                    onClick={() => setActiveTab('offers')} 
+                    className={`tab-btn ${activeTab === 'offers' ? 'active' : ''}`}
+                    style={{ flex: 1, padding: 14, borderRadius: 12, border: 'none', background: activeTab === 'offers' ? 'var(--primary)' : 'var(--surface)', color: activeTab === 'offers' ? '#fff' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', fontWeight: 600, transition: 'all .2s' }}
+                >
                     <Tag size={20} /> {t('offers') || 'Offers'}
                 </button>
-                <button onClick={() => setActiveTab('coupons')} style={{ flex: 1, padding: 14, borderRadius: 12, border: 'none', background: activeTab === 'coupons' ? 'var(--primary)' : 'var(--surface)', color: activeTab === 'coupons' ? '#fff' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', fontWeight: 600, transition: 'all .2s' }}>
+                <button 
+                    onClick={() => setActiveTab('coupons')} 
+                    className={`tab-btn ${activeTab === 'coupons' ? 'active' : ''}`}
+                    style={{ flex: 1, padding: 14, borderRadius: 12, border: 'none', background: activeTab === 'coupons' ? 'var(--primary)' : 'var(--surface)', color: activeTab === 'coupons' ? '#fff' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', fontWeight: 600, transition: 'all .2s' }}
+                >
                     <Ticket size={20} /> {t('coupons') || 'Coupons'}
                 </button>
             </div>
@@ -192,42 +204,18 @@ function OffersAndCoupons() {
                                 </thead>
                                 <tbody>
                                     {filteredList.map(item => (
-                                        <tr key={item.id} style={{ opacity: item.is_active ? 1 : 0.6 }}>
-                                            {activeTab === 'offers' ? (
-                                                <>
-                                                    <td className="font-bold">{item.title}</td>
-                                                    <td>
-                                                        {item.offer_type === 'percentage' ? `${item.discount_value}%` :
-                                                            item.offer_type === 'fixed' ? `${item.discount_value} KD` :
-                                                                `${t('bogo_offer')} (${item.buy_qty}+${item.get_qty})`}
-                                                    </td>
-                                                    <td>
-                                                        {item.target_type === 'all' ? (t('target_all') || 'All') :
-                                                            item.target_type === 'category' ? `${t('target_category')} (${item.target_id})` :
-                                                                `${t('target_product')} (${getProductName(item.target_id)})`}
-                                                    </td>
-                                                    <td>{item.valid_to || '—'}</td>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <td className="font-bold" style={{ color: 'var(--primary)', letterSpacing: 1 }}>{item.code}</td>
-                                                    <td>{item.discount_type === 'percentage' ? `${item.discount_value}%` : `${item.discount_value} KD`}</td>
-                                                    <td><span className="badge badge-secondary">{item.current_uses} / {item.max_uses || '∞'}</span></td>
-                                                    <td>{item.valid_to || '—'}</td>
-                                                </>
-                                            )}
-                                            <td>
-                                                <button onClick={() => !cannotEdit && toggleStatus(item)} disabled={cannotEdit} style={{ background: 'none', border: 'none', cursor: cannotEdit ? 'default' : 'pointer' }}>
-                                                    {item.is_active ? <span className="badge badge-success"><Check size={12} /> {t('offer_active') || 'Active'}</span> : <span className="badge badge-error"><X size={12} /> {t('inactive') || 'Inactive'}</span>}
-                                                </button>
-                                            </td>
-                                            <td>
-                                                <div className="table-actions">
-                                                    {!cannotEdit && <button className="btn btn-ghost btn-sm" onClick={() => openModal(item)}><Edit2 size={16} /></button>}
-                                                    {!cannotDelete && <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(item.id)}><Trash2 size={16} /></button>}
-                                                </div>
-                                            </td>
-                                        </tr>
+                                        <TableRow 
+                                            key={item.id}
+                                            item={item}
+                                            activeTab={activeTab}
+                                            t={t}
+                                            cannotEdit={cannotEdit}
+                                            cannotDelete={cannotDelete}
+                                            getProductName={getProductName}
+                                            openModal={openModal}
+                                            handleDelete={handleDelete}
+                                            toggleStatus={toggleStatus}
+                                        />
                                     ))}
                                 </tbody>
                             </table>
@@ -237,116 +225,170 @@ function OffersAndCoupons() {
             </div>
 
             <Modal isOpen={showModal} onClose={closeModal} title={activeTab === 'offers' ? (t('add_offer') || 'Offer Details') : (t('add_coupon') || 'Coupon Details')}>
-                <form id="offer-form" onSubmit={handleSubmit}>
-                    {activeTab === 'offers' ? (
-                        <>
-                            <div className="form-group">
-                                <label className="form-label">{t('offer_title') || 'Title'} *</label>
-                                <input type="text" className="form-input" value={formData.title || ''} onChange={e => setFormData({ ...formData, title: e.target.value })} required />
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">{t('offer_type') || 'Type'}</label>
-                                    <select className="form-select" value={formData.offer_type || 'percentage'} onChange={e => setFormData({ ...formData, offer_type: e.target.value })}>
-                                        <option value="percentage">{t('percentage_discount') || 'Percentage (%)'}</option>
-                                        <option value="fixed">{t('fixed_discount') || 'Fixed Amount'}</option>
-                                        <option value="bogo">{t('bogo_offer') || 'BOGO'}</option>
-                                    </select>
-                                </div>
-                                {formData.offer_type !== 'bogo' ? (
-                                    <div className="form-group">
-                                        <label className="form-label">{t('discount_value') || 'Value'} *</label>
-                                        <input type="number" step="any" min="0" className="form-input" value={formData.discount_value || ''} onChange={e => setFormData({ ...formData, discount_value: e.target.value })} required />
-                                    </div>
-                                ) : (
-                                    <div className="form-group" style={{ display: 'flex', gap: 10 }}>
-                                        <div style={{ flex: 1 }}>
-                                            <label className="form-label">{t('buy_qty') || 'Buy'}</label>
-                                            <input type="number" min="1" className="form-input" value={formData.buy_qty || ''} onChange={e => setFormData({ ...formData, buy_qty: e.target.value })} required />
-                                        </div>
-                                        <div style={{ flex: 1 }}>
-                                            <label className="form-label">{t('get_qty') || 'Get'}</label>
-                                            <input type="number" min="1" className="form-input" value={formData.get_qty || ''} onChange={e => setFormData({ ...formData, get_qty: e.target.value })} required />
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">{t('target_type') || 'Target'}</label>
-                                    <select className="form-select" value={formData.target_type || 'all'} onChange={e => setFormData({ ...formData, target_type: e.target.value })}>
-                                        <option value="all">{t('target_all') || 'All Products'}</option>
-                                        <option value="category">{t('target_category') || 'Specific Category'}</option>
-                                        <option value="product">{t('target_product') || 'Specific Product'}</option>
-                                    </select>
-                                </div>
-                                {formData.target_type === 'category' && (
-                                    <div className="form-group">
-                                        <label className="form-label">{t('target_category') || 'Category'} *</label>
-                                        <select className="form-select" value={formData.target_id || ''} onChange={e => setFormData({ ...formData, target_id: e.target.value })} required>
-                                            <option value="">-- {t('select') || 'Select'} --</option>
-                                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                    </div>
-                                )}
-                                {formData.target_type === 'product' && (
-                                    <div className="form-group">
-                                        <label className="form-label">{t('target_product') || 'Product'} *</label>
-                                        <input list="prods" className="form-input" value={formData.target_id || ''} onChange={e => setFormData({ ...formData, target_id: e.target.value })} required placeholder="ID..." />
-                                        <datalist id="prods">
-                                            {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                        </datalist>
-                                    </div>
-                                )}
-                            </div>
-                        </>
-                    ) : (
-                        <>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">{t('coupon_code') || 'Code'} *</label>
-                                    <input type="text" className="form-input" style={{ textTransform: 'uppercase', letterSpacing: 2, fontWeight: 'bold' }} value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} required />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">{t('max_uses') || 'Max Uses'}</label>
-                                    <input type="number" min="0" className="form-input" placeholder={t('unlimited_uses') || '0 = Unlimited'} value={formData.max_uses || ''} onChange={e => setFormData({ ...formData, max_uses: e.target.value })} />
-                                </div>
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">{t('discount_type') || 'Type'}</label>
-                                    <select className="form-select" value={formData.discount_type || 'fixed'} onChange={e => setFormData({ ...formData, discount_type: e.target.value })}>
-                                        <option value="fixed">{t('fixed_discount') || 'Fixed'}</option>
-                                        <option value="percentage">{t('percentage_discount') || 'Percentage (%)'}</option>
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">{t('discount_value') || 'Value'} *</label>
-                                    <input type="number" step="any" min="0" className="form-input" value={formData.discount_value || ''} onChange={e => setFormData({ ...formData, discount_value: e.target.value })} required />
-                                </div>
-                            </div>
-                        </>
-                    )}
-
-                    <div className="form-row" style={{ marginTop: 10, padding: 15, background: 'var(--bg-secondary)', borderRadius: 10 }}>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label"><Calendar size={14} style={{ display: 'inline', marginRight: 5 }} /> {t('valid_from') || 'Valid From'}</label>
-                            <input type="date" className="form-input" value={formData.valid_from || ''} onChange={e => setFormData({ ...formData, valid_from: e.target.value })} />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label"><Calendar size={14} style={{ display: 'inline', marginRight: 5 }} /> {t('valid_to') || 'Valid To'}</label>
-                            <input type="date" className="form-input" value={formData.valid_to || ''} onChange={e => setFormData({ ...formData, valid_to: e.target.value })} />
-                        </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                        <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>{t('save') || 'Save'}</button>
-                        <button type="button" className="btn btn-secondary" onClick={closeModal} style={{ flex: 1 }}>{t('cancel') || 'Cancel'}</button>
-                    </div>
-                </form>
+                <OfferForm 
+                    activeTab={activeTab}
+                    formData={formData}
+                    setFormData={setFormData}
+                    categories={categories}
+                    products={products}
+                    t={t}
+                    handleSubmit={handleSubmit}
+                    closeModal={closeModal}
+                />
             </Modal>
         </div>
     );
 }
+
+// Sub-component for table row with memo optimization
+const TableRow = React.memo(({ item, activeTab, t, cannotEdit, cannotDelete, getProductName, openModal, handleDelete, toggleStatus }) => (
+    <tr style={{ opacity: item.is_active ? 1 : 0.6 }}>
+        {activeTab === 'offers' ? (
+            <>
+                <td className="font-bold">{item.title}</td>
+                <td>
+                    {item.offer_type === 'percentage' ? `${item.discount_value}%` :
+                        item.offer_type === 'fixed' ? `${item.discount_value} KD` :
+                            `${t('bogo_offer')} (${item.buy_qty}+${item.get_qty})`}
+                </td>
+                <td>
+                    {item.target_type === 'all' ? (t('target_all') || 'All') :
+                        item.target_type === 'category' ? `${t('target_category')} (${item.target_id})` :
+                            `${t('target_product')} (${getProductName(item.target_id)})`}
+                </td>
+                <td>{item.valid_to || '—'}</td>
+            </>
+        ) : (
+            <>
+                <td className="font-bold" style={{ color: 'var(--primary)', letterSpacing: 1 }}>{item.code}</td>
+                <td>{item.discount_type === 'percentage' ? `${item.discount_value}%` : `${item.discount_value} KD`}</td>
+                <td><span className="badge badge-secondary">{item.current_uses} / {item.max_uses || '∞'}</span></td>
+                <td>{item.valid_to || '—'}</td>
+            </>
+        )}
+        <td>
+            <button onClick={() => !cannotEdit && toggleStatus(item)} disabled={cannotEdit} style={{ background: 'none', border: 'none', cursor: cannotEdit ? 'default' : 'pointer' }}>
+                {item.is_active ? <span className="badge badge-success"><Check size={12} /> {t('offer_active') || 'Active'}</span> : <span className="badge badge-error"><X size={12} /> {t('inactive') || 'Inactive'}</span>}
+            </button>
+        </td>
+        <td>
+            <div className="table-actions">
+                {!cannotEdit && <button className="btn btn-ghost btn-sm" onClick={() => openModal(item)}><Edit2 size={16} /></button>}
+                {!cannotDelete && <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(item.id)}><Trash2 size={16} /></button>}
+            </div>
+        </td>
+    </tr>
+));
+
+// Sub-component for offer form with memo optimization
+const OfferForm = React.memo(({ activeTab, formData, setFormData, categories, products, t, handleSubmit, closeModal }) => (
+    <form id="offer-form" onSubmit={handleSubmit}>
+        {activeTab === 'offers' ? (
+            <>
+                <div className="form-group">
+                    <label className="form-label">{t('offer_title') || 'Title'} *</label>
+                    <input type="text" className="form-input" value={formData.title || ''} onChange={e => setFormData({ ...formData, title: e.target.value })} required />
+                </div>
+                <div className="form-row">
+                    <div className="form-group">
+                        <label className="form-label">{t('offer_type') || 'Type'}</label>
+                        <select className="form-select" value={formData.offer_type || 'percentage'} onChange={e => setFormData({ ...formData, offer_type: e.target.value })}>
+                            <option value="percentage">{t('percentage_discount') || 'Percentage (%)'}</option>
+                            <option value="fixed">{t('fixed_discount') || 'Fixed Amount'}</option>
+                            <option value="bogo">{t('bogo_offer') || 'BOGO'}</option>
+                        </select>
+                    </div>
+                    {formData.offer_type !== 'bogo' ? (
+                        <div className="form-group">
+                            <label className="form-label">{t('discount_value') || 'Value'} *</label>
+                            <input type="number" step="any" min="0" className="form-input" value={formData.discount_value || ''} onChange={e => setFormData({ ...formData, discount_value: e.target.value })} required />
+                        </div>
+                    ) : (
+                        <div className="form-group" style={{ display: 'flex', gap: 10 }}>
+                            <div style={{ flex: 1 }}>
+                                <label className="form-label">{t('buy_qty') || 'Buy'}</label>
+                                <input type="number" min="1" className="form-input" value={formData.buy_qty || ''} onChange={e => setFormData({ ...formData, buy_qty: e.target.value })} required />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <label className="form-label">{t('get_qty') || 'Get'}</label>
+                                <input type="number" min="1" className="form-input" value={formData.get_qty || ''} onChange={e => setFormData({ ...formData, get_qty: e.target.value })} required />
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <div className="form-row">
+                    <div className="form-group">
+                        <label className="form-label">{t('target_type') || 'Target'}</label>
+                        <select className="form-select" value={formData.target_type || 'all'} onChange={e => setFormData({ ...formData, target_type: e.target.value })}>
+                            <option value="all">{t('target_all') || 'All Products'}</option>
+                            <option value="category">{t('target_category') || 'Specific Category'}</option>
+                            <option value="product">{t('target_product') || 'Specific Product'}</option>
+                        </select>
+                    </div>
+                    {formData.target_type === 'category' && (
+                        <div className="form-group">
+                            <label className="form-label">{t('target_category') || 'Category'} *</label>
+                            <select className="form-select" value={formData.target_id || ''} onChange={e => setFormData({ ...formData, target_id: e.target.value })} required>
+                                <option value="">-- {t('select') || 'Select'} --</option>
+                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                    )}
+                    {formData.target_type === 'product' && (
+                        <div className="form-group">
+                            <label className="form-label">{t('target_product') || 'Product'} *</label>
+                            <input list="prods" className="form-input" value={formData.target_id || ''} onChange={e => setFormData({ ...formData, target_id: e.target.value })} required placeholder="ID..." />
+                            <datalist id="prods">
+                                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </datalist>
+                        </div>
+                    )}
+                </div>
+            </>
+        ) : (
+            <>
+                <div className="form-row">
+                    <div className="form-group">
+                        <label className="form-label">{t('coupon_code') || 'Code'} *</label>
+                        <input type="text" className="form-input" style={{ textTransform: 'uppercase', letterSpacing: 2, fontWeight: 'bold' }} value={formData.code || ''} onChange={e => setFormData({ ...formData, code: e.target.value })} required />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">{t('max_uses') || 'Max Uses'}</label>
+                        <input type="number" min="0" className="form-input" placeholder={t('unlimited_uses') || '0 = Unlimited'} value={formData.max_uses || ''} onChange={e => setFormData({ ...formData, max_uses: e.target.value })} />
+                    </div>
+                </div>
+                <div className="form-row">
+                    <div className="form-group">
+                        <label className="form-label">{t('discount_type') || 'Type'}</label>
+                        <select className="form-select" value={formData.discount_type || 'fixed'} onChange={e => setFormData({ ...formData, discount_type: e.target.value })}>
+                            <option value="fixed">{t('fixed_discount') || 'Fixed'}</option>
+                            <option value="percentage">{t('percentage_discount') || 'Percentage (%)'}</option>
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">{t('discount_value') || 'Value'} *</label>
+                        <input type="number" step="any" min="0" className="form-input" value={formData.discount_value || ''} onChange={e => setFormData({ ...formData, discount_value: e.target.value })} required />
+                    </div>
+                </div>
+            </>
+        )}
+
+        <div className="form-row" style={{ marginTop: 10, padding: 15, background: 'var(--bg-secondary)', borderRadius: 10 }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label"><Calendar size={14} style={{ display: 'inline', marginRight: 5 }} /> {t('valid_from') || 'Valid From'}</label>
+                <input type="date" className="form-input" value={formData.valid_from || ''} onChange={e => setFormData({ ...formData, valid_from: e.target.value })} />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label"><Calendar size={14} style={{ display: 'inline', marginRight: 5 }} /> {t('valid_to') || 'Valid To'}</label>
+                <input type="date" className="form-input" value={formData.valid_to || ''} onChange={e => setFormData({ ...formData, valid_to: e.target.value })} />
+            </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>{t('save') || 'Save'}</button>
+            <button type="button" className="btn btn-secondary" onClick={closeModal} style={{ flex: 1 }}>{t('cancel') || 'Cancel'}</button>
+        </div>
+    </form>
+));
 
 export default OffersAndCoupons;

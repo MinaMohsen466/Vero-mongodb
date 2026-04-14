@@ -12,7 +12,6 @@ import SearchableSelect from '../components/SearchableSelect';
 const getTabs = (t) => [
     { id: 'employees', label: t('hr_employees') || 'Employees', icon: Users },
     { id: 'salaries', label: t('hr_salaries') || 'Salaries', icon: DollarSign },
-    { id: 'rent', label: t('hr_rent') || 'Rent', icon: Building2 },
     { id: 'leaves', label: t('hr_leaves') || 'Leaves', icon: Calendar },
     { id: 'deductions', label: t('hr_deductions') || 'Deductions', icon: AlertCircle },
 ];
@@ -890,7 +889,7 @@ const DeductionsTab = ({ t }) => {
             <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={t('add_deduction') || 'Add Deduction'}
                 footer={<>
                     <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>{t('cancel') || 'Cancel'} (Esc)</button>
-                    <button type="submit" form="deduction-form" className="btn btn-primary"><SaveIcon size={16} /> t('save_ctrl_s') || 'Save (Ctrl+S)'</button>
+                    <button type="submit" form="deduction-form" className="btn btn-primary"><SaveIcon size={16} /> {t('save_ctrl_s') || 'Save (Ctrl+S)'}</button>
                 </>}>
                 {error && <div className="alert alert-danger" style={{ marginBottom: 16 }}>{error}</div>}
                 <form id="deduction-form" onSubmit={(e) => { e.preventDefault(); save(); }}>
@@ -1107,7 +1106,6 @@ export default function HR() {
     const tabContent = {
         employees: <EmployeesTab t={t} />,
         salaries: <SalariesTab t={t} />,
-        rent: <RentTab t={t} />,
         leaves: <LeavesTab t={t} />,
         deductions: <DeductionsTab t={t} />,
     };
@@ -1117,7 +1115,7 @@ export default function HR() {
             <div className="page-header">
                 <div>
                     <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('hr_management') || 'HR Management'}</h2>
-                    <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem' }}>إدارة الt('employee') || 'Employee'ين والرواتب والإجازات و{t('deductions') || 'Deductions'}</p>
+                    <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem' }}>{t('hr_management_desc') || 'Manage employees, salaries, leaves, and deductions'}</p>
                 </div>
             </div>
 

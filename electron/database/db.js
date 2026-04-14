@@ -103,9 +103,10 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS employee_leaves (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL, leave_type TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, days INTEGER NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', approved_by INTEGER, notes TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
       CREATE TABLE IF NOT EXISTS employee_deductions (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL, month TEXT NOT NULL, amount REAL NOT NULL, reason TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
       CREATE TABLE IF NOT EXISTS salary_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_number TEXT UNIQUE NOT NULL, employee_id INTEGER NOT NULL, month TEXT NOT NULL, base_salary REAL DEFAULT 0, deductions REAL DEFAULT 0, net_salary REAL DEFAULT 0, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, journal_entry_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
-      CREATE TABLE IF NOT EXISTS rent_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_number TEXT UNIQUE NOT NULL, month TEXT NOT NULL, amount REAL NOT NULL, description TEXT, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, journal_entry_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_number TEXT UNIQUE NOT NULL, category TEXT NOT NULL, date TEXT NOT NULL, amount REAL NOT NULL, description TEXT, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, journal_entry_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS coupons (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, discount_type TEXT NOT NULL, discount_value REAL NOT NULL, max_uses INTEGER DEFAULT 0, current_uses INTEGER DEFAULT 0, valid_from TEXT, valid_to TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS offers (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, offer_type TEXT NOT NULL, discount_value REAL DEFAULT 0, target_type TEXT NOT NULL, target_id TEXT, buy_qty INTEGER DEFAULT 0, get_qty INTEGER DEFAULT 0, valid_from TEXT, valid_to TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, user_name TEXT NOT NULL, action TEXT NOT NULL, module TEXT NOT NULL, entity_id INTEGER, entity_ref TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     `);
 
         /// Migration for existing databases - add missing columns
@@ -159,6 +160,26 @@ class AppDatabase {
             }
         } catch (e) { console.log('user_permissions migration:', e.message); }
 
+        // Migration for expenses
+        try {
+            const hasRentTable = this.get("SELECT name FROM sqlite_master WHERE type='table' AND name='rent_payments'");
+            if (hasRentTable) {
+                this.exec("ALTER TABLE rent_payments RENAME TO expenses");
+                this.exec("ALTER TABLE expenses ADD COLUMN category TEXT DEFAULT 'rent'");
+                this.exec("ALTER TABLE expenses ADD COLUMN date TEXT");
+                this.exec("UPDATE expenses SET date = month || '-01' WHERE date IS NULL");
+                console.log('Migrated rent_payments to expenses');
+            } else {
+                // Ensure date column exists if it's already expenses
+                const expCols = this.all("PRAGMA table_info(expenses)");
+                const hasDate = expCols.some(col => col.name === 'date');
+                if (!hasDate) {
+                    this.exec("ALTER TABLE expenses ADD COLUMN date TEXT");
+                    this.exec("UPDATE expenses SET date = month || '-01' WHERE date IS NULL");
+                }
+            }
+        } catch (e) { console.log('Expenses migration:', e.message); }
+
         // HR migrations - fix incompatible employees table
         try {
             const empCols = this.all("PRAGMA table_info(employees)");
@@ -200,7 +221,11 @@ class AppDatabase {
                 ['41', 'إيرادات المبيعات', '4', 'revenue', 'credit'], ['51', 'تكلفة المبيعات', '5', 'expense', 'debit'],
                 ['52', 'مصروفات الرواتب', '5', 'expense', 'debit'],
                 ['521', 'رواتب الموظفين', '52', 'expense', 'debit'],
-                ['53', 'مصروفات الإيجار', '5', 'expense', 'debit']
+                ['53', 'مصروفات الإيجار', '5', 'expense', 'debit'],
+                ['54', 'مصروفات الضيافة', '5', 'expense', 'debit'],
+                ['55', 'مصروفات الكهرباء والماء', '5', 'expense', 'debit'],
+                ['56', 'مصروفات الصيانة', '5', 'expense', 'debit'],
+                ['57', 'مصروفات أخرى', '5', 'expense', 'debit']
             ];
             for (const [code, name, parent, type, nature] of accs) {
                 const parentId = parent ? this.get('SELECT id FROM accounts WHERE code = ?', [parent])?.id : null;
@@ -230,6 +255,20 @@ class AppDatabase {
                 this.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
                     ['53', 'مصروفات الإيجار', expenseParent?.id || null, 'expense', 'debit']);
             }
+            
+            // Ensure other generic expense accounts exist
+            const hospitalityAccount = this.get("SELECT id FROM accounts WHERE code = '54'");
+            if (!hospitalityAccount) {
+                const expenseParent = this.get("SELECT id FROM accounts WHERE code = '5'");
+                this.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
+                    ['54', 'مصروفات الضيافة', expenseParent?.id || null, 'expense', 'debit']);
+                this.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
+                    ['55', 'مصروفات الكهرباء والماء', expenseParent?.id || null, 'expense', 'debit']);
+                this.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
+                    ['56', 'مصروفات الصيانة', expenseParent?.id || null, 'expense', 'debit']);
+                this.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
+                    ['57', 'مصروفات أخرى', expenseParent?.id || null, 'expense', 'debit']);
+            }
         }
 
         // Settings
@@ -248,7 +287,7 @@ class AppDatabase {
         // Default Permissions
         const permCount = this.get('SELECT COUNT(*) as count FROM permissions');
         if (permCount.count === 0) {
-            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'pos', 'database', 'financial_summary'];
+            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'expenses', 'pos', 'database', 'financial_summary'];
             for (const mod of modules) {
                 // Admin: full access to everything
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', mod]);
@@ -258,7 +297,7 @@ class AppDatabase {
                 dashboard: [1, 0, 0, 0], customers: [1, 1, 1, 0], suppliers: [1, 1, 1, 0], products: [1, 1, 1, 0],
                 sales_invoices: [1, 1, 1, 0], purchase_invoices: [1, 1, 1, 0], receipt_vouchers: [1, 1, 1, 0], payment_vouchers: [1, 1, 1, 0],
                 chart_of_accounts: [1, 0, 0, 0], cash_bank: [1, 0, 0, 0], journal_entries: [1, 1, 0, 0], reports: [1, 0, 0, 0],
-                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [1, 1, 1, 0], pos: [1, 1, 1, 0]
+                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [1, 1, 1, 0], expenses: [1, 1, 1, 0], pos: [1, 1, 1, 0]
             };
             for (const [mod, [v, c, e, d]] of Object.entries(accountantPerms)) {
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?)", ['accountant', mod, v, c, e, d]);
@@ -268,7 +307,7 @@ class AppDatabase {
                 dashboard: [1, 0, 0, 0], customers: [0, 0, 0, 0], suppliers: [0, 0, 0, 0], products: [0, 0, 0, 0],
                 sales_invoices: [1, 1, 0, 0], purchase_invoices: [0, 0, 0, 0], receipt_vouchers: [1, 1, 0, 0], payment_vouchers: [0, 0, 0, 0],
                 chart_of_accounts: [0, 0, 0, 0], cash_bank: [0, 0, 0, 0], journal_entries: [0, 0, 0, 0], reports: [0, 0, 0, 0],
-                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [0, 0, 0, 0], pos: [1, 1, 1, 0], database: [0, 0, 0, 0]
+                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [0, 0, 0, 0], expenses: [0, 0, 0, 0], pos: [1, 1, 1, 0], database: [0, 0, 0, 0]
             };
             for (const [mod, [v, c, e, d]] of Object.entries(userPerms)) {
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?)", ['user', mod, v, c, e, d]);
@@ -310,6 +349,16 @@ class AppDatabase {
                     this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'financial_summary']);
                 }
             } catch (e) { console.log('Financial summary permission migration:', e.message); }
+
+            // Migration: add expenses permission for existing users
+            try {
+                const adminExp = this.get("SELECT id FROM permissions WHERE role='admin' AND module='expenses'");
+                if (!adminExp) {
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', 'expenses']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 0)", ['accountant', 'expenses']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'expenses']);
+                }
+            } catch (e) { console.log('Expenses permission migration:', e.message); }
         }
     }
 
@@ -329,8 +378,9 @@ class AppDatabase {
         this.salaries = new SalaryRepo(this);
         this.leaves = new LeavesRepo(this);
         this.deductions = new DeductionsRepo(this);
-        this.rent = new RentRepo(this);
+        this.expenses = new ExpensesRepo(this);
         this.system = new SystemRepo(this);
+        this.activityLog = new ActivityLogRepo(this);
     }
 
     backup() {
@@ -477,6 +527,38 @@ class ProductsRepo {
     create(p) { try { const count = this.db.get('SELECT COUNT(*) as count FROM products').count; const code = p.code || `P${String(count + 1).padStart(4, '0')}`; const r = this.db.run("INSERT INTO products (code, name, description, unit, category, purchase_price, sale_price, stock_quantity, min_stock, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [code, p.name, p.description, p.unit, p.category, p.purchase_price || 0, p.sale_price || 0, p.stock_quantity || 0, p.min_stock || 0, p.image || null]); return { success: true, id: r.lastInsertRowid }; } catch (e) { return { success: false, error: e.message }; } }
     update(p) { try { this.db.run("UPDATE products SET name=?, description=?, unit=?, category=?, purchase_price=?, sale_price=?, stock_quantity=?, min_stock=?, image=?, is_active=? WHERE id=?", [p.name, p.description, p.unit, p.category, p.purchase_price, p.sale_price, p.stock_quantity, p.min_stock, p.image || null, p.is_active ? 1 : 0, p.id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
     delete(id) { try { this.db.run('DELETE FROM products WHERE id = ?', [id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+
+    getMovements(productId, startDate, endDate) {
+        try {
+            let sql = `
+                SELECT
+                    ii.id,
+                    i.invoice_number,
+                    i.type,
+                    i.date,
+                    ii.quantity,
+                    ii.unit_price,
+                    ii.discount,
+                    ii.total,
+                    i.status,
+                    c.name as customer_name,
+                    s.name as supplier_name
+                FROM invoice_items ii
+                JOIN invoices i ON ii.invoice_id = i.id
+                LEFT JOIN customers c ON i.customer_id = c.id
+                LEFT JOIN suppliers s ON i.supplier_id = s.id
+                WHERE ii.product_id = ?
+            `;
+            const params = [productId];
+            if (startDate) { sql += ` AND i.date >= ?`; params.push(startDate); }
+            if (endDate)   { sql += ` AND i.date <= ?`; params.push(endDate); }
+            sql += ` ORDER BY i.date DESC, i.id DESC`;
+            const movements = this.db.all(sql, params);
+            return { success: true, movements };
+        } catch (e) {
+            return { success: false, error: e.message, movements: [] };
+        }
+    }
 }
 
 class InvoicesRepo {
@@ -1513,36 +1595,46 @@ class DeductionsRepo {
     }
 }
 
-class RentRepo {
+class ExpensesRepo {
     constructor(db) { this.db = db; }
 
     getAll() {
         return this.db.all(`
-            SELECT rp.*, a.name as payment_account_name
-            FROM rent_payments rp
-            LEFT JOIN accounts a ON rp.payment_account_id = a.id
-            ORDER BY rp.created_at DESC
+            SELECT ex.*, a.name as payment_account_name
+            FROM expenses ex
+            LEFT JOIN accounts a ON ex.payment_account_id = a.id
+            ORDER BY ex.date DESC, ex.created_at DESC
         `);
     }
 
-    getTotal(startDate, endDate) {
+    getTotal(startDate, endDate, category = null) {
         try {
-            let sql = 'SELECT COALESCE(SUM(amount), 0) as total FROM rent_payments WHERE 1=1';
+            let sql = 'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE 1=1';
             const params = [];
-            if (startDate) { sql += ' AND created_at >= ?'; params.push(startDate); }
-            if (endDate) { sql += ' AND created_at <= ?'; params.push(endDate + ' 23:59:59'); }
+            if (startDate) { sql += ' AND date >= ?'; params.push(startDate); }
+            if (endDate) { sql += ' AND date <= ?'; params.push(endDate); }
+            if (category && category !== 'all') { sql += ' AND category = ?'; params.push(category); }
+            
             const r = this.db.get(sql, params);
             return r?.total || 0;
         } catch (e) { return 0; }
     }
 
-    pay(payment) {
+    create(payment) {
         const n = (v) => v === undefined ? null : v;
         try {
-            const count = this.db.get('SELECT COUNT(*) as count FROM rent_payments').count;
-            const payNum = `RENT-${String(count + 1).padStart(6, '0')}`;
+            const count = this.db.get('SELECT COUNT(*) as count FROM expenses').count;
+            const payNum = `EXP-${String(count + 1).padStart(6, '0')}`;
             const amount = parseFloat(payment.amount) || 0;
             if (amount <= 0) return { success: false, error: 'المبلغ يجب أن يكون أكبر من صفر' };
+
+            // Determine category and default code
+            const category = payment.category || 'other';
+            let targetAccountCode = '57'; // other
+            if (category === 'rent') targetAccountCode = '53';
+            else if (category === 'hospitality') targetAccountCode = '54';
+            else if (category === 'utilities') targetAccountCode = '55';
+            else if (category === 'maintenance') targetAccountCode = '56';
 
             // Get payment accounts
             const cashAccount = this.db.get("SELECT id FROM accounts WHERE code = '111'");
@@ -1552,16 +1644,14 @@ class RentRepo {
                 paymentAccountId = payment.payment_method === 'bank' ? bankAccount?.id : cashAccount?.id;
             }
 
-            // Get rent expense account
-            let rentAccount = this.db.get("SELECT id FROM accounts WHERE code = '53'");
-            if (!rentAccount) {
-                const expParent = this.db.get("SELECT id FROM accounts WHERE code = '5'");
-                this.db.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
-                    ['53', 'مصروفات الإيجار', expParent?.id || null, 'expense', 'debit']);
-                rentAccount = this.db.get("SELECT id FROM accounts WHERE code = '53'");
+            // Get target expense account
+            let expenseAccount = this.db.get("SELECT id, name FROM accounts WHERE code = ?", [targetAccountCode]);
+            if (!expenseAccount) {
+                // Should exist due to seed, but fallback just in case
+                expenseAccount = this.db.get("SELECT id, name FROM accounts WHERE code = '5'");
             }
 
-            // Create journal entry: Debit rent expense, Credit cash/bank
+            // Create journal entry: Debit expense, Credit cash/bank
             let jeNum;
             let jeAttempt = 0;
             do {
@@ -1573,36 +1663,36 @@ class RentRepo {
                 jeAttempt++;
             } while (jeAttempt < 100);
 
-            const desc = payment.description || 'دفعة إيجار';
-            const jeDesc = `قيد إيجار - ${payment.month} - ${desc}`;
+            const desc = payment.description || `مصروفات ${expenseAccount?.name || 'عامة'}`;
+            const jeDesc = `قيد مصروف - ${payment.date} - ${desc}`;
             const jeR = this.db.run(
                 "INSERT INTO journal_entries (entry_number, date, description, reference, created_by) VALUES (?, ?, ?, ?, ?)",
-                [jeNum, payment.date || new Date().toISOString().split('T')[0], jeDesc, payNum, n(payment.created_by)]
+                [jeNum, payment.date, jeDesc, payNum, n(payment.created_by)]
             );
             const jeId = jeR.lastInsertRowid;
 
-            // Line 1: Debit rent expense account
-            if (rentAccount) {
+            // Line 1: Debit expense account
+            if (expenseAccount) {
                 this.db.run(
                     "INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?, ?, ?, ?, ?)",
-                    [jeId, rentAccount.id, amount, 0, `إيجار ${payment.month} - ${desc}`]
+                    [jeId, expenseAccount.id, amount, 0, `مصروف ${payment.date} - ${desc}`]
                 );
-                this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [amount, rentAccount.id]);
+                this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [amount, expenseAccount.id]);
             }
 
             // Line 2: Credit cash/bank account
             if (paymentAccountId) {
                 this.db.run(
                     "INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?, ?, ?, ?, ?)",
-                    [jeId, paymentAccountId, 0, amount, `صرف إيجار ${payment.month}`]
+                    [jeId, paymentAccountId, 0, amount, `دفع مصروف ${payment.date}`]
                 );
                 this.db.run('UPDATE accounts SET balance = balance - ? WHERE id = ?', [amount, paymentAccountId]);
             }
 
-            // Save rent payment record
+            // Save expense payment record
             const r = this.db.run(
-                "INSERT INTO rent_payments (payment_number, month, amount, description, payment_method, payment_account_id, journal_entry_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [payNum, payment.month, amount, desc, n(payment.payment_method) || 'cash', n(paymentAccountId), jeId, n(payment.notes), n(payment.created_by)]
+                "INSERT INTO expenses (payment_number, category, date, amount, description, payment_method, payment_account_id, journal_entry_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [payNum, category, payment.date, amount, desc, n(payment.payment_method) || 'cash', n(paymentAccountId), jeId, n(payment.notes), n(payment.created_by)]
             );
 
             return { success: true, id: r.lastInsertRowid, payment_number: payNum };
@@ -1613,7 +1703,7 @@ class RentRepo {
 
     delete(id) {
         try {
-            const payment = this.db.get('SELECT * FROM rent_payments WHERE id = ?', [id]);
+            const payment = this.db.get('SELECT * FROM expenses WHERE id = ?', [id]);
             if (!payment) return { success: false, error: 'السجل غير موجود' };
 
             // Reverse journal entry
@@ -1627,7 +1717,7 @@ class RentRepo {
                 this.db.run('DELETE FROM journal_entries WHERE id = ?', [payment.journal_entry_id]);
             }
 
-            this.db.run('DELETE FROM rent_payments WHERE id = ?', [id]);
+            this.db.run('DELETE FROM expenses WHERE id = ?', [id]);
             return { success: true };
         } catch (e) {
             return { success: false, error: e.message };
@@ -1781,8 +1871,44 @@ class OffersRepo {
     }
 }
 
+
+class ActivityLogRepo {
+    constructor(db) { this.db = db; }
+
+    log({ user_id, user_name, action, module, entity_id, entity_ref }) {
+        try {
+            this.db.run(
+                'INSERT INTO activity_log (user_id, user_name, action, module, entity_id, entity_ref) VALUES (?, ?, ?, ?, ?, ?)',
+                [user_id || null, user_name || 'system', action, module, entity_id || null, entity_ref || null]
+            );
+        } catch (e) {
+            console.error('[ActivityLog] Failed to log:', e.message);
+        }
+    }
+
+    getAll({ module, action, user_name, startDate, endDate, limit } = {}) {
+        try {
+            let sql = 'SELECT * FROM activity_log WHERE 1=1';
+            const params = [];
+            if (module)    { sql += ' AND module = ?';            params.push(module); }
+            if (action)    { sql += ' AND action = ?';            params.push(action); }
+            if (user_name) { sql += ' AND user_name LIKE ?';      params.push('%' + user_name + '%'); }
+            if (startDate) { sql += ' AND created_at >= ?';       params.push(startDate + ' 00:00:00'); }
+            if (endDate)   { sql += ' AND created_at <= ?';       params.push(endDate + ' 23:59:59'); }
+            sql += ' ORDER BY id DESC';
+            sql += ' LIMIT ?'; params.push(limit || 500);
+            return this.db.all(sql, params);
+        } catch (e) {
+            console.error('[ActivityLog] getAll error:', e.message);
+            return [];
+        }
+    }
+}
+
 const dbInstance = new AppDatabase();
 dbInstance.coupons = new CouponsRepo(dbInstance);
 dbInstance.offers = new OffersRepo(dbInstance);
+dbInstance.activityLog = new ActivityLogRepo(dbInstance);
 
 module.exports = dbInstance;
+

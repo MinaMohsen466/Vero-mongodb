@@ -5,7 +5,7 @@ export function useShortcuts(shortcuts) {
 
     useEffect(() => {
         shortcutsRef.current = shortcuts;
-    });
+    }, [shortcuts]);
 
     useEffect(() => {
         const handleKeyDown = (e) => {

@@ -3,7 +3,7 @@ import { Plus, Eye, Trash2, Search, ShoppingCart, Printer, X, Edit, Download } f
 import Modal from '../components/Modal';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
 import SearchableSelect from '../components/SearchableSelect';
-import { useAuth } from '../App';
+import { useAuth, isColorUnit } from '../App';
 import { toast } from 'react-hot-toast';
 import { useShortcuts } from '../hooks/useShortcuts';
 
@@ -36,7 +36,7 @@ function SalesInvoices() {
     const emptyForm = () => ({
         customer_id: '', date: new Date().toISOString().split('T')[0], due_date: '', notes: '',
         status: 'paid', payment_method: 'cash', payment_account_id: '',
-        items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0 }]
+        items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }]
     });
 
     const [formData, setFormData] = useState(emptyForm());
@@ -89,7 +89,7 @@ function SalesInvoices() {
         let finalPrice = parseFloat(item.unit_price) || 0;
         let qty = parseFloat(item.quantity) || 0;
         let finalTotal = finalPrice * qty;
-        let discountManual = parseFloat(item.discount) || 0;
+        let discountManual = 0; // Removing item.discount double-dip since we don't have manual item discounts in UI
         let appliedOffer = null;
         let bogoFreeQty = 0;
 
@@ -154,6 +154,7 @@ function SalesInvoices() {
             product_id: productId,
             description: product?.name || '',
             unit_price: product?.sale_price || 0,
+            unit: product?.unit || '',
         };
         newItems[index].total = calculateItemTotal(newItems[index]).finalTotal;
         setFormData({ ...formData, items: newItems });
@@ -166,7 +167,7 @@ function SalesInvoices() {
         setFormData({ ...formData, items: newItems });
     };
 
-    const addItem = () => setFormData({ ...formData, items: [...formData.items, { product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0 }] });
+    const addItem = () => setFormData({ ...formData, items: [...formData.items, { product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }] });
     const removeItem = (index) => formData.items.length > 1 && setFormData({ ...formData, items: formData.items.filter((_, i) => i !== index) });
 
     // Stock validation: check if selling more than available stock
@@ -255,7 +256,9 @@ function SalesInvoices() {
                     unit_price: parseFloat(item.unit_price) || 0,
                     discount: calculateItemTotal(item).discountCalculated,
                     tax: 0,
-                    total: calculateItemTotal(item).finalTotal
+                    total: calculateItemTotal(item).finalTotal,
+                    color: item.color || null,
+                    unit: item.unit || null
                 }))
             };
 
@@ -325,12 +328,14 @@ function SalesInvoices() {
                     quantity: Number(item.quantity) || 1,
                     unit_price: Number(item.unit_price) || 0,
                     discount: Number(item.discount) || 0,
-                    total: Number(item.total) || 0
+                    total: Number(item.total) || 0,
+                    color: item.color || '',
+                    unit: item.unit || ''
                 }));
                 console.log('[handleEdit] Mapped items:', mappedItems);
             } else {
                 console.log('[handleEdit] No items found, using empty row');
-                mappedItems = [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0 }];
+                mappedItems = [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '', unit: '' }];
             }
 
             setEditMode(true);
@@ -539,7 +544,10 @@ function SalesInvoices() {
                                             <td className="font-bold">{inv.invoice_number}</td>
                                             <td>{inv.customer_name || '-'}</td>
                                             <td>{new Date(inv.date).toLocaleDateString('en-GB')}</td>
-                                            <td className="font-bold">{formatCurrency(inv.total)}</td>
+                                            <td className="font-bold">
+                                                {formatCurrency(inv.total)}
+                                                {inv.discount > 0 && <span style={{ display: 'block', fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>{t('discount')}: {formatCurrency(inv.discount)}</span>}
+                                            </td>
                                             <td><span className={`badge ${inv.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{getStatusLabel(inv.status)}</span></td>
                                             <td>
                                                 <div className="table-actions">
@@ -608,11 +616,12 @@ function SalesInvoices() {
                         <div className="flex justify-between items-center mb-2"><h4>{t('inv_product')}</h4></div>
                         <div className="table-container">
                             <table>
-                                <thead><tr><th style={{ width: '200px' }}>{t('inv_product')}</th><th>{t('description')}</th><th style={{ width: '120px' }}>{t('inv_quantity')}</th><th style={{ width: '100px' }}>{t('inv_unitPrice')}</th><th style={{ width: '100px' }}>{t('inv_itemTotal')}</th><th style={{ width: '50px' }}></th></tr></thead>
+                                <thead><tr><th style={{ width: '200px' }}>{t('inv_product')}</th><th>{t('description')}</th><th style={{ width: '120px' }}>{t('inv_quantity')}</th><th style={{ width: '100px' }}>{t('inv_unitPrice')}</th>{settings?.general?.enable_product_color === 'yes' && <th style={{ width: '100px' }}>{t('color') || 'Color'}</th>}<th style={{ width: '100px' }}>{t('inv_itemTotal')}</th><th style={{ width: '50px' }}></th></tr></thead>
                                 <tbody>
                                     {formData.items.map((item, index) => {
                                         const product = item.product_id ? products.find(p => p.id === parseInt(item.product_id)) : null;
                                         const stockInfo = product ? ` (${t('inv_available') || 'Available'}: ${product.stock_quantity || 0})` : '';
+                                        const showColorField = settings?.general?.enable_product_color === 'yes' && isColorUnit(product?.unit);
                                         return (
                                             <tr key={index}>
                                                 <td style={{ minWidth: '200px' }}>
@@ -626,7 +635,15 @@ function SalesInvoices() {
                                                 </td>
                                                 <td><input type="text" className="form-input" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} style={{ margin: 0 }} /></td>
                                                 <td><input type="number" className="form-input" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} min="1" step="1" style={{ margin: 0 }} /></td>
-                                                <td><input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.25" style={{ margin: 0 }} /></td>
+                                                <td>
+                                                    <input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.25" style={{ margin: 0 }} />
+                                                    {calculateItemTotal(item).finalPrice < item.unit_price && (
+                                                        <span style={{ fontSize: '0.75rem', color: '#10b981', display: 'block', marginTop: '4px', fontWeight: 600 }}>
+                                                            {formatCurrency(calculateItemTotal(item).finalPrice)}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                {showColorField && <td><input type="text" className="form-input" placeholder={t('color') || 'Color'} value={item.color || ''} onChange={(e) => handleItemChange(index, 'color', e.target.value)} style={{ margin: 0 }} /></td>}
                                                 <td className="font-bold">
                                                     {formatCurrency(calculateItemTotal(item).finalTotal)}
                                                     {calculateItemTotal(item).appliedOffer && (
@@ -687,9 +704,17 @@ function SalesInvoices() {
                     <div>
                         <div className="form-row mb-4"><div><strong>{t('sinv_customer')}:</strong> {selectedInvoice.customer_name || '-'}</div><div><strong>{t('date')}:</strong> {new Date(selectedInvoice.date).toLocaleDateString('en-GB')}</div></div>
                         <div className="table-container">
-                            <table><thead><tr><th>#</th><th>{t('inv_product')}</th><th>{t('inv_quantity')}</th><th>{t('inv_unitPrice')}</th><th>{t('inv_total')}</th></tr></thead><tbody>{selectedInvoice.items?.map((item, i) => <tr key={i}><td>{i + 1}</td><td>{item.product_name || item.description}</td><td>{item.quantity}</td><td>{formatCurrency(item.unit_price)}</td><td className="font-bold">{formatCurrency(item.total)}</td></tr>)}</tbody></table>
+                            <table><thead><tr><th>#</th><th>{t('inv_product')}</th><th>{t('inv_quantity')}</th><th>{t('inv_unitPrice')}</th><th>{t('inv_total')}</th></tr></thead><tbody>{selectedInvoice.items?.map((item, i) => <tr key={i}><td>{i + 1}</td><td>{item.product_name || item.description}</td><td>{item.quantity}</td><td>
+                                {formatCurrency(item.unit_price)}
+                                {Number(item.discount) > 0 && <span style={{display: 'block', fontSize: '0.75rem', color: '#10b981'}}>{formatCurrency((Number(item.unit_price * item.quantity) - Number(item.discount)) / item.quantity)}</span>}
+                            </td><td className="font-bold">{formatCurrency(item.total)}</td></tr>)}</tbody></table>
                         </div>
-                        <div style={{ marginTop: '20px', textAlign: 'left', fontSize: '1.2rem' }}><strong>{t('inv_total')}: {formatCurrency(selectedInvoice.total)}</strong></div>
+                        <div style={{ marginTop: '20px', textAlign: 'left' }}>
+                            {selectedInvoice.discount > 0 && (
+                                <div style={{ fontSize: '1rem', color: '#ef4444', marginBottom: '8px' }}><strong>{t('discount')}: - {formatCurrency(selectedInvoice.discount)}</strong></div>
+                            )}
+                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}><strong>{t('inv_total')}: {formatCurrency(selectedInvoice.total)}</strong></div>
+                        </div>
                     </div>
                 )}
             </Modal>

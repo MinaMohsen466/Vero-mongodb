@@ -49,44 +49,122 @@ app.on('window-all-closed', () => {
 
 // ==================== IPC Handlers ====================
 
+// Helper: log activity safely
+function logActivity(action, module, entity_id, entity_ref, data) {
+    try {
+        const user_id = data?._userId || null;
+        const user_name = data?._userName || 'غير معروف';
+        db.activityLog.log({ user_id, user_name, action, module, entity_id, entity_ref });
+    } catch (e) { /* silent */ }
+}
+
 // --- System Setup ---
 ipcMain.handle('system:isFirstRun', async () => db.system.isFirstRun());
 ipcMain.handle('system:runSetup', async (event, data) => db.system.runSetup(data));
 
 // --- Users & Auth ---
-ipcMain.handle('users:login', async (event, { username, password }) => db.users.login(username, password));
+ipcMain.handle('users:login', async (event, { username, password }) => {
+    const result = db.users.login(username, password);
+    if (result.success) {
+        db.activityLog.log({ user_id: result.user.id, user_name: result.user.full_name || username, action: 'login', module: 'users', entity_ref: username });
+    }
+    return result;
+});
 ipcMain.handle('users:getAll', async () => db.users.getAll());
-ipcMain.handle('users:create', async (event, user) => db.users.create(user));
-ipcMain.handle('users:update', async (event, user) => db.users.update(user));
-ipcMain.handle('users:delete', async (event, id) => db.users.delete(id));
+ipcMain.handle('users:create', async (event, user) => {
+    const result = db.users.create(user);
+    if (result.success) logActivity('create', 'users', result.id, user.username, user);
+    return result;
+});
+ipcMain.handle('users:update', async (event, user) => {
+    const result = db.users.update(user);
+    if (result.success) logActivity('update', 'users', user.id, user.username, user);
+    return result;
+});
+ipcMain.handle('users:delete', async (event, id) => {
+    const result = db.users.delete(id);
+    if (result.success) logActivity('delete', 'users', id, String(id), {});
+    return result;
+});
 
 // --- Customers ---
 ipcMain.handle('customers:getAll', async () => db.customers.getAll());
 ipcMain.handle('customers:getById', async (event, id) => db.customers.getById(id));
-ipcMain.handle('customers:create', async (event, customer) => db.customers.create(customer));
-ipcMain.handle('customers:update', async (event, customer) => db.customers.update(customer));
-ipcMain.handle('customers:delete', async (event, id) => db.customers.delete(id));
+ipcMain.handle('customers:create', async (event, customer) => {
+    const result = db.customers.create(customer);
+    if (result.success) logActivity('create', 'customers', result.id, customer.name, customer);
+    return result;
+});
+ipcMain.handle('customers:update', async (event, customer) => {
+    const result = db.customers.update(customer);
+    if (result.success) logActivity('update', 'customers', customer.id, customer.name, customer);
+    return result;
+});
+ipcMain.handle('customers:delete', async (event, id) => {
+    const existing = db.customers.getById(id);
+    const result = db.customers.delete(id);
+    if (result.success) logActivity('delete', 'customers', id, existing?.name || String(id), {});
+    return result;
+});
 
 // --- Suppliers ---
 ipcMain.handle('suppliers:getAll', async () => db.suppliers.getAll());
 ipcMain.handle('suppliers:getById', async (event, id) => db.suppliers.getById(id));
-ipcMain.handle('suppliers:create', async (event, supplier) => db.suppliers.create(supplier));
-ipcMain.handle('suppliers:update', async (event, supplier) => db.suppliers.update(supplier));
-ipcMain.handle('suppliers:delete', async (event, id) => db.suppliers.delete(id));
+ipcMain.handle('suppliers:create', async (event, supplier) => {
+    const result = db.suppliers.create(supplier);
+    if (result.success) logActivity('create', 'suppliers', result.id, supplier.name, supplier);
+    return result;
+});
+ipcMain.handle('suppliers:update', async (event, supplier) => {
+    const result = db.suppliers.update(supplier);
+    if (result.success) logActivity('update', 'suppliers', supplier.id, supplier.name, supplier);
+    return result;
+});
+ipcMain.handle('suppliers:delete', async (event, id) => {
+    const existing = db.suppliers.getById(id);
+    const result = db.suppliers.delete(id);
+    if (result.success) logActivity('delete', 'suppliers', id, existing?.name || String(id), {});
+    return result;
+});
 
 // --- Accounts ---
 ipcMain.handle('accounts:getAll', async () => db.accounts.getAll());
 ipcMain.handle('accounts:getTree', async () => db.accounts.getTree());
-ipcMain.handle('accounts:create', async (event, account) => db.accounts.create(account));
-ipcMain.handle('accounts:update', async (event, account) => db.accounts.update(account));
-ipcMain.handle('accounts:delete', async (event, id) => db.accounts.delete(id));
+ipcMain.handle('accounts:create', async (event, account) => {
+    const result = db.accounts.create(account);
+    if (result.success) logActivity('create', 'accounts', result.id, account.name, account);
+    return result;
+});
+ipcMain.handle('accounts:update', async (event, account) => {
+    const result = db.accounts.update(account);
+    if (result.success) logActivity('update', 'accounts', account.id, account.name, account);
+    return result;
+});
+ipcMain.handle('accounts:delete', async (event, id) => {
+    const result = db.accounts.delete(id);
+    if (result.success) logActivity('delete', 'accounts', id, String(id), {});
+    return result;
+});
 ipcMain.handle('accounts:getBankAccounts', async () => db.accounts.getBankAccounts());
 
 // --- Products ---
 ipcMain.handle('products:getAll', async () => db.products.getAll());
-ipcMain.handle('products:create', async (event, product) => db.products.create(product));
-ipcMain.handle('products:update', async (event, product) => db.products.update(product));
-ipcMain.handle('products:delete', async (event, id) => db.products.delete(id));
+ipcMain.handle('products:create', async (event, product) => {
+    const result = db.products.create(product);
+    if (result.success) logActivity('create', 'products', result.id, product.name, product);
+    return result;
+});
+ipcMain.handle('products:update', async (event, product) => {
+    const result = db.products.update(product);
+    if (result.success) logActivity('update', 'products', product.id, product.name, product);
+    return result;
+});
+ipcMain.handle('products:delete', async (event, id) => {
+    const result = db.products.delete(id);
+    if (result.success) logActivity('delete', 'products', id, String(id), {});
+    return result;
+});
+ipcMain.handle('products:getMovements', async (event, { id, startDate, endDate }) => db.products.getMovements(id, startDate, endDate));
 
 // --- Invoices ---
 ipcMain.handle('invoices:getAll', async (event, type) => db.invoices.getAll(type));
@@ -101,10 +179,20 @@ ipcMain.handle('invoices:create', async (event, invoice) => {
     console.log('Creating invoice:', JSON.stringify(invoice, null, 2));
     const result = db.invoices.create(invoice);
     console.log('Invoice result:', result);
+    if (result.success) logActivity('create', invoice.type === 'sales' ? 'sales_invoices' : 'purchase_invoices', result.id, result.invoice_number, invoice);
     return result;
 });
-ipcMain.handle('invoices:update', async (event, invoice) => db.invoices.update(invoice));
-ipcMain.handle('invoices:delete', async (event, id) => db.invoices.delete(id));
+ipcMain.handle('invoices:update', async (event, invoice) => {
+    const result = db.invoices.update(invoice);
+    if (result.success) logActivity('update', invoice.type === 'sales' ? 'sales_invoices' : 'purchase_invoices', invoice.id, invoice.invoice_number, invoice);
+    return result;
+});
+ipcMain.handle('invoices:delete', async (event, id) => {
+    const existing = db.invoices.getById(id);
+    const result = db.invoices.delete(id);
+    if (result.success) logActivity('delete', existing?.type === 'sales' ? 'sales_invoices' : 'purchase_invoices', id, existing?.invoice_number || String(id), {});
+    return result;
+});
 ipcMain.handle('invoices:getPendingByCustomer', async (event, customerId) => db.invoices.getPendingByCustomer(customerId));
 ipcMain.handle('invoices:getPendingBySupplier', async (event, supplierId) => db.invoices.getPendingBySupplier(supplierId));
 ipcMain.handle('invoices:getByCustomer', async (event, customerId) => db.invoices.getByCustomer(customerId));
@@ -114,14 +202,114 @@ ipcMain.handle('invoices:updateStatus', async (event, { id, status }) => db.invo
 // --- Vouchers ---
 ipcMain.handle('vouchers:getAll', async (event, type) => db.vouchers.getAll(type));
 ipcMain.handle('vouchers:getById', async (event, id) => db.vouchers.getById(id));
-ipcMain.handle('vouchers:create', async (event, voucher) => db.vouchers.create(voucher));
-ipcMain.handle('vouchers:update', async (event, voucher) => db.vouchers.update(voucher));
-ipcMain.handle('vouchers:delete', async (event, id) => db.vouchers.delete(id));
+ipcMain.handle('vouchers:create', async (event, voucher) => {
+    const result = db.vouchers.create(voucher);
+    if (result.success) logActivity('create', 'vouchers', result.id, result.voucher_number, voucher);
+    return result;
+});
+ipcMain.handle('vouchers:update', async (event, voucher) => {
+    const result = db.vouchers.update(voucher);
+    if (result.success) logActivity('update', 'vouchers', voucher.id, voucher.voucher_number, voucher);
+    return result;
+});
+ipcMain.handle('vouchers:delete', async (event, id) => {
+    const existing = db.vouchers.getById(id);
+    const result = db.vouchers.delete(id);
+    if (result.success) logActivity('delete', 'vouchers', id, existing?.voucher_number || String(id), {});
+    return result;
+});
+
+// --- HR ---
+ipcMain.handle('employees:getAll', async () => db.employees.getAll());
+ipcMain.handle('employees:getById', async (event, id) => db.employees.getById(id));
+ipcMain.handle('employees:create', async (event, emp) => {
+    const result = db.employees.create(emp);
+    if (result.success) logActivity('create', 'employees', result.id, emp.name, emp);
+    return result;
+});
+ipcMain.handle('employees:update', async (event, emp) => {
+    const result = db.employees.update(emp);
+    if (result.success) logActivity('update', 'employees', emp.id, emp.name, emp);
+    return result;
+});
+ipcMain.handle('employees:delete', async (event, id) => {
+    const result = db.employees.delete(id);
+    if (result.success) logActivity('delete', 'employees', id, String(id), {});
+    return result;
+});
+ipcMain.handle('employees:getSummary', async (event, id) => db.employees.getSummary(id));
+
+ipcMain.handle('salaries:getAll', async () => db.salaries.getAll());
+ipcMain.handle('salaries:getByEmployee', async (event, id) => db.salaries.getByEmployee(id));
+ipcMain.handle('salaries:pay', async (event, payment) => {
+    const result = db.salaries.pay(payment);
+    if (result.success) logActivity('create', 'salaries', result.id, payment.payment_number || String(result.id), payment);
+    return result;
+});
+ipcMain.handle('salaries:delete', async (event, id) => {
+    const result = db.salaries.delete(id);
+    if (result.success) logActivity('delete', 'salaries', id, String(id), {});
+    return result;
+});
+ipcMain.handle('salaries:getTotal', async (event, { startDate, endDate }) => db.salaries.getTotal(startDate, endDate));
+
+ipcMain.handle('leaves:getAll', async () => db.leaves.getAll());
+ipcMain.handle('leaves:getByEmployee', async (event, id) => db.leaves.getByEmployee(id));
+ipcMain.handle('leaves:create', async (event, leave) => {
+    const result = db.leaves.create(leave);
+    if (result.success) logActivity('create', 'leaves', result.id, leave.leave_type, leave);
+    return result;
+});
+ipcMain.handle('leaves:updateStatus', async (event, { id, status, approvedBy }) => {
+    const result = db.leaves.updateStatus(id, status, approvedBy);
+    if (result.success) logActivity('update', 'leaves', id, status, { status, approvedBy });
+    return result;
+});
+ipcMain.handle('leaves:delete', async (event, id) => {
+    const result = db.leaves.delete(id);
+    if (result.success) logActivity('delete', 'leaves', id, String(id), {});
+    return result;
+});
+
+ipcMain.handle('deductions:getAll', async () => db.deductions.getAll());
+ipcMain.handle('deductions:getByEmployee', async (event, id) => db.deductions.getByEmployee(id));
+ipcMain.handle('deductions:create', async (event, deduction) => {
+    const result = db.deductions.create(deduction);
+    if (result.success) logActivity('create', 'deductions', result.id, deduction.reason, deduction);
+    return result;
+});
+ipcMain.handle('deductions:delete', async (event, id) => {
+    const result = db.deductions.delete(id);
+    if (result.success) logActivity('delete', 'deductions', id, String(id), {});
+    return result;
+});
+
+// --- Expenses ---
+ipcMain.handle('expenses:getAll', async () => db.expenses.getAll());
+ipcMain.handle('expenses:create', async (event, data) => {
+    const result = db.expenses.create(data);
+    if (result.success) logActivity('create', 'expenses', result.id, data.payment_number || String(result.id), data);
+    return result;
+});
+ipcMain.handle('expenses:delete', async (event, id) => {
+    const result = db.expenses.delete(id);
+    if (result.success) logActivity('delete', 'expenses', id, String(id), {});
+    return result;
+});
+ipcMain.handle('expenses:getTotal', async (event, { startDate, endDate, category }) => db.expenses.getTotal(startDate, endDate, category));
 
 // --- Journal Entries ---
 ipcMain.handle('journal:getAll', async () => db.journal.getAll());
-ipcMain.handle('journal:create', async (event, entry) => db.journal.create(entry));
-ipcMain.handle('journal:delete', async (event, id) => db.journal.delete(id));
+ipcMain.handle('journal:create', async (event, entry) => {
+    const result = db.journal.create(entry);
+    if (result.success) logActivity('create', 'journal_entries', result.id, result.entry_number, entry);
+    return result;
+});
+ipcMain.handle('journal:delete', async (event, id) => {
+    const result = db.journal.delete(id);
+    if (result.success) logActivity('delete', 'journal_entries', id, String(id), {});
+    return result;
+});
 
 // --- Reports ---
 ipcMain.handle('reports:accountStatement', async (event, { accountId, startDate, endDate }) => db.reports.accountStatement(accountId, startDate, endDate));
@@ -129,21 +317,45 @@ ipcMain.handle('reports:trialBalance', async (event, { date }) => db.reports.tri
 ipcMain.handle('reports:salesReport', async (event, { startDate, endDate }) => db.reports.salesReport(startDate, endDate));
 ipcMain.handle('reports:purchasesReport', async (event, { startDate, endDate }) => db.reports.purchasesReport(startDate, endDate));
 
-// --- Settings ---
 // --- Offers & Coupons ---
 ipcMain.handle('coupons:getAll', async () => db.coupons.getAll());
-ipcMain.handle('coupons:create', async (event, data) => db.coupons.create(data));
-ipcMain.handle('coupons:update', async (event, data) => db.coupons.update(data));
-ipcMain.handle('coupons:delete', async (event, id) => db.coupons.delete(id));
+ipcMain.handle('coupons:create', async (event, data) => {
+    const result = db.coupons.create(data);
+    if (result.success) logActivity('create', 'coupons', result.id, data.code, data);
+    return result;
+});
+ipcMain.handle('coupons:update', async (event, data) => {
+    const result = db.coupons.update(data);
+    if (result.success) logActivity('update', 'coupons', data.id, data.code, data);
+    return result;
+});
+ipcMain.handle('coupons:delete', async (event, id) => {
+    const result = db.coupons.delete(id);
+    if (result.success) logActivity('delete', 'coupons', id, String(id), {});
+    return result;
+});
 ipcMain.handle('coupons:validate', async (event, code) => db.coupons.validate(code));
 ipcMain.handle('coupons:incrementUse', async (event, id) => db.coupons.incrementUse(id));
 
 ipcMain.handle('offers:getAll', async () => db.offers.getAll());
 ipcMain.handle('offers:getActive', async () => db.offers.getActive());
-ipcMain.handle('offers:create', async (event, data) => db.offers.create(data));
-ipcMain.handle('offers:update', async (event, data) => db.offers.update(data));
-ipcMain.handle('offers:delete', async (event, id) => db.offers.delete(id));
+ipcMain.handle('offers:create', async (event, data) => {
+    const result = db.offers.create(data);
+    if (result.success) logActivity('create', 'offers', result.id, data.title, data);
+    return result;
+});
+ipcMain.handle('offers:update', async (event, data) => {
+    const result = db.offers.update(data);
+    if (result.success) logActivity('update', 'offers', data.id, data.title, data);
+    return result;
+});
+ipcMain.handle('offers:delete', async (event, id) => {
+    const result = db.offers.delete(id);
+    if (result.success) logActivity('delete', 'offers', id, String(id), {});
+    return result;
+});
 
+// --- Settings ---
 ipcMain.handle('settings:get', async (event, key) => db.settings.get(key));
 ipcMain.handle('settings:getAll', async () => db.settings.getAll());
 ipcMain.handle('settings:set', async (event, { category, key, value }) => db.settings.set(category, key, value));
@@ -159,8 +371,6 @@ ipcMain.handle('settings:changeDbPath', async (event, newFolderPath) => {
 });
 ipcMain.handle('settings:restore', async (event, filePath) => db.restore(filePath));
 ipcMain.handle('settings:optimizeDb', async () => db.vacuum());
-
-
 
 // Get database file size
 ipcMain.handle('settings:getDbSize', async () => {
@@ -200,39 +410,10 @@ ipcMain.handle('permissions:getUserPermissions', async (event, userId) => db.per
 ipcMain.handle('permissions:saveUserPermissions', async (event, { userId, permissions }) => db.permissions.saveUserPermissions(userId, permissions));
 ipcMain.handle('permissions:clearUserPermissions', async (event, userId) => db.permissions.clearUserPermissions(userId));
 
-// --- HR: Employees ---
-ipcMain.handle('employees:getAll', async () => db.employees.getAll());
-ipcMain.handle('employees:getById', async (event, id) => db.employees.getById(id));
-ipcMain.handle('employees:create', async (event, emp) => db.employees.create(emp));
-ipcMain.handle('employees:update', async (event, emp) => db.employees.update(emp));
-ipcMain.handle('employees:delete', async (event, id) => db.employees.delete(id));
-ipcMain.handle('employees:getSummary', async (event, id) => db.employees.getSummary(id));
-
-// --- HR: Salaries ---
-ipcMain.handle('salaries:getAll', async () => db.salaries.getAll());
-ipcMain.handle('salaries:getByEmployee', async (event, id) => db.salaries.getByEmployee(id));
-ipcMain.handle('salaries:pay', async (event, payment) => db.salaries.pay(payment));
-ipcMain.handle('salaries:delete', async (event, id) => db.salaries.delete(id));
-
-// --- HR: Leaves ---
-ipcMain.handle('leaves:getAll', async () => db.leaves.getAll());
-ipcMain.handle('leaves:getByEmployee', async (event, id) => db.leaves.getByEmployee(id));
-ipcMain.handle('leaves:create', async (event, leave) => db.leaves.create(leave));
-ipcMain.handle('leaves:updateStatus', async (event, { id, status, approvedBy }) => db.leaves.updateStatus(id, status, approvedBy));
-ipcMain.handle('leaves:delete', async (event, id) => db.leaves.delete(id));
-
-// --- HR: Deductions ---
-ipcMain.handle('deductions:getAll', async () => db.deductions.getAll());
-ipcMain.handle('deductions:getByEmployee', async (event, id) => db.deductions.getByEmployee(id));
-ipcMain.handle('deductions:create', async (event, ded) => db.deductions.create(ded));
-ipcMain.handle('deductions:delete', async (event, id) => db.deductions.delete(id));
-
-// --- HR: Rent ---
-ipcMain.handle('rent:getAll', async () => db.rent.getAll());
-ipcMain.handle('rent:pay', async (event, payment) => db.rent.pay(payment));
-ipcMain.handle('rent:delete', async (event, id) => db.rent.delete(id));
-ipcMain.handle('rent:getTotal', async (event, { startDate, endDate }) => db.rent.getTotal(startDate, endDate));
-ipcMain.handle('salaries:getTotal', async (event, { startDate, endDate }) => db.salaries.getTotal(startDate, endDate));
+// --- Activity Log ---
+ipcMain.handle('activityLog:getAll', async (event, filters) => {
+    return db.activityLog.getAll(filters || {});
+});
 
 // --- File Dialog ---
 ipcMain.handle('dialog:openFile', async (event, options) => {
@@ -308,6 +489,7 @@ ipcMain.handle('file:copyLogo', async (event, srcPath) => {
         return null;
     }
 });
+
 // --- Save text/csv file to disk ---
 ipcMain.handle('file:saveText', async (event, { content, defaultName, filters }) => {
     try {
@@ -323,3 +505,9 @@ ipcMain.handle('file:saveText', async (event, { content, defaultName, filters })
         return { success: false, error: e.message };
     }
 });
+
+
+
+// Start logging
+console.log('All IPC handlers registered successfully');
+

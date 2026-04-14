@@ -119,11 +119,11 @@ function Reports() {
                 data = { chartData, total, count: filtered.length, invoices: filtered.slice(0, 50) };
 
             } else if (activeReport === 'profit_loss') {
-                const [sales, purchases, totalSalaries, totalRent] = await Promise.all([
+                const [sales, purchases, totalSalaries, totalExpenses] = await Promise.all([
                     window.api.invoices.getAll('sales'),
                     window.api.invoices.getAll('purchase'),
                     window.api.salaries.getTotal(filters.start_date, filters.end_date),
-                    window.api.rent.getTotal(filters.start_date, filters.end_date)
+                    window.api.expenses.getTotal(filters.start_date, filters.end_date)
                 ]);
                 const filterFn = inv => {
                     if (filters.start_date && inv.date < filters.start_date) return false;
@@ -135,7 +135,7 @@ function Reports() {
                 const totalSalesAmt = filteredSales.reduce((s, i) => s + (i.total || 0), 0);
                 const totalPurchasesAmt = filteredPurchases.reduce((s, i) => s + (i.total || 0), 0);
                 const grossProfit = totalSalesAmt - totalPurchasesAmt;
-                const netProfit = grossProfit - (totalSalaries || 0) - (totalRent || 0);
+                const netProfit = grossProfit - (totalSalaries || 0) - (totalExpenses || 0);
                 // Monthly both
                 const byMonth = {};
                 filteredSales.forEach(inv => {
@@ -154,7 +154,7 @@ function Reports() {
                     const [y, m] = r.month.split('-');
                     return { ...r, label: `${MONTHS_AR[parseInt(m) - 1]}`, profit: r['sales'] - r['purchases'] };
                 });
-                data = { totalSales: totalSalesAmt, totalPurchases: totalPurchasesAmt, totalSalaries: totalSalaries || 0, totalRent: totalRent || 0, grossProfit, profit: netProfit, chartData };
+                data = { totalSales: totalSalesAmt, totalPurchases: totalPurchasesAmt, totalSalaries: totalSalaries || 0, totalExpenses: totalExpenses || 0, grossProfit, profit: netProfit, chartData };
 
             } else if (activeReport === 'inventory') {
                 const allProducts = await window.api.products.getAll();
@@ -266,7 +266,7 @@ function Reports() {
             rows.push([t('rep_totalPurchases') || 'Total Purchases', reportData.totalPurchases]);
             rows.push([t('rep_grossProfit') || 'Gross Profit', reportData.grossProfit]);
             rows.push([t('rep_totalSalaries') || 'Total Salaries', reportData.totalSalaries]);
-            rows.push([t('rep_totalRent') || 'Total Rent', reportData.totalRent]);
+            rows.push([t('rep_totalExpenses') || 'Total Expenses', reportData.totalExpenses]);
             rows.push([t('rep_netProfit') || 'Net Profit', reportData.profit]);
             if (reportData.chartData?.length) {
                 rows.push([]);
@@ -517,7 +517,7 @@ function Reports() {
                                         <StatCard label={t('rep_totalSales') || 'Total Sales'} val={fmt(reportData.totalSales)} color="#6366F1" />
                                         <StatCard label={t('rep_totalPurchases') || 'Total Purchases'} val={fmt(reportData.totalPurchases)} color="#EF4444" />
                                         <StatCard label={t('rep_totalSalaries') || 'Total Salaries'} val={fmt(reportData.totalSalaries)} color="#F59E0B" />
-                                        <StatCard label={t('rep_totalRent') || 'Total Rent'} val={fmt(reportData.totalRent)} color="#8B5CF6" />
+                                        <StatCard label={t('rep_totalExpenses') || 'Total Expenses'} val={fmt(reportData.totalExpenses)} color="#8B5CF6" />
                                         <div style={{
                                             background: reportData.profit >= 0 ? '#D1FAE5' : '#FEE2E2',
                                             border: `2px solid ${reportData.profit >= 0 ? '#10B981' : '#EF4444'}`,
@@ -549,7 +549,7 @@ function Reports() {
                                         </div>
                                     )}
                                     {/* Expense summary table */}
-                                    {(reportData.totalSalaries > 0 || reportData.totalRent > 0) && (
+                                    {(reportData.totalSalaries > 0 || reportData.totalExpenses > 0) && (
                                         <div style={{ marginTop: '20px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
                                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                                 <thead>
@@ -563,7 +563,7 @@ function Reports() {
                                                     <tr><td style={tdStyle}>{t('rep_totalPurchases') || 'Total Purchases'}</td><td style={{ ...tdStyle, color: '#EF4444', fontWeight: 700 }}>{fmt(reportData.totalPurchases)}</td></tr>
                                                     <tr style={{ background: '#f0f9ff' }}><td style={{ ...tdStyle, fontWeight: 600 }}>{t('rep_grossProfit') || 'Gross Profit'}</td><td style={{ ...tdStyle, fontWeight: 700, color: reportData.grossProfit >= 0 ? '#059669' : '#DC2626' }}>{fmt(reportData.grossProfit)}</td></tr>
                                                     <tr><td style={tdStyle}>➖ {t('rep_totalSalaries') || 'Total Salaries'}</td><td style={{ ...tdStyle, color: '#F59E0B', fontWeight: 600 }}>{fmt(reportData.totalSalaries)}</td></tr>
-                                                    <tr><td style={tdStyle}>➖ {t('rep_totalRent') || 'Total Rent'}</td><td style={{ ...tdStyle, color: '#8B5CF6', fontWeight: 600 }}>{fmt(reportData.totalRent)}</td></tr>
+                                                    <tr><td style={tdStyle}>➖ {t('rep_totalExpenses') || 'Total Expenses'}</td><td style={{ ...tdStyle, color: '#8B5CF6', fontWeight: 600 }}>{fmt(reportData.totalExpenses)}</td></tr>
                                                     <tr style={{ background: reportData.profit >= 0 ? '#D1FAE5' : '#FEE2E2', fontWeight: 700 }}><td style={tdStyle}>{reportData.profit >= 0 ? `✅ ${t('rep_netProfit') || 'Net Profit'}` : `❌ ${t('rep_netLoss') || 'Net Loss'}`}</td><td style={{ ...tdStyle, fontSize: '1.1rem', color: reportData.profit >= 0 ? '#059669' : '#DC2626' }}>{fmt(Math.abs(reportData.profit))}</td></tr>
                                                 </tbody>
                                             </table>

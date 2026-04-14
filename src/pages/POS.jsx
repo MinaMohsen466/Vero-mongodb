@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Printer, X, Check, Package, User, UserPlus } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { useAuth } from '../App';
+import { useAuth, isColorUnit } from '../App';
 
 const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#3B82F6', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#06B6D4'];
 
@@ -261,14 +261,14 @@ function POS() {
                     return prev;
                 }
                 return prev.map(i => i.id === fresh.id
-                    ? { ...i, qty: i.qty + 1, total: (i.qty + 1) * i.price }
+                    ? { ...i, qty: i.qty + 1, total: (i.qty + 1) * i.price, unit: i.unit || fresh.unit || '' }
                     : i
                 );
             }
             return [...prev, {
-                id: fresh.id, name: fresh.name, code: fresh.code, category: fresh.category,
+                id: fresh.id, name: fresh.name, code: fresh.code, category: fresh.category, unit: fresh.unit || '',
                 price: fresh.sale_price || 0, stock: fresh.stock_quantity,
-                qty: 1, total: fresh.sale_price || 0
+                qty: 1, total: fresh.sale_price || 0, color: ''
             }];
         });
     }, [allProducts, settings, t]);
@@ -338,10 +338,13 @@ function POS() {
         }
     }
 
+    const originalSubtotal = enrichedCart.reduce((sum, item) => sum + item.originalTotal, 0);
+    const offersDiscountAmount = originalSubtotal - calcSubtotal;
+
     const manualDiscAmount = parseFloat(discount) || 0;
-    const totalDiscountAmount = couponDiscountAmount + manualDiscAmount;
+    const totalDiscountAmount = offersDiscountAmount + couponDiscountAmount + manualDiscAmount;
     
-    const subtotal = calcSubtotal;
+    const subtotal = originalSubtotal;
     const discountAmount = Math.min(subtotal, totalDiscountAmount);
     const total = subtotal - discountAmount;
     const change = parseFloat(amountPaid) - total;
@@ -399,7 +402,8 @@ function POS() {
                 items: enrichedCart.map(i => ({
                     product_id: i.id, description: i.name,
                     quantity: i.qty, unit_price: i.price,
-                    discount: i.originalTotal - i.finalTotal, tax: 0, total: i.finalTotal
+                    discount: i.originalTotal - i.finalTotal, tax: 0, total: i.finalTotal,
+                    color: i.color || null
                 }))
             };
             const result = await window.api.invoices.create(invoiceData);
@@ -485,7 +489,7 @@ function POS() {
                 {/* Products Grid */}
                 <div style={{
                     flex: 1, overflowY: 'auto',
-                    display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                    display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
                     gap: '12px', alignContent: 'start',
                     paddingTop: '12px',
                     paddingRight: '6px',
@@ -652,9 +656,34 @@ function POS() {
                                         </span>
                                     )}
                                 </p>
+                                {/* Color field (if unit is Drum, Gallon, or Liter) */}
+                                {settings?.general?.enable_product_color === 'yes' && isColorUnit(item.unit) && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{t('color') || 'اللون'}:</span>
+                                        <input
+                                            type="text"
+                                            value={item.color || ''}
+                                            placeholder={t('enter_color') || 'أدخل اللون'}
+                                            onClick={e => e.stopPropagation()}
+                                            onChange={e => {
+                                                setCart(prev => prev.map(i =>
+                                                    i.id === item.id
+                                                        ? { ...i, color: e.target.value }
+                                                        : i
+                                                ));
+                                            }}
+                                            style={{
+                                                width: '70px', padding: '1px 5px', fontSize: '0.72rem',
+                                                border: '1px solid var(--border)', borderRadius: '5px',
+                                                background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                                                outline: 'none'
+                                            }}
+                                        />
+                                    </div>
+                                )}
                                 {/* Editable price */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{t('price') || 'Price'}:</span>
+                                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{t('price') || 'السعر'}:</span>
                                     <input
                                         type="number"
                                         value={item.price}
@@ -718,6 +747,11 @@ function POS() {
                             style={{ flex: 1, padding: '4px 8px', fontSize: '0.83rem', textAlign: 'left' }}
                         />
                     </div>
+                    {offersDiscountAmount > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.83rem', color: '#10b981', fontWeight: 600 }}>
+                            <span>{t('offers_discount') || 'خصم العروض'}</span><span>- {formatCurrency(offersDiscountAmount)}</span>
+                        </div>
+                    )}
                     
                     {/* Coupon Input */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
@@ -879,52 +913,91 @@ function POS() {
             {/* ── Receipt Modal ───────────────────────────────────────────── */}
             {showReceipt && lastReceipt && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                    <div style={{ background: 'var(--bg-primary)', borderRadius: '16px', padding: '22px', width: '370px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
-                        <div style={{ textAlign: 'center', marginBottom: '14px' }}>
+                    <div style={{ background: 'var(--bg-primary)', borderRadius: '16px', padding: '0', width: '420px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column' }}>
+                        {/* Header Success Message */}
+                        <div style={{ textAlign: 'center', paddingTop: '22px', paddingBottom: '12px', paddingLeft: '22px', paddingRight: '22px', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(59, 130, 246, 0.08))', borderBottom: '1px solid var(--border)' }}>
                             <div style={{ width: '56px', height: '56px', background: '#D1FAE5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
                                 <Check size={28} color="#10B981" />
                             </div>
                             <h3 style={{ fontWeight: 700, color: 'var(--text-primary)', margin: 0, fontSize: '1rem' }}>{t('sale_completed_success') || 'Sale completed successfully!'}</h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '3px' }}>{lastReceipt.number}</p>
                         </div>
-                        <div style={{ border: '1px dashed var(--border)', borderRadius: '10px', padding: '12px', marginBottom: '14px', background: 'var(--bg-secondary)' }}>
-                            <div style={{ textAlign: 'center', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px dashed var(--border)' }}>
-                                <p style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', margin: 0 }}>{lastReceipt.company}</p>
-                                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>{lastReceipt.date} | {lastReceipt.customer}</p>
-                            </div>
-                            {lastReceipt.items.map((item, i) => (
-                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '3px', color: 'var(--text-secondary)' }}>
-                                    <span>{item.name} × {item.qty}</span><span>{formatCurrency(item.total)}</span>
+
+                        {/* Receipt Content */}
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '22px' }}>
+                            {/* Company & Invoice Details Header */}
+                            <div style={{ border: '2px solid var(--border)', borderRadius: '12px', padding: '14px', marginBottom: '16px', background: 'var(--bg-secondary)' }}>
+                                <div style={{ textAlign: 'center', marginBottom: '12px', paddingBottom: '12px', borderBottom: '2px solid var(--border)' }}>
+                                    <p style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--primary)', margin: 0 }}>{lastReceipt.company}</p>
+                                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>{t('receipt_no') || 'Receipt No'}: <strong>{lastReceipt.number}</strong></p>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '3px 0 0' }}>{lastReceipt.date}</p>
                                 </div>
-                            ))}
-                            <div style={{ borderTop: '1px dashed var(--border)', marginTop: '8px', paddingTop: '8px' }}>
+
+                                {/* Customer Info Section */}
+                                <div style={{ background: 'rgba(99, 102, 241, 0.08)', padding: '10px', borderRadius: '8px', marginBottom: '10px', borderLeft: '3px solid var(--primary)' }}>
+                                    <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0 0 4px 0', fontWeight: 600 }}>{t('customer') || 'Customer'}:</p>
+                                    <p style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)', margin: 0 }}>{lastReceipt.customer}</p>
+                                </div>
+
+                                {/* Payment Method */}
+                                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, textAlign: 'center', fontWeight: 600 }}>
+                                    {t('payment_method') || 'Payment Method'}: <span style={{ color: 'var(--primary)', fontWeight: 800 }}>
+                                        {lastReceipt.payMethod === 'cash' ? (t('cash') || 'Cash') : 
+                                         lastReceipt.payMethod === 'credit' ? (t('credit') || 'Credit') :
+                                         (t('bank_transfer') || 'Bank Transfer')}
+                                    </span>
+                                </p>
+                            </div>
+
+                            {/* Items Table */}
+                            <div style={{ marginBottom: '16px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '8px', paddingBottom: '8px', borderBottom: '2px solid var(--border)', marginBottom: '8px' }}>
+                                    <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0, textTransform: 'uppercase' }}>{t('item') || 'Item'}</p>
+                                    <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0, textAlign: 'center', textTransform: 'uppercase' }}>{t('quantity') || 'Qty'}</p>
+                                    <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0, textAlign: 'right', textTransform: 'uppercase' }}>{t('total') || 'Total'}</p>
+                                </div>
+                                {lastReceipt.items.map((item, i) => (
+                                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '8px', paddingBottom: '6px', borderBottom: '1px solid rgba(0,0,0,0.05)', marginBottom: '4px' }}>
+                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: 500 }}>{item.name}</span>
+                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>× {item.qty}</span>
+                                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', textAlign: 'right' }}>{formatCurrency(item.total)}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Totals Section */}
+                            <div style={{ border: '2px solid var(--border)', borderRadius: '10px', padding: '12px', background: 'rgba(99, 102, 241, 0.04)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '6px', color: 'var(--text-secondary)' }}>
+                                    <span>{t('subtotal') || 'Subtotal'}</span><span>{formatCurrency(lastReceipt.subtotal)}</span>
+                                </div>
                                 {lastReceipt.discountAmount > 0 && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#ef4444', marginBottom: '3px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#ef4444', marginBottom: '6px', fontWeight: 600 }}>
                                         <span>{t('discount') || 'Discount'}</span><span>- {formatCurrency(lastReceipt.discountAmount)}</span>
                                     </div>
                                 )}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '0.95rem', color: 'var(--primary)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', paddingBottom: '4px', borderTop: '2px solid var(--border)', fontWeight: 800, fontSize: '1rem', color: 'var(--primary)' }}>
                                     <span>{t('final_total') || 'Total'}</span><span>{formatCurrency(lastReceipt.total)}</span>
                                 </div>
                                 {lastReceipt.change > 0 && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#10B981', marginTop: '3px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#10B981', marginTop: '6px', fontWeight: 700, paddingTop: '6px', borderTop: '1px dashed var(--border)' }}>
                                         <span>{t('change_amount') || 'Change'}</span><span>{formatCurrency(lastReceipt.change)}</span>
                                     </div>
                                 )}
                             </div>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+
+                        {/* Action Buttons Footer */}
+                        <div style={{ padding: '16px 22px', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                             <button onClick={printReceipt} style={{
-                                padding: '11px', background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-                                borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem',
-                                color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px'
+                                padding: '12px', background: 'linear-gradient(135deg, #3B82F6, #2563EB)', border: 'none',
+                                borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.88rem',
+                                color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
                             }}>
                                 <Printer size={16} /> {t('print') || 'Print'}
                             </button>
                             <button onClick={() => setShowReceipt(false)} style={{
-                                padding: '11px', background: 'var(--primary)', color: 'white',
+                                padding: '12px', background: 'linear-gradient(135deg, #10B981, #059669)', color: 'white',
                                 border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.88rem',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px'
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
                             }}>
                                 <Plus size={16} /> {t('new_sale') || 'New Sale'}
                             </button>
@@ -1002,35 +1075,95 @@ function generateReceiptHTML(receipt, settings, t) {
     const fmt = (v) => new Intl.NumberFormat('en-US', { minimumFractionDigits: decimals }).format(v || 0) + ' ' + symbol;
     const itemRows = receipt.items.map(item => `
         <tr>
-            <td style="padding:4px 6px;">${item.name}</td>
-            <td style="padding:4px 6px;text-align:center;">${item.qty}</td>
-            <td style="padding:4px 6px;text-align:right;">${fmt(item.price)}</td>
-            <td style="padding:4px 6px;text-align:right;font-weight:bold">${fmt(item.total)}</td>
+            <td style="padding:8px;border-bottom:1px dashed #000;">${item.name}</td>
+            <td style="padding:8px;text-align:center;border-bottom:1px dashed #000;">${item.qty}</td>
+            <td style="padding:8px;text-align:right;border-bottom:1px dashed #000;">${fmt(item.price)}</td>
+            <td style="padding:8px;text-align:right;font-weight:bold;border-bottom:1px dashed #000">${fmt(item.total)}</td>
         </tr>`).join('');
     return `<!DOCTYPE html><html dir="ltr" lang="en"><head><meta charset="UTF-8"><style>
-    *{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;font-size:12px;width:80mm;padding:8px;}
-    .header{text-align:center;border-bottom:1px dashed #000;padding-bottom:8px;margin-bottom:8px;}
-    .header h2{font-size:16px;font-weight:bold;}.header p{font-size:10px;color:#555;}
-    table{width:100%;border-collapse:collapse;}thead tr{border-bottom:1px solid #000;}
-    th{font-size:11px;padding:4px 6px;text-align:left;}
-    .totals{border-top:1px dashed #000;margin-top:8px;padding-top:8px;}
-    .totals .row{display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px;}
-    .totals .total-row{font-weight:bold;font-size:14px;}
-    .footer{text-align:center;margin-top:12px;border-top:1px dashed #000;padding-top:8px;font-size:10px;color:#555;}
-    @media print{body{margin:0;}}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Arial', sans-serif;font-size:13px;width:80mm;padding:10px;background:#fff;color:#000;}
+    .receipt-container{border:2px solid #000;border-radius:8px;padding:15px;background:#fff;}
+    .header{text-align:center;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:12px;}
+    .header h2{font-size:18px;font-weight:bold;margin:0 0 4px 0;}
+    .header .company-info{font-size:11px;line-height:1.6;}
+    .receipt-number{text-align:center;font-size:12px;font-weight:bold;margin:10px 0;border-top:1px solid #000;border-bottom:1px solid #000;padding:8px 0;}
+    .customer-section{padding:10px 0;margin:10px 0;border-bottom:1px dashed #000;}
+    .customer-section label{font-size:10px;font-weight:bold;text-transform:uppercase;display:block;margin-bottom:3px;}
+    .customer-section .name{font-size:13px;font-weight:bold;}
+    table{width:100%;border-collapse:collapse;margin:10px 0;}
+    thead tr{border-top:2px solid #000;border-bottom:2px solid #000;}
+    th{font-size:11px;padding:8px;text-align:left;font-weight:bold;}
+    td{padding:8px;font-size:12px;}
+    .totals-section{margin-top:12px;padding-top:12px;border-top:2px solid #000;}
+    .totals-row{display:flex;justify-content:space-between;padding:6px 0;font-size:12px;}
+    .subtotal{font-weight:normal;}
+    .discount{font-weight:bold;}
+    .total-row{font-weight:bold;font-size:16px;padding:10px 0;border-top:2px solid #000;border-bottom:2px solid #000;}
+    .change-row{font-weight:bold;margin-top:6px;padding-top:6px;border-top:1px dashed #000;}
+    .payment-method{text-align:center;font-size:11px;margin:10px 0;}
+    .footer{text-align:center;margin-top:12px;padding-top:12px;border-top:1px dashed #000;font-size:11px;}
+    @media print{body{margin:0;padding:0;}.receipt-container{border:1px solid #000;border-radius:0;}}
     </style></head><body>
-    <div class="header"><h2>${company}</h2>${phone ? `<p>📞 ${phone}</p>` : ''}${address ? `<p>${address}</p>` : ''}
-    <p style="margin-top:6px">${T('receipt_no') || 'Receipt No:'} <strong>${receipt.number}</strong></p>
-    <p>${T('date') || 'Date:'} ${receipt.date} | ${receipt.customer}</p></div>
-    <table><thead><tr><th>${T('item') || 'Item'}</th><th>${T('quantity') || 'Qty'}</th><th>${T('price') || 'Price'}</th><th>${T('total') || 'Total'}</th></tr></thead>
-    <tbody>${itemRows}</tbody></table>
-    <div class="totals">
-    <div class="row"><span>${T('subtotal') || 'Subtotal'}</span><span>${fmt(receipt.subtotal)}</span></div>
-    ${receipt.discountAmount > 0 ? `<div class="row"><span>${T('discount') || 'Discount'}</span><span>- ${fmt(receipt.discountAmount)}</span></div>` : ''}
-    <div class="row total-row"><span>${T('final_total') || 'Total'}</span><span>${fmt(receipt.total)}</span></div>
-    ${receipt.change > 0 ? `<div class="row" style="color:green"><span>${T('change_amount') || 'Change'}</span><span>${fmt(receipt.change)}</span></div>` : ''}
-    <div class="row"><span>${T('payment_method') || 'Payment Method'}</span><span>${receipt.payMethod === 'cash' ? (T('cash') || 'Cash') : (T('bank_transfer') || 'Bank Transfer')}</span></div></div>
-    <div class="footer"><p>${T('thank_you_visit') || 'Thank you for your visit'}</p></div></body></html>`;
+    <div class="receipt-container">
+    <div class="header">
+        <h2>${company}</h2>
+        <div class="company-info">
+            ${phone ? `<div>${phone}</div>` : ''}
+            ${address ? `<div>${address}</div>` : ''}
+        </div>
+    </div>
+    <div class="receipt-number">
+        <div>${T('receipt_no') || 'Receipt No'}: <strong>${receipt.number}</strong></div>
+        <div style="font-size:10px;margin-top:4px;color:#999;">${receipt.date}</div>
+    </div>
+    <div class="customer-section">
+        <label>${T('customer') || 'Customer'}</label>
+        <div class="name">${receipt.customer}</div>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>${T('item') || 'Item'}</th>
+                <th style="text-align:center;">${T('quantity') || 'Qty'}</th>
+                <th style="text-align:right;">${T('price') || 'Price'}</th>
+                <th style="text-align:right;">${T('total') || 'Total'}</th>
+            </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+    </table>
+    <div class="totals-section">
+        <div class="totals-row subtotal">
+            <span>${T('subtotal') || 'Subtotal'}</span>
+            <span>${fmt(receipt.subtotal)}</span>
+        </div>
+        ${receipt.discountAmount > 0 ? `
+        <div class="totals-row discount">
+            <span>${T('discount') || 'Discount'}</span>
+            <span>- ${fmt(receipt.discountAmount)}</span>
+        </div>` : ''}
+        <div class="totals-row total-row">
+            <span>${T('final_total') || 'Total'}</span>
+            <span>${fmt(receipt.total)}</span>
+        </div>
+        ${receipt.change > 0 ? `
+        <div class="totals-row change-row">
+            <span>${T('change_amount') || 'Change'}</span>
+            <span>${fmt(receipt.change)}</span>
+        </div>` : ''}
+    </div>
+    <div class="payment-method">
+        <strong>${T('payment_method') || 'Payment Method'}</strong><br>
+        ${receipt.payMethod === 'cash' ? (T('cash') || 'Cash') : 
+          receipt.payMethod === 'credit' ? (T('credit') || 'Credit') :
+          (T('bank_transfer') || 'Bank Transfer')}
+    </div>
+    <div class="footer">
+        <p style="margin:0;">${T('thank_you_visit') || 'Thank you for your visit'}</p>
+        <p style="margin:4px 0 0;font-size:9px;">${T('please_visit_again') || 'Visit us again soon'}</p>
+    </div>
+    </div>
+    </body></html>`;
 }
 
 export default POS;
