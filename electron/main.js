@@ -47,6 +47,12 @@ app.on('window-all-closed', () => {
     }
 });
 
+app.on('before-quit', () => {
+    if (db && typeof db.forceSave === 'function') {
+        db.forceSave();
+    }
+});
+
 // ==================== IPC Handlers ====================
 
 // Helper: log activity safely

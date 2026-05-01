@@ -7,6 +7,7 @@ class AppDatabase {
         this.db = null;
         this.dbPath = null;
         this.app = null;
+        this._saveTimeout = null;
     }
 
     async init(app) {
@@ -45,9 +46,27 @@ class AppDatabase {
     }
 
     save() {
-        const data = this.db.export();
-        const buffer = Buffer.from(data);
-        fs.writeFileSync(this.dbPath, buffer);
+        if (this._saveTimeout) {
+            clearTimeout(this._saveTimeout);
+        }
+        this._saveTimeout = setTimeout(() => {
+            this.forceSave();
+        }, 500); // Wait 500ms before actual disk write
+    }
+
+    forceSave() {
+        if (this._saveTimeout) {
+            clearTimeout(this._saveTimeout);
+            this._saveTimeout = null;
+        }
+        if (!this.db || !this.dbPath) return;
+        try {
+            const data = this.db.export();
+            const buffer = Buffer.from(data);
+            fs.writeFileSync(this.dbPath, buffer);
+        } catch (e) {
+            console.error('[DB] Error saving database:', e);
+        }
     }
 
     run(sql, params = []) {
