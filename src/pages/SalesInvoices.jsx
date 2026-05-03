@@ -310,10 +310,7 @@ function SalesInvoices() {
 
     const handleEdit = async (invoiceId) => {
         try {
-            console.log('[handleEdit] Loading invoice:', invoiceId);
             const invoice = await window.api.invoices.getById(invoiceId);
-            console.log('[handleEdit] Got invoice:', invoice);
-            console.log('[handleEdit] Invoice items:', invoice?.items);
 
             if (!invoice) {
                 toast.error(t('inv_loadError'));
@@ -332,9 +329,7 @@ function SalesInvoices() {
                     color: item.color || '',
                     unit: item.unit || ''
                 }));
-                console.log('[handleEdit] Mapped items:', mappedItems);
             } else {
-                console.log('[handleEdit] No items found, using empty row');
                 mappedItems = [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '', unit: '' }];
             }
 
@@ -363,8 +358,6 @@ function SalesInvoices() {
             // Reload fresh settings to get latest logo/terms
             const freshSettings = await window.api.settings.getAll();
             setSettings(freshSettings || {});
-            console.log('[SalesInvoices.viewInvoice] Fresh settings reloaded:', freshSettings);
-            console.log('[SalesInvoices.viewInvoice] Logo path:', freshSettings?.company?.company_logo);
 
             const invoice = await window.api.invoices.getById(id);
             setSelectedInvoice(invoice);
@@ -392,19 +385,136 @@ function SalesInvoices() {
         }
         const logoHtml = logoBase64 ? `<img src="${logoBase64}" alt="Logo" style="max-height:60px;max-width:140px;object-fit:contain" />` : '';
         const showCompanyInfo = settings.invoice?.show_company_info !== 'no';
-        const companyInfoHtml = showCompanyInfo ? `<div style="line-height:1.5"><h1 style="margin:0;font-size:20px;font-weight:700">${companyName}</h1>${companyAddress ? `<p style="margin:2px 0;font-size:11px;color:#555">${companyAddress}</p>` : ''}${companyPhone ? `<p style="margin:2px 0;font-size:11px;color:#555">${t('phone_abbr') || 'Tel'}: ${companyPhone}</p>` : ''}${companyEmail ? `<p style="margin:2px 0;font-size:11px;color:#555">${companyEmail}</p>` : ''}${companyTaxNumber ? `<p style="margin:2px 0;font-size:11px;color:#555">${t('tax_number_abbr') || 'Tax No'}: ${companyTaxNumber}</p>` : ''}</div>` : '';
+        const companyInfoHtml = showCompanyInfo ? `
+            <div style="text-align:center; color:#555; max-width:300px;">
+                ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" style="max-height:80px;max-width:160px;object-fit:contain;margin-bottom:10px;" />` : ''}
+                <h1 style="margin:0;font-size:20px;font-weight:bold;color:#111;">${companyName}</h1>
+                ${companyAddress ? `<p style="margin:4px 0 0;font-size:13px;">${companyAddress}</p>` : ''}
+                ${companyPhone ? `<p style="margin:4px 0 0;font-size:13px;"><span style="color:#777;">${t('phone_abbr') || 'الهاتف'}:</span> <span style="direction:ltr; display:inline-block;">${companyPhone}</span></p>` : ''}
+                ${companyTaxNumber ? `<p style="margin:4px 0 0;font-size:13px;"><span style="color:#777;">${t('tax_number_abbr') || 'الرقم الضريبي'}:</span> <span style="direction:ltr; display:inline-block;">${companyTaxNumber}</span></p>` : ''}
+            </div>` : '';
         const inv = selectedInvoice;
         const statusLabel = inv.status === 'paid' ? (t('inv_paid') || 'Paid') : inv.status === 'partial' ? (t('inv_partial') || 'Partially Paid') : (t('inv_credit') || 'Credit');
-        const formatCurr = (a) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(a || 0) + ' ' + currencySymbol;
-        const statusColor = inv.status === 'paid' ? '#22c55e' : inv.status === 'partial' ? '#f59e0b' : '#ef4444';
-
-        const itemsHtml = (inv.items || []).map((item, i) => `<tr style="border-bottom:1px solid #e2e8f0;${i % 2 === 1 ? 'background:#f8fafc' : ''}"><td style="padding:10px 12px;text-align:center;color:#64748b;font-size:13px">${i + 1}</td><td style="padding:10px 12px;font-weight:500">${item.product_name || item.description || '-'}</td><td style="padding:10px 12px;text-align:center">${item.quantity}</td><td style="padding:10px 12px;text-align:center">${Number(item.unit_price).toFixed(3)} ${currencySymbol}</td><td style="padding:10px 12px;text-align:center;font-weight:600;color:#1a365d">${Number(item.total).toFixed(3)} ${currencySymbol}</td></tr>`).join('');
+        const formatCurr = (a) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(a || 0);
+        const formatCurrWithSymbol = (a) => formatCurr(a) + ' ' + currencySymbol;
 
         const isRtl = document.documentElement.dir === 'rtl';
         const alignLeft = isRtl ? 'right' : 'left';
         const alignRight = isRtl ? 'left' : 'right';
 
-        const html = `<!DOCTYPE html><html dir="${isRtl ? 'rtl' : 'ltr'}" lang="${isRtl ? 'ar' : 'en'}"><head><meta charset="UTF-8"><style>@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Cairo','Arial',sans-serif;padding:0;background:white;color:#334155;font-size:14px}.invoice-page{max-width:780px;margin:0 auto;padding:30px}.header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px}.divider{height:3px;background:linear-gradient(90deg,#1a365d 0%,#3b82f6 50%,#1a365d 100%);border-radius:2px;margin-bottom:20px}.invoice-title-bar{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#1a365d,#2563eb);color:white;padding:12px 20px;border-radius:8px;margin-bottom:20px}.invoice-title-bar h2{margin:0;font-size:18px;font-weight:600}.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px}.meta-box{padding:15px;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafc}.meta-box h4{font-size:12px;color:#64748b;margin-bottom:8px}.meta-box .value{font-weight:600;color:#1a365d}table{width:100%;border-collapse:collapse;margin-bottom:20px}thead th{background:linear-gradient(135deg,#1a365d,#2563eb);color:white;padding:11px 12px;font-weight:600;font-size:13px;text-align:${isRtl ? 'right' : 'left'}}thead th:first-child{border-radius:${isRtl ? '0 8px 0 0' : '8px 0 0 0'}}thead th:last-child{border-radius:${isRtl ? '8px 0 0 0' : '0 8px 0 0'}}.totals-section{display:flex;justify-content:flex-end;margin-bottom:20px;${isRtl ? 'justify-content:flex-start;' : ''}}.totals-table{width:280px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0}.totals-table tr td{padding:10px 15px;font-size:13px}.totals-table tr:last-child{background:linear-gradient(135deg,#1a365d,#2563eb);color:white;font-size:16px;font-weight:700}.notes-box{padding:12px 15px;background:#fefce8;border:1px solid #fde68a;border-radius:8px;margin-bottom:15px;font-size:13px}.terms-box{padding:12px 15px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;margin-bottom:20px;font-size:12px}.footer{border-top:2px solid #e2e8f0;padding-top:15px;text-align:center;color:#64748b;font-size:13px}.status-badge{display:inline-block;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:600;color:white}@media print{body{padding:0}.invoice-page{padding:15px}@page{margin:10mm}}</style></head><body><div class="invoice-page"><div class="header"><div style="display:flex;align-items:center;gap:15px">${logoHtml}${companyInfoHtml}</div><div style="text-align:${alignRight}"><p style="font-size:13px;color:#64748b;margin:3px 0"><strong>${t('inv_number') || 'Invoice No'}:</strong> ${inv.invoice_number}</p><p style="font-size:13px;color:#64748b;margin:3px 0"><strong>${t('date') || 'Date'}:</strong> ${new Date(inv.date).toLocaleDateString('en-GB')}</p>${inv.due_date ? `<p style="font-size:13px;color:#64748b;margin:3px 0"><strong>${t('inv_dueDate') || 'Due Date'}:</strong> ${new Date(inv.due_date).toLocaleDateString('en-GB')}</p>` : ''}</div></div><div class="divider"></div><div class="invoice-title-bar"><h2>${invoiceTitle}</h2><span class="status-badge" style="background:${statusColor}">${statusLabel}</span></div><div class="meta-grid"><div class="meta-box"><h4>${t('customer_data') || 'Customer Data'}</h4><p class="value">${inv.customer_name || (t('cash_customer') || 'Cash Customer')}</p></div><div class="meta-box"><h4>${t('payment_info') || 'Payment Info'}</h4><p><strong>${t('status') || 'Status'}:</strong> <span style="color:${statusColor};font-weight:600">${statusLabel}</span></p>${inv.payment_method ? `<p><strong>${t('inv_paymentMethod') || 'Payment Method'}:</strong> ${inv.payment_method === 'cash' ? (t('inv_cash') || 'Cash') : inv.payment_method === 'bank' ? (t('inv_bank') || 'Bank Transfer') : inv.payment_method}</p>` : ''}</div></div><table><thead><tr><th style="width:40px;text-align:center">#</th><th>${t('inv_product') || 'Item'}</th><th style="width:80px;text-align:center">${t('inv_quantity') || 'Qty'}</th><th style="width:110px;text-align:center">${t('inv_unitPrice') || 'Price'}</th><th style="width:110px;text-align:center">${t('inv_itemTotal') || 'Total'}</th></tr></thead><tbody>${itemsHtml}</tbody></table><div class="totals-section"><table class="totals-table">${inv.subtotal && inv.subtotal !== inv.total ? `<tr style="background:#f8fafc"><td>${t('subtotal') || 'Subtotal'}</td><td style="text-align:${alignLeft}">${formatCurr(inv.subtotal)}</td></tr>` : ''}${inv.discount ? `<tr style="background:#fef2f2"><td>${t('discount') || 'Discount'}</td><td style="text-align:${alignLeft};color:#ef4444">- ${formatCurr(inv.discount)}</td></tr>` : ''}${inv.tax ? `<tr style="background:#f0f9ff"><td>${t('tax') || 'Tax'}</td><td style="text-align:${alignLeft}">${formatCurr(inv.tax)}</td></tr>` : ''}<tr><td>${t('final_total') || 'Final Total'}</td><td style="text-align:${alignLeft}">${formatCurr(inv.total)}</td></tr></table></div>${inv.notes ? `<div class="notes-box"><strong>${t('notes') || 'Notes'}:</strong> ${inv.notes}</div>` : ''}${invoiceTerms ? `<div class="terms-box"><strong style="display:block;margin-bottom:5px">${t('terms_and_conditions') || 'Terms and Conditions'}:</strong><div style="white-space:pre-wrap;color:#475569">${invoiceTerms}</div></div>` : ''}<div class="footer"><p>${invoiceFooter}</p></div></div></body></html>`;
+        const itemsHtml = (inv.items || []).map((item, i) => `
+        <tr style="border-bottom:1px solid #eee; background:${i % 2 === 1 ? '#fafafa' : '#ffffff'};">
+            <td style="padding:12px; text-align:center; color:#555; font-size:13px;">${i + 1}</td>
+            <td style="padding:12px; font-weight:500; text-align:${alignRight};">${item.product_name || item.description || '-'}</td>
+            <td style="padding:12px; text-align:center;">${item.quantity}</td>
+            <td style="padding:12px; text-align:center;">${formatCurr(item.unit_price)}</td>
+            <td style="padding:12px; text-align:center; font-weight:600; color:#111;">${formatCurr(item.total)}</td>
+        </tr>`).join('');
+
+        const html = `<!DOCTYPE html>
+<html dir="${isRtl ? 'rtl' : 'ltr'}" lang="${isRtl ? 'ar' : 'en'}">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:Arial,sans-serif;padding:0;background:white;color:#333;font-size:14px;line-height:1.5;}
+        .invoice-page{max-width:800px;margin:0 auto;padding:40px;}
+        .header{display:flex;justify-content:space-between;align-items:flex-start;}
+        .divider{height:4px;background:#1f1f1f;margin:25px 0;}
+        .meta-bar{background:#f8f9fa;padding:12px 20px;display:flex;justify-content:space-between;border-radius:4px;margin-bottom:25px;border:1px solid #eee;font-size:13px;}
+        table{width:100%;border-collapse:collapse;margin-bottom:30px;}
+        thead th{background:#1f1f1f;color:white;padding:12px;font-weight:600;font-size:13px;}
+        .totals-table{width:300px;border-collapse:collapse;border:1px solid #eee;font-size:14px;}
+        .totals-table td{padding:12px;border-bottom:1px solid #eee;}
+        .notes-box{padding:15px;background:#fefce8;border:1px solid #fde68a;border-radius:4px;margin-bottom:20px;font-size:13px;}
+        .terms-box{padding:15px;background:#f8f9fa;border:1px solid #eee;border-radius:4px;margin-bottom:20px;font-size:12px;}
+        @media print{body{padding:0}.invoice-page{padding:20px}@page{margin:5mm}}
+    </style>
+</head>
+<body>
+    <div class="invoice-page">
+        <div class="header">
+            <!-- Left Side (Title and Meta) -->
+            <div>
+                <h2 style="font-size:24px; font-weight:bold; margin-bottom: 20px; color:#1f1f1f;">${invoiceTitle}</h2>
+                <table style="width:auto; margin-bottom:0; font-size:13px; color:#555;">
+                    <tr>
+                        <td style="padding:0 0 10px ${isRtl ? '20px' : '0'}; padding-right:${isRtl ? '0' : '20px'};">${t('inv_number') || 'رقم الفاتورة'}</td>
+                        <td style="padding:0 0 10px 0; font-weight:600; font-family:monospace; font-size:14px; color:#111;">${inv.invoice_number}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:0 0 10px ${isRtl ? '20px' : '0'}; padding-right:${isRtl ? '0' : '20px'};">${t('date') || 'التاريخ'}</td>
+                        <td style="padding:0 0 10px 0; font-weight:600; color:#111;">${new Date(inv.date).toLocaleDateString('en-GB')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:0 0 10px ${isRtl ? '20px' : '0'}; padding-right:${isRtl ? '0' : '20px'};">${t('time') || 'الوقت'}</td>
+                        <td style="padding:0 0 10px 0; font-weight:600; color:#111;">${new Date(inv.created_at || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <!-- Right Side (Logo and Company Info) -->
+            <div>
+                ${companyInfoHtml}
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="meta-bar">
+            <div><strong>${t('cashier') || 'Cashier'}:</strong> ${user?.name || 'Admin'}</div>
+            <div><strong>${t('inv_paymentMethod') || 'Payment'}:</strong> ${inv.payment_method === 'cash' ? (t('inv_cash') || 'Cash') : inv.payment_method === 'bank' ? (t('inv_bank') || 'Bank Transfer') : inv.payment_method}</div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:40px;text-align:center">#</th>
+                    <th style="text-align:${alignRight}">${t('inv_product') || 'Item'}</th>
+                    <th style="width:80px;text-align:center">${t('inv_quantity') || 'Qty'}</th>
+                    <th style="width:110px;text-align:center">${t('inv_unitPrice') || 'Price'}</th>
+                    <th style="width:110px;text-align:center">${t('inv_itemTotal') || 'Total'}</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${itemsHtml}
+            </tbody>
+        </table>
+
+        <div style="display:flex; justify-content:flex-end; ${isRtl ? 'justify-content:flex-start;' : ''}">
+            <table class="totals-table">
+                ${inv.subtotal && inv.subtotal !== inv.total ? `
+                <tr>
+                    <td>${t('subtotal') || 'Subtotal'}</td>
+                    <td style="text-align:${alignLeft}">${formatCurrWithSymbol(inv.subtotal)}</td>
+                </tr>` : ''}
+                ${inv.discount ? `
+                <tr>
+                    <td>${t('discount') || 'Discount'}</td>
+                    <td style="text-align:${alignLeft};color:#ef4444">- ${formatCurrWithSymbol(inv.discount)}</td>
+                </tr>` : ''}
+                ${inv.tax ? `
+                <tr>
+                    <td>${t('tax') || 'Tax'}</td>
+                    <td style="text-align:${alignLeft}">${formatCurrWithSymbol(inv.tax)}</td>
+                </tr>` : ''}
+                <tr style="background:#1f1f1f;color:white;font-size:16px;font-weight:bold;border:none;">
+                    <td style="padding:15px; border-radius:${isRtl ? '0 4px 4px 0' : '4px 0 0 4px'};">${t('final_total') || 'Total'}</td>
+                    <td style="text-align:${alignLeft}; padding:15px; border-radius:${isRtl ? '4px 0 0 4px' : '0 4px 4px 0'};">${formatCurrWithSymbol(inv.total)}</td>
+                </tr>
+            </table>
+        </div>
+
+        ${inv.notes ? `<div class="notes-box"><strong>${t('notes') || 'Notes'}:</strong><br/>${inv.notes}</div>` : ''}
+        ${invoiceTerms ? `<div class="terms-box"><strong>${t('terms_and_conditions') || 'Terms and Conditions'}:</strong><br/>${invoiceTerms}</div>` : ''}
+        
+        <div style="text-align:center; margin-top:40px; color:#666; font-size:13px;">
+            <p>${invoiceFooter}</p>
+            <p style="color:#aaa; font-size:11px; margin-top:8px;">${companyName}</p>
+        </div>
+    </div>
+</body>
+</html>`;
         await window.api.print.invoice(html);
     };
 
@@ -548,7 +658,16 @@ function SalesInvoices() {
                                                 {formatCurrency(inv.total)}
                                                 {inv.discount > 0 && <span style={{ display: 'block', fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>{t('discount')}: {formatCurrency(inv.discount)}</span>}
                                             </td>
-                                            <td><span className={`badge ${inv.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{getStatusLabel(inv.status)}</span></td>
+                                            <td>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <span className={`badge ${inv.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{getStatusLabel(inv.status)}</span>
+                                                    {(inv.status === 'paid' || inv.status === 'partial') && inv.payment_method && inv.payment_method !== 'credit' && (
+                                                        <span style={{ fontSize: '11px', color: '#666', background: '#f5f5f5', padding: '2px 6px', borderRadius: '4px', border: '1px solid #ddd', whiteSpace: 'nowrap' }}>
+                                                            {inv.payment_method === 'bank' ? (t('inv_bank') || 'بنكي') : inv.payment_method === 'cash' ? (t('inv_cash') || 'نقدي') : inv.payment_method}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
                                             <td>
                                                 <div className="table-actions">
                                                     {user?.permissions?.sales_invoices?.can_view && (

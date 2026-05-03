@@ -53,8 +53,10 @@ function InvoicePrintPreview({ invoice, settings, onClose, type = 'sales' }) {
     };
     const getPayLabel = (m) => m === 'bank' ? (t('bank_transfer') || 'Bank Transfer') : m === 'cash' ? (t('cash') || 'Cash') : (t('credit') || 'Credit');
 
-    const logoImg = (h, maxW = '160px') => showLogo && (logoBase64 || logoSrc)
-        ? `<img src="${logoBase64 || logoSrc}" alt="Logo" style="max-height:${h};max-width:${maxW};object-fit:contain"/>`
+    const validLogoUrl = logoBase64 ? logoBase64 : (logoSrc && logoSrc.startsWith('http') ? logoSrc : null);
+    
+    const logoImg = (h, maxW = '160px') => showLogo && validLogoUrl
+        ? `<img src="${validLogoUrl}" alt="Logo" style="max-height:${h};max-width:${maxW};object-fit:contain"/>`
         : '';
 
     const compInfoHtml = (size = 11) => showCompanyInfo ? `
@@ -79,7 +81,7 @@ function InvoicePrintPreview({ invoice, settings, onClose, type = 'sales' }) {
     const pageSize = isThermo ? thermoWidth : (paperSize === 'A5' ? 'A5' : 'A4');
     const pageMargin = isThermo ? '5mm' : '10mm';
     const pageOrient = !isThermo && paperOrientation === 'landscape' ? ' landscape' : '';
-    const font = "@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap');";
+    const font = "";
 
     const itemsRows = (items, tdStyle = '') => (items || []).map((item, i) => {
         const shouldShowColor = settings?.general?.enable_product_color === 'yes' && isColorUnit(item.unit) && item.color;
@@ -132,75 +134,137 @@ ${extraCss}
     // TEMPLATE 1: MODERN (colored full-width header band)
     // ─────────────────────────────────────────────────────────────────────────
     const templateModern = () => {
-        const css = `
-.band{background:${printColor};color:#fff;padding:20px 24px;display:flex;justify-content:space-between;align-items:center;margin:-28px -28px 20px -28px;${isThermo ? 'margin:-10px -10px 14px' : ''}border-radius:4px 4px 0 0;gap:16px}
-.band-right{flex:1;text-align:right}
-.band-title{font-size:24px;font-weight:800;letter-spacing:1px;margin-bottom:6px}
-.band-num{font-size:13px;opacity:.9;font-weight:600}
-.band-center{text-align:center;flex-shrink:0}
-.band-logo{max-height:${logoMaxH};max-width:120px}
-.band-left{flex:1;text-align:left;font-size:12px;line-height:1.6;opacity:.95}
-.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
-.meta-box{padding:12px 14px;border:1px solid #e5e7eb;border-radius:8px;background:#fafbfc}
-.meta-box .lbl{font-size:9px;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;display:block}
-.meta-box .val{font-weight:800;font-size:15px;color:#1f2937}
-.meta-box .sub{font-size:12px;color:#4b5563;margin-top:4px;line-height:1.4}
-table.items{width:100%;border-collapse:collapse;margin-bottom:18px;background:#fff}
-.items thead tr{background:${printColor};color:#fff}
-.items thead th{padding:12px 14px;font-size:11px;font-weight:800;text-align:right;letter-spacing:.5px;text-transform:uppercase;border:none}
-.items thead th:first-child{text-align:center;width:40px}
-.items tbody tr:nth-child(even){background:#f9fafb}
-.items tbody tr:hover{background:#f3f4f6}
-.items tbody td{padding:12px 14px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151}
-.items tbody td:first-child{text-align:center;color:#d1d5db;font-size:11px}
-.items tbody td:last-child{font-weight:700;color:${printColor}}
-.totals-wrap{display:flex;justify-content:flex-end;margin-bottom:18px}
-.totals{border-collapse:collapse;width:300px}
-.totals td{padding:10px 14px;font-size:12px;border-bottom:1px solid #e5e7eb;color:#374151}
-.totals td:first-child{font-weight:600;text-align:right}
-.totals td:last-child{text-align:left;font-weight:700;color:${printColor}}
-.totals tr:last-child td{background:${printColor};color:#fff;font-weight:800;font-size:14px;border:none;padding:14px 14px}
-.totals tr:last-child td:last-child{text-align:right}
-`;
-        const body = `
-<div class="band">
-  <div class="band-right">
-    <div class="band-title">${invoiceTitle}</div>
-    <div class="band-num"># ${invoice.invoice_number}</div>
-    <div style="font-size:11px;opacity:.85;margin-top:4px">${new Date(invoice.date).toLocaleDateString('ar-KW')}</div>
-  </div>
-  <div class="band-center">${logoImg(logoMaxH, '120px')}</div>
-  <div class="band-left">${showCompanyInfo ? `<div style="font-weight:800;margin-bottom:6px;font-size:13px">${companyName}</div><div style="font-size:11px;line-height:1.6">${companyAddress || ''}${companyAddress && companyPhone ? '<br>' : ''}${companyPhone ? `${t('phone_label') || 'الهاتف'}: ${companyPhone}` : ''}${(companyPhone || companyAddress) && companyTaxNumber ? '<br>' : ''}${companyTaxNumber ? `${t('tax_number_label') || 'الضريبة'}: ${companyTaxNumber}` : ''}</div>` : ''}</div>
-</div>
-<div class="meta-grid">
-  <div class="meta-box">
-    <span class="lbl">${clientLabel}</span>
-    <div class="val">${clientName}</div>
-  </div>
-  <div class="meta-box">
-    <span class="lbl">${t('invoice_status') || 'حالة الفاتورة'}</span>
-    <div class="sub"><strong>${getStatusLabel(invoice.status)}</strong></div>
-    <div class="sub" style="margin-top:3px">${t('payment') || 'الدفع'}: ${getPayLabel(invoice.payment_method)}</div>
-  </div>
-  <div class="meta-box">
-    <span class="lbl">${t('invoice_dates') || 'التواريخ'}</span>
-    <div class="sub"><strong>${t('invoice_date') || 'التاريخ'}:</strong><br>${new Date(invoice.date).toLocaleDateString('ar-KW')}</div>
-    ${invoice.due_date && invoice.due_date !== invoice.date ? `<div class="sub" style="margin-top:4px"><strong>${t('due_date') || 'الاستحقاق'}:</strong><br>${new Date(invoice.due_date).toLocaleDateString('ar-KW')}</div>` : ''}
-  </div>
-</div>
-<table class="items">
-  <thead><tr><th>#</th><th>${t('item_desc') || 'الصنف / الوصف'}</th><th style="width:70px;text-align:center">${t('quantity') || 'الكمية'}</th><th style="width:90px;text-align:center">${t('unit_price') || 'سعر الوحدة'}</th><th style="width:110px;text-align:center">${t('total') || 'الإجمالي'}</th></tr></thead>
-  <tbody>${itemsRows(invoice.items)}</tbody>
-</table>
-<div class="totals-wrap"><table class="totals"><tbody>
-<tr><td>${t('subtotal') || 'المجموع الفرعي'}</td><td>${formatCurrency(invoice.subtotal || invoice.total)}</td></tr>
-${invoice.discount > 0 ? `<tr><td>${t('discount') || 'الخصم'}</td><td>- ${formatCurrency(invoice.discount)}</td></tr>` : ''}
-${invoice.tax > 0 ? `<tr><td>${t('tax') || 'الضريبة'}</td><td>${formatCurrency(invoice.tax)}</td></tr>` : ''}
-<tr><td>${t('final_total') || 'الإجمالي النهائي'}</td><td>${formatCurrency(invoice.total)}</td></tr>
-</tbody></table></div>
-${notesBlock()}${termsBlock()}${sigBlock()}${footerBlock(printColor)}`;
-        return wrap(body, css);
+        const isRtl = document.documentElement.dir === 'rtl';
+        const alignLeft = isRtl ? 'right' : 'left';
+        const alignRight = isRtl ? 'left' : 'right';
+        const formatCurr = (a) => Number(a || 0).toFixed(decimalPlaces);
+        const formatCurrWithSymbol = (a) => formatCurr(a) + ' ' + currencySymbol;
+
+        const itemsHtml = (invoice.items || []).map((item, i) => `
+        <tr style="border-bottom:1px solid #eee; background:${i % 2 === 1 ? '#fafafa' : '#ffffff'};">
+            <td style="padding:12px; text-align:center; color:#555; font-size:13px;">${i + 1}</td>
+            <td style="padding:12px; font-weight:500; text-align:${alignRight};">${item.product_name || item.description || '-'}</td>
+            <td style="padding:12px; text-align:center;">${item.quantity}</td>
+            <td style="padding:12px; text-align:center;">${formatCurr(item.unit_price)}</td>
+            <td style="padding:12px; text-align:center; font-weight:600; color:#111;">${formatCurr(item.total)}</td>
+        </tr>`).join('');
+
+        const companyInfoHtml = showCompanyInfo ? `
+            <div style="text-align:center; color:#555; max-width:300px;">
+                ${validLogoUrl ? `<img src="${validLogoUrl}" alt="Logo" style="max-height:80px;max-width:160px;object-fit:contain;margin-bottom:10px;" />` : ''}
+                <h1 style="margin:0;font-size:20px;font-weight:bold;color:#111;">${companyName}</h1>
+                ${companyAddress ? `<p style="margin:4px 0 0;font-size:13px;">${companyAddress}</p>` : ''}
+                ${companyPhone ? `<p style="margin:4px 0 0;font-size:13px;"><span style="color:#777;">${t('phone_abbr') || 'الهاتف'}:</span> <span style="direction:ltr; display:inline-block;">${companyPhone}</span></p>` : ''}
+                ${companyTaxNumber ? `<p style="margin:4px 0 0;font-size:13px;"><span style="color:#777;">${t('tax_number_abbr') || 'الرقم الضريبي'}:</span> <span style="direction:ltr; display:inline-block;">${companyTaxNumber}</span></p>` : ''}
+            </div>` : '';
+
+        const html = `<!DOCTYPE html>
+<html dir="${isRtl ? 'rtl' : 'ltr'}" lang="${isRtl ? 'ar' : 'en'}">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:Arial,sans-serif;padding:0;background:white;color:#333;font-size:14px;line-height:1.5;}
+        .invoice-page{max-width:800px;margin:0 auto;padding:40px;}
+        .header{display:flex;justify-content:space-between;align-items:flex-start;}
+        .divider{height:4px;background:#1f1f1f;margin:25px 0;}
+        .meta-bar{background:#f8f9fa;padding:12px 20px;display:flex;justify-content:space-between;border-radius:4px;margin-bottom:25px;border:1px solid #eee;font-size:13px;}
+        table{width:100%;border-collapse:collapse;margin-bottom:30px;}
+        thead th{background:#1f1f1f;color:white;padding:12px;font-weight:600;font-size:13px;}
+        .totals-table{width:300px;border-collapse:collapse;border:1px solid #eee;font-size:14px;}
+        .totals-table td{padding:12px;border-bottom:1px solid #eee;}
+        .notes-box{padding:15px;background:#fefce8;border:1px solid #fde68a;border-radius:4px;margin-bottom:20px;font-size:13px;}
+        .terms-box{padding:15px;background:#f8f9fa;border:1px solid #eee;border-radius:4px;margin-bottom:20px;font-size:12px;}
+        @media print{body{padding:0}.invoice-page{padding:20px}@page{margin:5mm}}
+    </style>
+</head>
+<body>
+    <div class="invoice-page">
+        <div class="header">
+            <!-- Left Side (Title and Meta) -->
+            <div>
+                <h2 style="font-size:24px; font-weight:bold; margin-bottom: 20px; color:#1f1f1f;">${invoiceTitle}</h2>
+                <table style="width:auto; margin-bottom:0; font-size:13px; color:#555;">
+                    <tr>
+                        <td style="padding:0 0 10px ${isRtl ? '20px' : '0'}; padding-right:${isRtl ? '0' : '20px'};">${t('inv_number') || 'رقم الفاتورة'}</td>
+                        <td style="padding:0 0 10px 0; font-weight:600; font-family:monospace; font-size:14px; color:#111;">${invoice.invoice_number}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:0 0 10px ${isRtl ? '20px' : '0'}; padding-right:${isRtl ? '0' : '20px'};">${t('date') || 'التاريخ'}</td>
+                        <td style="padding:0 0 10px 0; font-weight:600; color:#111;">${new Date(invoice.date).toLocaleDateString('en-GB')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:0 0 10px ${isRtl ? '20px' : '0'}; padding-right:${isRtl ? '0' : '20px'};">${t('time') || 'الوقت'}</td>
+                        <td style="padding:0 0 10px 0; font-weight:600; color:#111;">${new Date(invoice.created_at || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <!-- Right Side (Logo and Company Info) -->
+            <div>
+                ${companyInfoHtml}
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="meta-bar">
+            <div><strong>${t('cashier') || 'Cashier'}:</strong> ${invoice.created_by_name || 'Admin'}</div>
+            <div><strong>${t('inv_paymentMethod') || 'Payment'}:</strong> ${invoice.payment_method === 'cash' ? (t('inv_cash') || 'Cash') : invoice.payment_method === 'bank' ? (t('inv_bank') || 'Bank Transfer') : invoice.payment_method}</div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:40px;text-align:center">#</th>
+                    <th style="text-align:${alignRight}">${t('inv_product') || 'Item'}</th>
+                    <th style="width:80px;text-align:center">${t('inv_quantity') || 'Qty'}</th>
+                    <th style="width:110px;text-align:center">${t('inv_unitPrice') || 'Price'}</th>
+                    <th style="width:110px;text-align:center">${t('inv_itemTotal') || 'Total'}</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${itemsHtml}
+            </tbody>
+        </table>
+
+        <div style="display:flex; justify-content:flex-end; ${isRtl ? 'justify-content:flex-start;' : ''}">
+            <table class="totals-table">
+                ${invoice.subtotal && invoice.subtotal !== invoice.total ? `
+                <tr>
+                    <td>${t('subtotal') || 'Subtotal'}</td>
+                    <td style="text-align:${alignLeft}">${formatCurrWithSymbol(invoice.subtotal)}</td>
+                </tr>` : ''}
+                ${invoice.discount ? `
+                <tr>
+                    <td>${t('discount') || 'Discount'}</td>
+                    <td style="text-align:${alignLeft};color:#ef4444">- ${formatCurrWithSymbol(invoice.discount)}</td>
+                </tr>` : ''}
+                ${invoice.tax ? `
+                <tr>
+                    <td>${t('tax') || 'Tax'}</td>
+                    <td style="text-align:${alignLeft}">${formatCurrWithSymbol(invoice.tax)}</td>
+                </tr>` : ''}
+                <tr style="background:#1f1f1f;color:white;font-size:16px;font-weight:bold;border:none;">
+                    <td style="padding:15px; border-radius:${isRtl ? '0 4px 4px 0' : '4px 0 0 4px'};">${t('final_total') || 'Total'}</td>
+                    <td style="text-align:${alignLeft}; padding:15px; border-radius:${isRtl ? '4px 0 0 4px' : '0 4px 4px 0'};">${formatCurrWithSymbol(invoice.total)}</td>
+                </tr>
+            </table>
+        </div>
+
+        ${invoice.notes ? `<div class="notes-box"><strong>${t('notes') || 'Notes'}:</strong><br/>${invoice.notes}</div>` : ''}
+        ${invoiceTerms ? `<div class="terms-box"><strong>${t('terms_and_conditions') || 'Terms and Conditions'}:</strong><br/>${invoiceTerms}</div>` : ''}
+        
+        <div style="text-align:center; margin-top:40px; color:#666; font-size:13px;">
+            <p>${invoiceFooter}</p>
+            <p style="color:#aaa; font-size:11px; margin-top:8px;">${companyName}</p>
+        </div>
+    </div>
+</body>
+</html>`;
+        return html;
     };
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // TEMPLATE 2: CLASSIC (black & white, formal)
@@ -406,8 +470,8 @@ ${notesBlock()}${termsBlock()}${sigBlock()}${footerBlock(printColor)}`;
 
     // ── LIVE PREVIEW (React JSX version of chosen template) ──
     const previewColor = printColor;
-    const logoEl = showLogo && (logoBase64 || logoSrc)
-        ? <img src={logoBase64 || logoSrc} alt="Logo" style={{ maxHeight: logoMaxH, maxWidth: 160, objectFit: 'contain' }} />
+    const logoEl = showLogo && validLogoUrl
+        ? <img src={validLogoUrl} alt="Logo" style={{ maxHeight: logoMaxH, maxWidth: 160, objectFit: 'contain' }} />
         : null;
 
     const TEMPLATES = [
@@ -454,36 +518,45 @@ ${notesBlock()}${termsBlock()}${sigBlock()}${footerBlock(printColor)}`;
                     <div style={{ maxWidth: 760, margin: '20px auto', background: 'white', padding: 28, boxShadow: '0 4px 20px rgba(0,0,0,.12)', borderRadius: 6 }}>
                         {/* ── MODERN PREVIEW ── */}
                         {(template === 'modern' || !template) && (
-                            <>
-                                {/* Colored band header */}
-                                <div style={{ background: previewColor, color: '#fff', padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '-28px -28px 18px', borderRadius: '6px 6px 0 0', gap: 16 }}>
-                                    <div style={{ flex: 1, textAlign: 'right' }}>
-                                        <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: 1, marginBottom: 6 }}>{invoiceTitle}</div>
-                                        <div style={{ fontSize: 13, opacity: .9, fontWeight: 600 }}># {invoice.invoice_number}</div>
+                            <div style={{ padding: '0 20px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+                                    <div>
+                                        <h2 style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 20, color: '#1f1f1f' }}>{invoiceTitle}</h2>
+                                        <table style={{ width: 'auto', marginBottom: 0, fontSize: 13, color: '#555' }}>
+                                            <tbody>
+                                                <tr>
+                                                    <td style={{ padding: '0 0 10px 0', paddingLeft: document.documentElement.dir === 'rtl' ? 20 : 0, paddingRight: document.documentElement.dir === 'rtl' ? 0 : 20 }}>{t('inv_number') || 'رقم الفاتورة'}</td>
+                                                    <td style={{ padding: '0 0 10px 0', fontWeight: 600, fontFamily: 'monospace', fontSize: 14, color: '#111' }}>{invoice.invoice_number}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ padding: '0 0 10px 0', paddingLeft: document.documentElement.dir === 'rtl' ? 20 : 0, paddingRight: document.documentElement.dir === 'rtl' ? 0 : 20 }}>{t('date') || 'التاريخ'}</td>
+                                                    <td style={{ padding: '0 0 10px 0', fontWeight: 600, color: '#111' }}>{new Date(invoice.date).toLocaleDateString('en-GB')}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ padding: '0 0 10px 0', paddingLeft: document.documentElement.dir === 'rtl' ? 20 : 0, paddingRight: document.documentElement.dir === 'rtl' ? 0 : 20 }}>{t('time') || 'الوقت'}</td>
+                                                    <td style={{ padding: '0 0 10px 0', fontWeight: 600, color: '#111' }}>{new Date(invoice.created_at || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
                                     </div>
-                                    <div style={{ textAlign: 'center' }}>{logoEl}</div>
-                                    <div style={{ flex: 1, textAlign: 'left', fontSize: 12, opacity: .95, lineHeight: 1.6 }}>
-                                        {showCompanyInfo && <>
-                                            <div style={{fontWeight: 800, marginBottom: 4 }}>{companyName}</div>
-                                            {companyAddress && <div>{companyAddress}</div>}
-                                        </>}
+                                    <div style={{ textAlign: 'center', color: '#555', maxWidth: 300 }}>
+                                        {logoEl && <div style={{ marginBottom: 10 }}>{logoEl}</div>}
+                                        {showCompanyInfo && (
+                                            <>
+                                                <h1 style={{ margin: 0, fontSize: 20, fontWeight: 'bold', color: '#111' }}>{companyName}</h1>
+                                                {companyAddress && <p style={{ margin: '4px 0 0', fontSize: 13 }}>{companyAddress}</p>}
+                                                {companyPhone && <p style={{ margin: '4px 0 0', fontSize: 13 }}><span style={{ color: '#777' }}>{t('phone_abbr') || 'الهاتف'}:</span> <span style={{ direction: 'ltr', display: 'inline-block' }}>{companyPhone}</span></p>}
+                                                {companyTaxNumber && <p style={{ margin: '4px 0 0', fontSize: 13 }}><span style={{ color: '#777' }}>{t('tax_number_abbr') || 'الرقم الضريبي'}:</span> <span style={{ direction: 'ltr', display: 'inline-block' }}>{companyTaxNumber}</span></p>}
+                                            </>
+                                        )}
                                     </div>
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 18 }}>
-                                    <div style={{ padding: 12, background: '#fafbfc', border: '1px solid #e5e7eb', borderRadius: 8 }}>
-                                        <div style={{ fontSize: 9, color: '#6b7280', fontWeight: 800, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.8px' }}>{clientLabel}</div>
-                                        <div style={{ fontWeight: 800, fontSize: 15, color: '#1f2937' }}>{clientName}</div>
-                                    </div>
-                                    <div style={{ padding: 12, background: '#fafbfc', border: '1px solid #e5e7eb', borderRadius: 8 }}>
-                                        <div style={{ fontSize: 9, color: '#6b7280', fontWeight: 800, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.8px' }}>{t('invoice_details') || 'تفاصيل الفاتورة'}</div>
-                                        <div style={{ fontSize: 11, color: '#4b5563', lineHeight: 1.6 }}>
-                                            <div><strong>{t('date') || 'التاريخ'}:</strong> {new Date(invoice.date).toLocaleDateString('ar-KW')}</div>
-                                            <div><strong>{t('status') || 'الحالة'}:</strong> {getStatusLabel(invoice.status)}</div>
-                                            <div><strong>{t('payment') || 'الدفع'}:</strong> {getPayLabel(invoice.payment_method)}</div>
-                                        </div>
-                                    </div>
+                                <div style={{ height: 4, background: '#1f1f1f', margin: '25px 0' }} />
+                                <div style={{ background: '#f8f9fa', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', borderRadius: 4, marginBottom: 25, border: '1px solid #eee', fontSize: 13 }}>
+                                    <div><strong>{t('cashier') || 'Cashier'}:</strong> {invoice.created_by_name || 'Admin'}</div>
+                                    <div><strong>{t('inv_paymentMethod') || 'Payment'}:</strong> {invoice.payment_method === 'cash' ? (t('inv_cash') || 'Cash') : invoice.payment_method === 'bank' ? (t('inv_bank') || 'Bank Transfer') : invoice.payment_method}</div>
                                 </div>
-                            </>
+                            </div>
                         )}
 
                         {/* ── CLASSIC PREVIEW ── */}

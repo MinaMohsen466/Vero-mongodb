@@ -403,7 +403,16 @@ function PurchaseInvoices() {
                                             <td>{inv.supplier_name || '-'}</td>
                                             <td>{new Date(inv.date).toLocaleDateString('en-GB')}</td>
                                             <td className="font-bold">{formatCurrency(inv.total)}</td>
-                                            <td><span className={`badge ${inv.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{getStatusLabel(inv.status)}</span></td>
+                                            <td>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <span className={`badge ${inv.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{getStatusLabel(inv.status)}</span>
+                                                    {(inv.status === 'paid' || inv.status === 'partial') && inv.payment_method && inv.payment_method !== 'credit' && (
+                                                        <span style={{ fontSize: '11px', color: '#666', background: '#f5f5f5', padding: '2px 6px', borderRadius: '4px', border: '1px solid #ddd', whiteSpace: 'nowrap' }}>
+                                                            {inv.payment_method === 'bank' ? (t('inv_bank') || 'بنكي') : inv.payment_method === 'cash' ? (t('inv_cash') || 'نقدي') : inv.payment_method}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
                                             <td>
                                                 <div className="table-actions">
                                                     {user?.permissions?.purchase_invoices?.can_view && (

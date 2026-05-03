@@ -6,15 +6,16 @@ import { toast } from 'react-hot-toast';
 import { useShortcuts } from '../hooks/useShortcuts';
 
 function CashBank() {
-    const { t, user } = useAuth();
+    const auth = useAuth() || {};
+    const { t = (k) => k, user } = auth;
     const [accounts, setAccounts] = useState([]);
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [settings, setSettings] = useState({});
     const [selectedAccount, setSelectedAccount] = useState(null);
     const [showModal, setShowModal] = useState(false);
-    const [modalType, setModalType] = useState('deposit'); // 'deposit' or 'withdraw'
-    const [formData, setFormData] = useState({ amount: '', description: '', date: new Date().toISOString().split('T')[0] });
+    const [modalType, setModalType] = useState('deposit'); // 'deposit', 'withdraw', or 'transfer'
+    const [formData, setFormData] = useState({ amount: '', description: '', date: new Date().toISOString().split('T')[0], toAccount: '' });
     const [saving, setSaving] = useState(false);
 
     useShortcuts({
@@ -89,7 +90,7 @@ function CashBank() {
 
     const openModal = (type) => {
         setModalType(type);
-        setFormData({ amount: '', description: '', date: new Date().toISOString().split('T')[0] });
+        setFormData({ amount: '', description: '', date: new Date().toISOString().split('T')[0], toAccount: '' });
         setShowModal(true);
     };
 
@@ -116,22 +117,37 @@ function CashBank() {
                 // Deposit: Debit Cash/Bank, Credit Equity (Capital)
                 lines.push({ account_id: selectedAccount, debit: amount, credit: 0, description: formData.description || (t('cb_cashDeposit') || 'Cash Deposit') });
                 lines.push({ account_id: equityAccount.id, debit: 0, credit: amount, description: formData.description || (t('cb_cashDeposit') || 'Cash Deposit') });
-            } else {
+            } else if (modalType === 'withdraw') {
                 // Withdraw: Debit Equity/Expense, Credit Cash/Bank
                 const expenseAcct = allAccounts.find(a => a.code === '5') || equityAccount;
                 lines.push({ account_id: expenseAcct.id, debit: amount, credit: 0, description: formData.description || (t('cb_cashWithdrawal') || 'Cash Withdrawal') });
                 lines.push({ account_id: selectedAccount, debit: 0, credit: amount, description: formData.description || (t('cb_cashWithdrawal') || 'Cash Withdrawal') });
+            } else if (modalType === 'transfer') {
+                const toAccountId = Number(formData.toAccount);
+                if (!toAccountId) {
+                    toast.error(t('cb_toAccountRequired') || 'To Account is required');
+                    setSaving(false);
+                    return;
+                }
+                if (toAccountId === selectedAccount) {
+                    toast.error(t('cb_cannotTransferSameAccount') || 'Cannot transfer to the same account');
+                    setSaving(false);
+                    return;
+                }
+                // Transfer: Debit toAccount, Credit selectedAccount
+                lines.push({ account_id: toAccountId, debit: amount, credit: 0, description: formData.description || (t('cb_transfer') || 'Internal Transfer') });
+                lines.push({ account_id: selectedAccount, debit: 0, credit: amount, description: formData.description || (t('cb_transfer') || 'Internal Transfer') });
             }
 
             await window.api.journal.create({
                 date: formData.date,
-                description: formData.description || (modalType === 'deposit' ? (t('cb_cashDeposit') || 'Cash Deposit') : (t('cb_cashWithdrawal') || 'Cash Withdrawal')),
-                reference: modalType === 'deposit' ? 'DEP' : 'WTH',
+                description: formData.description || (modalType === 'deposit' ? (t('cb_cashDeposit') || 'Cash Deposit') : modalType === 'withdraw' ? (t('cb_cashWithdrawal') || 'Cash Withdrawal') : (t('cb_transfer') || 'Internal Transfer')),
+                reference: modalType === 'deposit' ? 'DEP' : modalType === 'withdraw' ? 'WTH' : 'TRF',
                 created_by: user?.id,
                 lines
             });
 
-            toast.success(modalType === 'deposit' ? (t('cb_depositSuccess') || 'Deposit successful') : (t('cb_withdrawSuccess') || 'Withdrawal successful'));
+            toast.success(modalType === 'deposit' ? (t('cb_depositSuccess') || 'Deposit successful') : modalType === 'withdraw' ? (t('cb_withdrawSuccess') || 'Withdrawal successful') : (t('cb_transferSuccess') || 'Transfer successful'));
             setShowModal(false);
             loadData();
         } catch (e) {
@@ -205,6 +221,9 @@ function CashBank() {
                         <button className="btn btn-danger btn-sm" onClick={() => openModal('withdraw')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <ArrowUpCircle size={16} /> {t('cb_withdraw') || 'Withdraw'}
                         </button>
+                        <button className="btn btn-primary btn-sm" onClick={() => openModal('transfer')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <RefreshCw size={16} /> {t('cb_transfer') || 'Transfer'}
+                        </button>
                         <button className="btn btn-ghost btn-sm" onClick={() => { setLoading(true); loadData(); }} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <RefreshCw size={16} /> {t('refresh') || 'Refresh'}
                         </button>
@@ -263,15 +282,24 @@ function CashBank() {
             <Modal
                 isOpen={showModal}
                 onClose={() => setShowModal(false)}
-                title={modalType === 'deposit' ? (t('cb_depositAmount') || 'Deposit Amount') : (t('cb_withdrawAmount') || 'Withdraw Amount')}
+                title={modalType === 'deposit' ? (t('cb_depositAmount') || 'Deposit Amount') : modalType === 'withdraw' ? (t('cb_withdrawAmount') || 'Withdraw Amount') : (t('cb_transferAmount') || 'Transfer Amount')}
             >
                 <form id="cashbank-form" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
                     <div className="form-group" style={{ marginBottom: '16px' }}>
-                        <label className="form-label">{t('cb_account') || 'Account'}</label>
+                        <label className="form-label">{modalType === 'transfer' ? (t('cb_fromAccount') || 'From Account') : (t('cb_account') || 'Account')}</label>
                         <select className="form-input" value={selectedAccount || ''} onChange={e => setSelectedAccount(Number(e.target.value))}>
                             {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}
                         </select>
                     </div>
+                    {modalType === 'transfer' && (
+                        <div className="form-group" style={{ marginBottom: '16px' }}>
+                            <label className="form-label">{t('cb_toAccount') || 'To Account'}</label>
+                            <select className="form-input" value={formData.toAccount || ''} onChange={e => setFormData({ ...formData, toAccount: e.target.value })} required={modalType === 'transfer'}>
+                                <option value="">{t('select') || 'Select...'}</option>
+                                {accounts.filter(a => a.id !== selectedAccount).map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}
+                            </select>
+                        </div>
+                    )}
                     <div className="form-group" style={{ marginBottom: '16px' }}>
                         <label className="form-label">{t('amount') || 'Amount'}</label>
                         <input
@@ -302,7 +330,7 @@ function CashBank() {
                             className="form-input"
                             value={formData.description}
                             onChange={e => setFormData({ ...formData, description: e.target.value })}
-                            placeholder={modalType === 'deposit' ? (t('cb_exampleDeposit') || 'e.g. Capital deposit') : (t('cb_exampleWithdraw') || 'e.g. Administrative expenses')}
+                            placeholder={modalType === 'deposit' ? (t('cb_exampleDeposit') || 'e.g. Capital deposit') : modalType === 'withdraw' ? (t('cb_exampleWithdraw') || 'e.g. Administrative expenses') : (t('cb_exampleTransfer') || 'e.g. Internal transfer')}
                         />
                     </div>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -310,10 +338,10 @@ function CashBank() {
                         <button
                             type="submit"
                             form="cashbank-form"
-                            className={`btn ${modalType === 'deposit' ? 'btn-success' : 'btn-danger'}`}
+                            className={`btn ${modalType === 'deposit' ? 'btn-success' : modalType === 'withdraw' ? 'btn-danger' : 'btn-primary'}`}
                             disabled={saving || !formData.amount}
                         >
-                            {saving ? t('savingProgress') : (modalType === 'deposit' ? (t('cb_deposit') || 'Deposit') : (t('cb_withdraw') || 'Withdraw'))} (Ctrl+S)
+                            {saving ? t('savingProgress') : (modalType === 'deposit' ? (t('cb_deposit') || 'Deposit') : modalType === 'withdraw' ? (t('cb_withdraw') || 'Withdraw') : (t('cb_transfer') || 'Transfer'))} (Ctrl+S)
                         </button>
                     </div>
                 </form>
