@@ -55,7 +55,6 @@ function SalesInvoices() {
         },
         Escape: () => {
             if (showModal) closeModal();
-            if (showViewModal) setShowViewModal(false);
             if (showPrintPreview) setShowPrintPreview(false);
         },
         Search: () => {
@@ -214,6 +213,12 @@ function SalesInvoices() {
             return;
         }
 
+        // Require customer for unpaid invoices
+        if (formData.status !== 'paid' && !formData.customer_id) {
+            setError('العميل مطلوب للفواتير غير المدفوعة');
+            return;
+        }
+
         // Stock validation for sales
         if (!editMode && !validateStock()) {
             return;
@@ -277,6 +282,20 @@ function SalesInvoices() {
                 toast.success(t('savedSuccess') || (editMode ? 'Invoice updated successfully' : 'Invoice saved successfully'));
                 await loadData();
                 closeModal();
+
+                // Open the in-app invoice preview immediately
+                const targetId = editMode ? editingId : result.id;
+                if (targetId) {
+                    try {
+                        const freshSettings = await window.api.settings.getAll();
+                        setSettings(freshSettings || {});
+                        const invoice = await window.api.invoices.getById(targetId);
+                        setSelectedInvoice(invoice);
+                        setShowPrintPreview(true);
+                    } catch (e) {
+                        console.error('Error opening preview after save:', e);
+                    }
+                }
             } else {
                 const errorMsg = result.error || t('inv_saveError') || 'Error saving invoice';
                 setError(errorMsg);
@@ -361,161 +380,10 @@ function SalesInvoices() {
 
             const invoice = await window.api.invoices.getById(id);
             setSelectedInvoice(invoice);
-            setShowViewModal(true);
+            setShowPrintPreview(true);
         } catch (e) {
             console.error('[SalesInvoices.viewInvoice] Error:', e);
         }
-    };
-
-    const printInvoice = async () => {
-        if (!selectedInvoice) return;
-        const currencySymbol = settings.general?.currency_symbol || (t('currency_kd') || 'KD');
-        const invoiceTitle = settings.invoice?.invoice_title_sales || (t('sales_invoice') || 'Sales Invoice');
-        const invoiceFooter = settings.invoice?.invoice_footer || (t('invoice_footer_default') || 'Thank you for your business');
-        const invoiceTerms = settings.invoice?.invoice_terms || '';
-        const companyName = settings.company?.company_name || (t('my_company') || 'My Company');
-        const companyAddress = settings.company?.company_address || '';
-        const companyPhone = settings.company?.company_phone || '';
-        const companyEmail = settings.company?.company_email || '';
-        const companyTaxNumber = settings.company?.company_tax_number || '';
-        const companyLogo = settings.company?.company_logo || '';
-        let logoBase64 = '';
-        if (companyLogo && window.api?.file?.readAsBase64) {
-            logoBase64 = await window.api.file.readAsBase64(companyLogo) || '';
-        }
-        const logoHtml = logoBase64 ? `<img src="${logoBase64}" alt="Logo" style="max-height:60px;max-width:140px;object-fit:contain" />` : '';
-        const showCompanyInfo = settings.invoice?.show_company_info !== 'no';
-        const companyInfoHtml = showCompanyInfo ? `
-            <div style="text-align:center; color:#555; max-width:300px;">
-                ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" style="max-height:80px;max-width:160px;object-fit:contain;margin-bottom:10px;" />` : ''}
-                <h1 style="margin:0;font-size:20px;font-weight:bold;color:#111;">${companyName}</h1>
-                ${companyAddress ? `<p style="margin:4px 0 0;font-size:13px;">${companyAddress}</p>` : ''}
-                ${companyPhone ? `<p style="margin:4px 0 0;font-size:13px;"><span style="color:#777;">${t('phone_abbr') || 'الهاتف'}:</span> <span style="direction:ltr; display:inline-block;">${companyPhone}</span></p>` : ''}
-                ${companyTaxNumber ? `<p style="margin:4px 0 0;font-size:13px;"><span style="color:#777;">${t('tax_number_abbr') || 'الرقم الضريبي'}:</span> <span style="direction:ltr; display:inline-block;">${companyTaxNumber}</span></p>` : ''}
-            </div>` : '';
-        const inv = selectedInvoice;
-        const statusLabel = inv.status === 'paid' ? (t('inv_paid') || 'Paid') : inv.status === 'partial' ? (t('inv_partial') || 'Partially Paid') : (t('inv_credit') || 'Credit');
-        const formatCurr = (a) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(a || 0);
-        const formatCurrWithSymbol = (a) => formatCurr(a) + ' ' + currencySymbol;
-
-        const isRtl = document.documentElement.dir === 'rtl';
-        const alignLeft = isRtl ? 'right' : 'left';
-        const alignRight = isRtl ? 'left' : 'right';
-
-        const itemsHtml = (inv.items || []).map((item, i) => `
-        <tr style="border-bottom:1px solid #eee; background:${i % 2 === 1 ? '#fafafa' : '#ffffff'};">
-            <td style="padding:12px; text-align:center; color:#555; font-size:13px;">${i + 1}</td>
-            <td style="padding:12px; font-weight:500; text-align:${alignRight};">${item.product_name || item.description || '-'}</td>
-            <td style="padding:12px; text-align:center;">${item.quantity}</td>
-            <td style="padding:12px; text-align:center;">${formatCurr(item.unit_price)}</td>
-            <td style="padding:12px; text-align:center; font-weight:600; color:#111;">${formatCurr(item.total)}</td>
-        </tr>`).join('');
-
-        const html = `<!DOCTYPE html>
-<html dir="${isRtl ? 'rtl' : 'ltr'}" lang="${isRtl ? 'ar' : 'en'}">
-<head>
-    <meta charset="UTF-8">
-    <style>
-        *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:Arial,sans-serif;padding:0;background:white;color:#333;font-size:14px;line-height:1.5;}
-        .invoice-page{max-width:800px;margin:0 auto;padding:40px;}
-        .header{display:flex;justify-content:space-between;align-items:flex-start;}
-        .divider{height:4px;background:#1f1f1f;margin:25px 0;}
-        .meta-bar{background:#f8f9fa;padding:12px 20px;display:flex;justify-content:space-between;border-radius:4px;margin-bottom:25px;border:1px solid #eee;font-size:13px;}
-        table{width:100%;border-collapse:collapse;margin-bottom:30px;}
-        thead th{background:#1f1f1f;color:white;padding:12px;font-weight:600;font-size:13px;}
-        .totals-table{width:300px;border-collapse:collapse;border:1px solid #eee;font-size:14px;}
-        .totals-table td{padding:12px;border-bottom:1px solid #eee;}
-        .notes-box{padding:15px;background:#fefce8;border:1px solid #fde68a;border-radius:4px;margin-bottom:20px;font-size:13px;}
-        .terms-box{padding:15px;background:#f8f9fa;border:1px solid #eee;border-radius:4px;margin-bottom:20px;font-size:12px;}
-        @media print{body{padding:0}.invoice-page{padding:20px}@page{margin:5mm}}
-    </style>
-</head>
-<body>
-    <div class="invoice-page">
-        <div class="header">
-            <!-- Left Side (Title and Meta) -->
-            <div>
-                <h2 style="font-size:24px; font-weight:bold; margin-bottom: 20px; color:#1f1f1f;">${invoiceTitle}</h2>
-                <table style="width:auto; margin-bottom:0; font-size:13px; color:#555;">
-                    <tr>
-                        <td style="padding:0 0 10px ${isRtl ? '20px' : '0'}; padding-right:${isRtl ? '0' : '20px'};">${t('inv_number') || 'رقم الفاتورة'}</td>
-                        <td style="padding:0 0 10px 0; font-weight:600; font-family:monospace; font-size:14px; color:#111;">${inv.invoice_number}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding:0 0 10px ${isRtl ? '20px' : '0'}; padding-right:${isRtl ? '0' : '20px'};">${t('date') || 'التاريخ'}</td>
-                        <td style="padding:0 0 10px 0; font-weight:600; color:#111;">${new Date(inv.date).toLocaleDateString('en-GB')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding:0 0 10px ${isRtl ? '20px' : '0'}; padding-right:${isRtl ? '0' : '20px'};">${t('time') || 'الوقت'}</td>
-                        <td style="padding:0 0 10px 0; font-weight:600; color:#111;">${new Date(inv.created_at || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
-                    </tr>
-                </table>
-            </div>
-            
-            <!-- Right Side (Logo and Company Info) -->
-            <div>
-                ${companyInfoHtml}
-            </div>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="meta-bar">
-            <div><strong>${t('cashier') || 'Cashier'}:</strong> ${user?.name || 'Admin'}</div>
-            <div><strong>${t('inv_paymentMethod') || 'Payment'}:</strong> ${inv.payment_method === 'cash' ? (t('inv_cash') || 'Cash') : inv.payment_method === 'bank' ? (t('inv_bank') || 'Bank Transfer') : inv.payment_method}</div>
-        </div>
-
-        <table>
-            <thead>
-                <tr>
-                    <th style="width:40px;text-align:center">#</th>
-                    <th style="text-align:${alignRight}">${t('inv_product') || 'Item'}</th>
-                    <th style="width:80px;text-align:center">${t('inv_quantity') || 'Qty'}</th>
-                    <th style="width:110px;text-align:center">${t('inv_unitPrice') || 'Price'}</th>
-                    <th style="width:110px;text-align:center">${t('inv_itemTotal') || 'Total'}</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${itemsHtml}
-            </tbody>
-        </table>
-
-        <div style="display:flex; justify-content:flex-end; ${isRtl ? 'justify-content:flex-start;' : ''}">
-            <table class="totals-table">
-                ${inv.subtotal && inv.subtotal !== inv.total ? `
-                <tr>
-                    <td>${t('subtotal') || 'Subtotal'}</td>
-                    <td style="text-align:${alignLeft}">${formatCurrWithSymbol(inv.subtotal)}</td>
-                </tr>` : ''}
-                ${inv.discount ? `
-                <tr>
-                    <td>${t('discount') || 'Discount'}</td>
-                    <td style="text-align:${alignLeft};color:#ef4444">- ${formatCurrWithSymbol(inv.discount)}</td>
-                </tr>` : ''}
-                ${inv.tax ? `
-                <tr>
-                    <td>${t('tax') || 'Tax'}</td>
-                    <td style="text-align:${alignLeft}">${formatCurrWithSymbol(inv.tax)}</td>
-                </tr>` : ''}
-                <tr style="background:#1f1f1f;color:white;font-size:16px;font-weight:bold;border:none;">
-                    <td style="padding:15px; border-radius:${isRtl ? '0 4px 4px 0' : '4px 0 0 4px'};">${t('final_total') || 'Total'}</td>
-                    <td style="text-align:${alignLeft}; padding:15px; border-radius:${isRtl ? '4px 0 0 4px' : '0 4px 4px 0'};">${formatCurrWithSymbol(inv.total)}</td>
-                </tr>
-            </table>
-        </div>
-
-        ${inv.notes ? `<div class="notes-box"><strong>${t('notes') || 'Notes'}:</strong><br/>${inv.notes}</div>` : ''}
-        ${invoiceTerms ? `<div class="terms-box"><strong>${t('terms_and_conditions') || 'Terms and Conditions'}:</strong><br/>${invoiceTerms}</div>` : ''}
-        
-        <div style="text-align:center; margin-top:40px; color:#666; font-size:13px;">
-            <p>${invoiceFooter}</p>
-            <p style="color:#aaa; font-size:11px; margin-top:8px;">${companyName}</p>
-        </div>
-    </div>
-</body>
-</html>`;
-        await window.api.print.invoice(html);
     };
 
     const openModal = () => {
@@ -677,7 +545,7 @@ function SalesInvoices() {
                                                         <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(inv.id)} title={t('edit')}><Edit size={16} /></button>
                                                     )}
                                                     {user?.permissions?.sales_invoices?.can_view && (
-                                                        <button className="btn btn-ghost btn-sm" onClick={async () => { await viewInvoice(inv.id); setShowPrintPreview(true); }} title={t('inv_print')}><Printer size={16} /></button>
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => viewInvoice(inv.id)} title={t('inv_print')}><Printer size={16} /></button>
                                                     )}
                                                     {user?.permissions?.sales_invoices?.can_delete && (
                                                         <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(inv.id)} title={t('delete')}><Trash2 size={16} /></button>
@@ -817,26 +685,7 @@ function SalesInvoices() {
                 </form>
             </Modal>
 
-            {/* View Modal */}
-            <Modal isOpen={showViewModal} onClose={() => setShowViewModal(false)} title={`${t('inv_view')} ${selectedInvoice?.invoice_number}`} size="lg" footer={<><button className="btn btn-secondary" onClick={() => setShowViewModal(false)}>{t('close')}</button><button className="btn btn-primary" onClick={printInvoice}><Printer size={18} /> {t('inv_print')}</button></>}>
-                {selectedInvoice && (
-                    <div>
-                        <div className="form-row mb-4"><div><strong>{t('sinv_customer')}:</strong> {selectedInvoice.customer_name || '-'}</div><div><strong>{t('date')}:</strong> {new Date(selectedInvoice.date).toLocaleDateString('en-GB')}</div></div>
-                        <div className="table-container">
-                            <table><thead><tr><th>#</th><th>{t('inv_product')}</th><th>{t('inv_quantity')}</th><th>{t('inv_unitPrice')}</th><th>{t('inv_total')}</th></tr></thead><tbody>{selectedInvoice.items?.map((item, i) => <tr key={i}><td>{i + 1}</td><td>{item.product_name || item.description}</td><td>{item.quantity}</td><td>
-                                {formatCurrency(item.unit_price)}
-                                {Number(item.discount) > 0 && <span style={{display: 'block', fontSize: '0.75rem', color: '#10b981'}}>{formatCurrency((Number(item.unit_price * item.quantity) - Number(item.discount)) / item.quantity)}</span>}
-                            </td><td className="font-bold">{formatCurrency(item.total)}</td></tr>)}</tbody></table>
-                        </div>
-                        <div style={{ marginTop: '20px', textAlign: 'left' }}>
-                            {selectedInvoice.discount > 0 && (
-                                <div style={{ fontSize: '1rem', color: '#ef4444', marginBottom: '8px' }}><strong>{t('discount')}: - {formatCurrency(selectedInvoice.discount)}</strong></div>
-                            )}
-                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}><strong>{t('inv_total')}: {formatCurrency(selectedInvoice.total)}</strong></div>
-                        </div>
-                    </div>
-                )}
-            </Modal>
+
 
             {/* Print Preview Modal */}
             {showPrintPreview && selectedInvoice && (

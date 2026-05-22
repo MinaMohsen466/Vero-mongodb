@@ -1,9 +1,18 @@
 import React, { useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { Building2, User, Settings as SettingsIcon, CheckCircle, MoveRight, MoveLeft, Upload } from 'lucide-react';
+import { Building2, User, Settings as SettingsIcon, CheckCircle, MoveRight, MoveLeft, Upload, Lock, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import appIcon from '../assets/icon.png';
 
 export default function SetupWizard({ onComplete, t, language, changeLanguage }) {
+    // Gate state
+    const [gateUnlocked, setGateUnlocked] = useState(false);
+    const [gateUsername, setGateUsername] = useState('');
+    const [gatePassword, setGatePassword] = useState('');
+    const [showGatePassword, setShowGatePassword] = useState(false);
+    const [gateLoading, setGateLoading] = useState(false);
+    const [gateError, setGateError] = useState('');
+
+    // Setup wizard state (after gate)
     const [step, setStep] = useState(0);
     const [loading, setLoading] = useState(false);
     const [logoPreview, setLogoPreview] = useState('');
@@ -28,6 +37,29 @@ export default function SetupWizard({ onComplete, t, language, changeLanguage })
             ...prev,
             [name]: type === 'checkbox' ? checked : value
         }));
+    };
+
+    // ── Gate: Verify admin password ──
+    const handleGateSubmit = async () => {
+        if (!gateUsername || !gatePassword) {
+            setGateError(t('setup_gate_fields_required') || 'يرجى إدخال اسم المستخدم وكلمة المرور');
+            return;
+        }
+        setGateLoading(true);
+        setGateError('');
+        try {
+            const result = await window.api.system.verifySetupAccess(gateUsername, gatePassword);
+            if (result.success) {
+                setGateUnlocked(true);
+                toast.success(t('setup_gate_success') || 'تم التحقق بنجاح');
+            } else {
+                setGateError(t('setup_gate_wrong_password') || 'اسم المستخدم أو كلمة المرور غير صحيحة');
+            }
+        } catch (e) {
+            console.error(e);
+            setGateError(t('error_occurred') || 'حدث خطأ');
+        }
+        setGateLoading(false);
     };
 
     const nextStep = () => {
@@ -89,6 +121,134 @@ export default function SetupWizard({ onComplete, t, language, changeLanguage })
     const NextIcon = isArabic ? MoveLeft : MoveRight;
     const PrevIcon = isArabic ? MoveRight : MoveLeft;
 
+    // ══════════════════════════════════════════════════════════════════════
+    // GATE SCREEN — must verify admin password before accessing setup
+    // ══════════════════════════════════════════════════════════════════════
+    if (!gateUnlocked) {
+        return (
+            <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-secondary)', padding: '20px' }}>
+                <div style={{
+                    width: '100%',
+                    maxWidth: '440px',
+                    background: 'var(--bg-primary)',
+                    borderRadius: '16px',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
+                    overflow: 'hidden'
+                }}>
+                    {/* Header */}
+                    <div style={{ padding: '40px 40px 30px', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+                        <img src={appIcon} alt="Vero" style={{ width: 64, height: 64, objectFit: 'contain', marginBottom: 16 }} />
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>
+                            {t('setup_gate_title') || 'تأكيد صلاحية الإعداد'}
+                        </h2>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', margin: 0 }}>
+                            {t('setup_gate_desc') || 'أدخل بيانات الأدمن للسماح بإنشاء شركة جديدة'}
+                        </p>
+                    </div>
+
+                    {/* Form */}
+                    <div style={{ padding: '30px 40px 40px' }}>
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24
+                        }}>
+                            <div style={{
+                                width: 56, height: 56, borderRadius: '50%',
+                                background: 'linear-gradient(135deg, var(--primary), #6366f1)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                boxShadow: '0 6px 20px rgba(37,99,235,0.25)'
+                            }}>
+                                <Lock size={24} color="#fff" />
+                            </div>
+                        </div>
+
+                        {gateError && (
+                            <div style={{
+                                padding: '10px 14px', marginBottom: 16, borderRadius: 8,
+                                background: 'rgba(239,68,68,0.1)', color: '#ef4444',
+                                fontSize: '0.875rem', fontWeight: 500, textAlign: 'center',
+                                border: '1px solid rgba(239,68,68,0.2)'
+                            }}>
+                                {gateError}
+                            </div>
+                        )}
+
+                        <div className="form-group" style={{ marginBottom: 16 }}>
+                            <label className="form-label">{t('login_username') || 'اسم المستخدم'}</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                style={{ padding: '12px 14px', fontSize: '1rem', direction: 'ltr' }}
+                                value={gateUsername}
+                                onChange={e => setGateUsername(e.target.value)}
+                                placeholder="admin"
+                                autoFocus
+                                onKeyDown={e => e.key === 'Enter' && handleGateSubmit()}
+                            />
+                        </div>
+
+                        <div className="form-group" style={{ marginBottom: 24 }}>
+                            <label className="form-label">{t('login_password') || 'كلمة المرور'}</label>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type={showGatePassword ? 'text' : 'password'}
+                                    className="form-input"
+                                    style={{ padding: '12px 44px 12px 14px', fontSize: '1rem', direction: 'ltr', width: '100%', boxSizing: 'border-box' }}
+                                    value={gatePassword}
+                                    onChange={e => setGatePassword(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleGateSubmit()}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowGatePassword(!showGatePassword)}
+                                    style={{
+                                        position: 'absolute',
+                                        right: '12px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        color: '#94a3b8',
+                                        padding: '4px',
+                                        display: 'flex',
+                                        borderRadius: '6px',
+                                        transition: 'color 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--primary)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+                                    title={showGatePassword ? t('hide_password') || 'Hide password' : t('show_password') || 'Show password'}
+                                >
+                                    {showGatePassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={handleGateSubmit}
+                            disabled={gateLoading}
+                            style={{
+                                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                gap: 8, padding: '12px 24px', fontSize: '1.05rem', borderRadius: 10
+                            }}
+                        >
+                            {gateLoading ? (
+                                <div className="spinner" style={{ width: 20, height: 20 }}></div>
+                            ) : (
+                                <ShieldCheck size={20} />
+                            )}
+                            {t('setup_gate_verify') || 'تحقق وابدأ الإعداد'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // SETUP WIZARD — only accessible after gate verification
+    // ══════════════════════════════════════════════════════════════════════
     return (
         <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-secondary)', padding: '20px' }}>
             <div style={{
@@ -147,6 +307,8 @@ export default function SetupWizard({ onComplete, t, language, changeLanguage })
 
                     {/* Forms Container */}
                     <div style={{ flex: 1, padding: '0 5px' }}>
+
+                        {/* ── Step 0: Language Selection ── */}
                         {step === 0 && (
                             <div className="animation-fade-in" style={{ maxWidth: '400px', margin: '40px auto 0', textAlign: 'center' }}>
                                 <h3 style={{ marginBottom: 30, color: 'var(--text-primary)', fontSize: '1.25rem', fontWeight: 700 }}>
@@ -185,6 +347,7 @@ export default function SetupWizard({ onComplete, t, language, changeLanguage })
                             </div>
                         )}
 
+                        {/* ── Step 1: Company Details ── */}
                         {step === 1 && (
                             <div className="animation-fade-in" style={{ maxWidth: '600px', margin: '0 auto' }}>
                                 <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24 }}>
@@ -234,6 +397,7 @@ export default function SetupWizard({ onComplete, t, language, changeLanguage })
                             </div>
                         )}
 
+                        {/* ── Step 2: Admin Account ── */}
                         {step === 2 && (
                             <div className="animation-fade-in" style={{ maxWidth: '600px', margin: '0 auto' }}>
                                 <div className="alert alert-info" style={{ marginBottom: 30, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -257,6 +421,7 @@ export default function SetupWizard({ onComplete, t, language, changeLanguage })
                             </div>
                         )}
 
+                        {/* ── Step 3: Preferences ── */}
                         {step === 3 && (
                             <div className="animation-fade-in" style={{ maxWidth: '600px', margin: '0 auto' }}>
                                 <div style={{ marginBottom: 24, padding: '20px', background: 'var(--bg-secondary)', borderRadius: 12, border: '1px solid var(--border)' }}>

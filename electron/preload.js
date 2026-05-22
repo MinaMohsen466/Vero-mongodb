@@ -4,7 +4,8 @@ contextBridge.exposeInMainWorld('api', {
     // System
     system: {
         isFirstRun: () => ipcRenderer.invoke('system:isFirstRun'),
-        runSetup: (data) => ipcRenderer.invoke('system:runSetup', data)
+        runSetup: (data) => ipcRenderer.invoke('system:runSetup', data),
+        verifySetupAccess: (username, password) => ipcRenderer.invoke('system:verifySetupAccess', { username, password })
     },
 
     // Users & Auth
@@ -197,6 +198,14 @@ contextBridge.exposeInMainWorld('api', {
         readAsBase64: (filePath) => ipcRenderer.invoke('file:readAsBase64', filePath),
         copyLogo: (srcPath) => ipcRenderer.invoke('file:copyLogo', srcPath),
         saveText: (options) => ipcRenderer.invoke('file:saveText', options)
+    },
+
+    // Database backup management
+    database: {
+        getBackupPath: () => ipcRenderer.invoke('database:getBackupPath'),
+        setBackupPath: (backupPath) => ipcRenderer.invoke('database:setBackupPath', backupPath),
+        testBackupPath: (testPath) => ipcRenderer.invoke('database:testBackupPath', testPath),
+        selectBackupPath: () => ipcRenderer.invoke('database:selectBackupPath')
     },
 
     // Activity Log

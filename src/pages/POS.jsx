@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Printer, X, Check, Package, User, UserPlus } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuth, isColorUnit } from '../App';
+import InvoicePrintPreview from '../components/InvoicePrintPreview';
 
 const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#3B82F6', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#06B6D4'];
 
@@ -127,6 +128,9 @@ function POS() {
     const [lastReceipt, setLastReceipt] = useState(null);
     const [showReceipt, setShowReceipt] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [showInvoicePreview, setShowInvoicePreview] = useState(false);
+    const [previewInvoice, setPreviewInvoice] = useState(null);
+    const [lastInvoiceId, setLastInvoiceId] = useState(null);
 
     // Add customer
     const [showAddCustomer, setShowAddCustomer] = useState(false);
@@ -385,6 +389,13 @@ function POS() {
 
     const handleCheckout = async () => {
         if (cart.length === 0) return;
+        
+        // Require customer for credit sales
+        if (payMethod === 'credit' && !selectedCustomer) {
+            toast.error('العميل مطلوب للعمليات الآجلة');
+            return;
+        }
+        
         setSaving(true);
         try {
             const isCash = payMethod === 'cash';
@@ -421,6 +432,7 @@ function POS() {
                     company: settings.company?.company_name || t('my_company') || 'My Company'
                 };
                 setLastReceipt(receipt);
+                setLastInvoiceId(result.id);
                 setShowPayModal(false);
                 setShowReceipt(true);
                 clearCart();
@@ -435,9 +447,17 @@ function POS() {
         setSaving(false);
     };
 
-    const printReceipt = () => {
-        if (!lastReceipt) return;
-        window.api.print.invoice(generateReceiptHTML(lastReceipt, settings, t));
+    const printReceipt = async () => {
+        if (!lastInvoiceId) return;
+        try {
+            const freshSettings = await window.api.settings.getAll();
+            setSettings(freshSettings || {});
+            const invoice = await window.api.invoices.getById(lastInvoiceId);
+            setPreviewInvoice(invoice);
+            setShowInvoicePreview(true);
+        } catch (e) {
+            console.error('Error opening print preview:', e);
+        }
     };
 
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
@@ -1055,6 +1075,16 @@ function POS() {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* In-app Invoice Print Preview */}
+            {showInvoicePreview && previewInvoice && (
+                <InvoicePrintPreview
+                    invoice={previewInvoice}
+                    settings={settings}
+                    type="sales"
+                    onClose={() => setShowInvoicePreview(false)}
+                />
             )}
 
             {/* Spin animation */}

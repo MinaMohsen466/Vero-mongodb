@@ -22,6 +22,9 @@ dist-electron/
 *.sqlite
 *.sqlite3
 
+# Admin configuration (contains sensitive data)
+.admin-config.json
+
 # environment variables
 .env
 .env.local

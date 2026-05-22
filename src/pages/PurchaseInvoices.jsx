@@ -20,7 +20,7 @@ function PurchaseInvoices() {
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [showModal, setShowModal] = useState(false);
-    const [showViewModal, setShowViewModal] = useState(false);
+
     const [showPrintPreview, setShowPrintPreview] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [settings, setSettings] = useState({});
@@ -51,7 +51,7 @@ function PurchaseInvoices() {
         },
         Escape: () => {
             if (showModal) closeModal();
-            if (showViewModal) setShowViewModal(false);
+
             if (showPrintPreview) setShowPrintPreview(false);
         },
         Search: () => {
@@ -119,6 +119,12 @@ function PurchaseInvoices() {
             return;
         }
 
+        // Require supplier for unpaid invoices
+        if (formData.status !== 'paid' && !formData.supplier_id) {
+            setError('المورد مطلوب للفواتير غير المدفوعة');
+            return;
+        }
+
         setSaving(true);
         try {
             const totals = calculateTotals();
@@ -160,6 +166,20 @@ function PurchaseInvoices() {
                 toast.success(t('savedSuccess') || (editMode ? 'Invoice updated successfully' : 'Invoice saved successfully'));
                 await loadData();
                 closeModal();
+
+                // Open the in-app invoice preview immediately
+                const targetId = editMode ? editingId : result.id;
+                if (targetId) {
+                    try {
+                        const freshSettings = await window.api.settings.getAll();
+                        setSettings(freshSettings || {});
+                        const invoice = await window.api.invoices.getById(targetId);
+                        setSelectedInvoice(invoice);
+                        setShowPrintPreview(true);
+                    } catch (e) {
+                        console.error('Error opening preview after save:', e);
+                    }
+                }
             } else {
                 const errorMsg = result.error || t('inv_saveError') || 'Error saving invoice';
                 setError(errorMsg);
@@ -248,27 +268,17 @@ function PurchaseInvoices() {
     };
 
     const viewInvoice = async (id) => {
-        const invoice = await window.api.invoices.getById(id);
-        setSelectedInvoice(invoice);
-        setShowViewModal(true);
-    };
+        try {
+            // Reload fresh settings to get latest logo/terms
+            const freshSettings = await window.api.settings.getAll();
+            setSettings(freshSettings || {});
 
-    const printInvoice = async () => {
-        if (!selectedInvoice) return;
-        const currencySymbol = settings.general?.currency_symbol || (t('currency_kd') || 'KD');
-        const invoiceTitle = settings.invoice?.invoice_title_purchase || (t('purchase_invoice') || 'Purchase Invoice');
-        const invoiceFooter = settings.invoice?.invoice_footer || (t('invoice_footer_default') || 'Thank you for your business');
-        const companyName = settings.company?.company_name || (t('my_company') || 'My Company');
-        const companyLogo = settings.company?.company_logo || '';
-
-        const logoHtml = companyLogo ? `<img src="${companyLogo}" alt="Logo" style="max-height:60px;max-width:150px;object-fit:contain" />` : '';
-
-        const isRtl = document.documentElement.dir === 'rtl';
-        const alignLeft = isRtl ? 'right' : 'left';
-        const alignRight = isRtl ? 'left' : 'right';
-
-        const html = `<!DOCTYPE html><html dir="${isRtl ? 'rtl' : 'ltr'}" lang="${isRtl ? 'ar' : 'en'}"><head><meta charset="UTF-8"><style>body{font-family:'Cairo','Arial',sans-serif;padding:40px;margin:0}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1e3a5f;padding-bottom:20px;margin-bottom:20px}.company{display:flex;align-items:center;gap:15px}.company h1{margin:0;font-size:24px;color:#1e3a5f}.info{text-align:${alignRight}}.info p{margin:4px 0;font-size:14px}.supplier{margin:20px 0;padding:15px;background:#f8fafc;border-radius:8px;border-${isRtl ? 'right' : 'left'}:4px solid #1e3a5f}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{border:1px solid #e2e8f0;padding:12px;text-align:${alignLeft}}th{background:#1e3a5f;color:white;font-weight:600;text-align:${isRtl ? 'right' : 'left'}}tr:nth-child(even){background:#f8fafc}.totals{margin-top:20px;display:flex;justify-content:flex-end;${isRtl ? 'justify-content:flex-start;' : ''}}.totals table{width:280px;border:none}.totals td{border:none;padding:8px 12px}.total-row{font-size:18px;font-weight:bold;background:#1e3a5f;color:white;border-radius:8px}.footer{margin-top:40px;text-align:center;color:#64748b;border-top:1px solid #e2e8f0;padding-top:20px;font-size:14px}</style></head><body><div class="header"><div class="company">${logoHtml}<div><h1>${companyName}</h1><p style="color:#64748b;margin:0">${invoiceTitle}</p></div></div><div class="info"><p><strong>${t('inv_number') || 'Invoice No'}:</strong> ${selectedInvoice.invoice_number}</p><p><strong>${t('date') || 'Date'}:</strong> ${new Date(selectedInvoice.date).toLocaleDateString('en-GB')}</p>${selectedInvoice.due_date ? `<p><strong>${t('inv_dueDate') || 'Due Date'}:</strong> ${new Date(selectedInvoice.due_date).toLocaleDateString('en-GB')}</p>` : ''}</div></div><div class="supplier"><strong>${t('pinv_supplier') || 'Supplier'}:</strong> ${selectedInvoice.supplier_name || '-'}</div><table><thead><tr><th style="width:40px;text-align:center">#</th><th>${t('inv_product') || 'Item'}</th><th style="width:80px;text-align:center">${t('inv_quantity') || 'Qty'}</th><th style="width:100px;text-align:center">${t('inv_unitPrice') || 'Price'}</th><th style="width:100px;text-align:center">${t('inv_total') || 'Total'}</th></tr></thead><tbody>${selectedInvoice.items?.map((item, i) => `<tr><td style="text-align:center">${i + 1}</td><td>${item.product_name || item.description}</td><td style="text-align:center">${item.quantity}</td><td>${Number(item.unit_price).toFixed(3)} ${currencySymbol}</td><td style="font-weight:bold">${Number(item.total).toFixed(3)} ${currencySymbol}</td></tr>`).join('')}</tbody></table><div class="totals"><table><tr class="total-row"><td>${t('inv_total') || 'Total'}:</td><td>${Number(selectedInvoice.total).toFixed(3)} ${currencySymbol}</td></tr></table></div>${selectedInvoice.notes ? `<div style="margin-top:20px;padding:10px;background:#fef9c3;border-radius:4px;font-size:14px"><strong>${t('notes') || 'Notes'}:</strong> ${selectedInvoice.notes}</div>` : ''}<div class="footer"><p>${invoiceFooter}</p></div></body></html>`;
-        await window.api.print.invoice(html);
+            const invoice = await window.api.invoices.getById(id);
+            setSelectedInvoice(invoice);
+            setShowPrintPreview(true);
+        } catch (e) {
+            console.error('[PurchaseInvoices.viewInvoice] Error:', e);
+        }
     };
 
     const openModal = () => {
@@ -422,7 +432,7 @@ function PurchaseInvoices() {
                                                         <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(inv.id)} title={t('edit')}><Edit size={16} /></button>
                                                     )}
                                                     {user?.permissions?.purchase_invoices?.can_view && (
-                                                        <button className="btn btn-ghost btn-sm" onClick={async () => { await viewInvoice(inv.id); setShowPrintPreview(true); }} title={t('inv_print')}><Printer size={16} /></button>
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => viewInvoice(inv.id)} title={t('inv_print')}><Printer size={16} /></button>
                                                     )}
                                                     {user?.permissions?.purchase_invoices?.can_delete && (
                                                         <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(inv.id)} title={t('delete')}><Trash2 size={16} /></button>
@@ -515,18 +525,6 @@ function PurchaseInvoices() {
                 </form>
             </Modal>
 
-            {/* View Modal */}
-            <Modal isOpen={showViewModal} onClose={() => setShowViewModal(false)} title={`${t('inv_view')} ${selectedInvoice?.invoice_number}`} size="lg" footer={<><button className="btn btn-secondary" onClick={() => setShowViewModal(false)}>{t('close')}</button><button className="btn btn-primary" onClick={printInvoice}><Printer size={18} /> {t('inv_print')}</button></>}>
-                {selectedInvoice && (
-                    <div>
-                        <div className="form-row mb-4"><div><strong>{t('pinv_supplier')}:</strong> {selectedInvoice.supplier_name || '-'}</div><div><strong>{t('date')}:</strong> {new Date(selectedInvoice.date).toLocaleDateString('en-GB')}</div></div>
-                        <div className="table-container">
-                            <table><thead><tr><th>#</th><th>{t('inv_product')}</th><th>{t('inv_quantity')}</th><th>{t('inv_unitPrice')}</th><th>{t('inv_total')}</th></tr></thead><tbody>{selectedInvoice.items?.map((item, i) => <tr key={i}><td>{i + 1}</td><td>{item.product_name || item.description}</td><td>{item.quantity}</td><td>{formatCurrency(item.unit_price)}</td><td className="font-bold">{formatCurrency(item.total)}</td></tr>)}</tbody></table>
-                        </div>
-                        <div style={{ marginTop: '20px', textAlign: 'left', fontSize: '1.2rem' }}><strong>{t('inv_total')}: {formatCurrency(selectedInvoice.total)}</strong></div>
-                    </div>
-                )}
-            </Modal>
 
             {/* Print Preview Modal */}
             {showPrintPreview && selectedInvoice && (

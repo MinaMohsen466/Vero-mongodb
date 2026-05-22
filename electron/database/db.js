@@ -8,6 +8,11 @@ class AppDatabase {
         this.dbPath = null;
         this.app = null;
         this._saveTimeout = null;
+        this.adminConfig = null; // Store admin config
+    }
+
+    setAdminConfig(adminConfig) {
+        this.adminConfig = adminConfig;
     }
 
     async init(app) {
@@ -64,8 +69,42 @@ class AppDatabase {
             const data = this.db.export();
             const buffer = Buffer.from(data);
             fs.writeFileSync(this.dbPath, buffer);
+            
+            // Save to backup path if configured (async in background)
+            this.saveBackupAsync();
         } catch (e) {
             console.error('[DB] Error saving database:', e);
+        }
+    }
+
+    saveBackupAsync() {
+        // Non-blocking backup to alternate path
+        try {
+            const config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+            if (config.backupDbPath && config.backupDbPath !== this.dbPath) {
+                // Ensure backup directory exists
+                const backupDir = path.dirname(config.backupDbPath);
+                if (!fs.existsSync(backupDir)) {
+                    fs.mkdirSync(backupDir, { recursive: true });
+                }
+                
+                // Async write - doesn't block main thread
+                setImmediate(() => {
+                    try {
+                        const data = this.db.export();
+                        const buffer = Buffer.from(data);
+                        fs.writeFileSync(config.backupDbPath, buffer);
+                        
+                        // Update last backup time in config
+                        config.lastBackupTime = new Date().toISOString();
+                        fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2));
+                    } catch (e) {
+                        console.error('[DB] Error saving backup database:', e);
+                    }
+                });
+            }
+        } catch (e) {
+            // Silently fail if config doesn't have backup path
         }
     }
 
@@ -226,9 +265,17 @@ class AppDatabase {
     }
 
     seedDefaultData() {
-        // Admin user
+        // Get admin password from config (must be initialized by main.js)
+        const adminPassword = this.adminConfig?.getAdminPassword();
+        
+        // Admin user - ensure correct default password
         const admin = this.get('SELECT id FROM users WHERE username = ?', ['admin']);
-        if (!admin) this.run("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)", ['admin', 'password123', 'مدير النظام', 'admin']);
+        if (!admin) {
+            this.run("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)", ['admin', adminPassword, 'مدير النظام', 'admin']);
+        } else if (admin.password_hash !== adminPassword) {
+            // Update password if it's different (for backwards compatibility)
+            this.run("UPDATE users SET password_hash = ? WHERE username = ?", [adminPassword, 'admin']);
+        }
 
         // Accounts
         const count = this.get('SELECT COUNT(*) as count FROM accounts');
@@ -407,6 +454,70 @@ class AppDatabase {
         const data = this.db.export();
         fs.writeFileSync(backupPath, Buffer.from(data));
         return { success: true, path: backupPath };
+    }
+
+    getBackupPath() {
+        try {
+            if (!this.configPath || !fs.existsSync(this.configPath)) {
+                return { backupDbPath: null, lastBackupTime: null };
+            }
+            const config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+            return {
+                backupDbPath: config.backupDbPath || null,
+                lastBackupTime: config.lastBackupTime || null
+            };
+        } catch (e) {
+            console.error('[DB] Error reading backup config:', e);
+        }
+        return { backupDbPath: null, lastBackupTime: null };
+    }
+
+    setBackupPath(newBackupPath) {
+        try {
+            // Ensure config file exists or create it
+            if (!fs.existsSync(this.configPath)) {
+                fs.writeFileSync(this.configPath, JSON.stringify({}, null, 2));
+            }
+            
+            const config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+            
+            // Validate the path
+            if (newBackupPath) {
+                const backupDir = path.dirname(newBackupPath);
+                // Try to create the directory to ensure access
+                try {
+                    fs.mkdirSync(backupDir, { recursive: true });
+                } catch (e) {
+                    return { success: false, error: 'خطأ في الوصول إلى المسار: ' + e.message };
+                }
+            }
+            
+            config.backupDbPath = newBackupPath;
+            config.lastBackupTime = new Date().toISOString();
+            fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2));
+            
+            // Immediately save backup to new location
+            if (newBackupPath && this.db) {
+                const data = this.db.export();
+                fs.writeFileSync(newBackupPath, Buffer.from(data));
+            }
+            
+            return { success: true, message: 'تم تعيين مسار النسخة الاحتياطية بنجاح' };
+        } catch (e) {
+            return { success: false, error: 'خطأ في تعيين مسار النسخة الاحتياطية: ' + e.message };
+        }
+    }
+
+    testBackupPath(testPath) {
+        try {
+            const testDir = path.dirname(testPath);
+            fs.mkdirSync(testDir, { recursive: true });
+            fs.writeFileSync(testPath, 'test');
+            fs.unlinkSync(testPath);
+            return { success: true, message: 'المسار صحيح وقابل للكتابة' };
+        } catch (e) {
+            return { success: false, error: 'فشل الوصول للمسار: ' + e.message };
+        }
     }
 
     backupToPath(destPath) {
@@ -1757,8 +1868,9 @@ class SystemRepo {
         const admin = this.db.get("SELECT password_hash FROM users WHERE role = 'admin'");
         const companyName = this.db.get("SELECT value FROM settings WHERE key = 'company_name'");
 
+        const defaultAdminPassword = this.adminConfig?.getAdminPassword();
         let isDefault = true;
-        if (admin && admin.password_hash !== 'password123') isDefault = false;
+        if (admin && admin.password_hash !== defaultAdminPassword) isDefault = false;
         if (companyName && companyName.value !== 'شركتي') isDefault = false;
 
         const invoicesDb = this.db.get("SELECT COUNT(*) as c FROM invoices");

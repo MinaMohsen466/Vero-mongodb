@@ -183,11 +183,14 @@ function Login({ onLogin }) {
                                     color: '#94a3b8',
                                     padding: '4px',
                                     display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
                                     borderRadius: '6px',
-                                    transition: 'color 0.2s'
+                                    transition: 'color 0.2s, background-color 0.2s',
+                                    zIndex: 10
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.color = '#3b82f6'}
-                                onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+                                onMouseEnter={(e) => { e.currentTarget.style.color = '#3b82f6'; e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.1)'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                             >
                                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                             </button>
@@ -244,7 +247,7 @@ function Login({ onLogin }) {
                     textAlign: 'center'
                 }}>
                     <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>
-                        {t('default_user_info') || 'Default user'}: <span style={{ color: '#1e40af', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px' }}>admin</span> / <span style={{ color: '#1e40af', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px' }}>password123</span>
+                        {t('login_help') || 'Contact your system administrator for credentials'}
                     </p>
                 </div>
             </div>

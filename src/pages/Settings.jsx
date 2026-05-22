@@ -133,6 +133,8 @@ export default function Settings() {
     const [permMode, setPermMode] = useState('role'); // 'role' | 'user'
     const [permSearch, setPermSearch] = useState('');
     const [selRole, setSelRole] = useState('accountant'); // selected role in role mode
+    const [backupPath, setBackupPath] = useState(null);
+    const [backupLastTime, setBackupLastTime] = useState(null);
     const upUserIdRef = useRef(null); // tracks which user we're loading for (prevents race conditions)
     const dropRef = useRef(null);
 
@@ -203,6 +205,13 @@ export default function Settings() {
                 window.api.settings?.getDbSize?.() || ''
             ]);
             setDbPath(path || ''); setDbSize(size || '');
+            
+            // Load backup path
+            if (window.api.database?.getBackupPath) {
+                const bkp = await window.api.database.getBackupPath();
+                setBackupPath(bkp.backupDbPath);
+                setBackupLastTime(bkp.lastBackupTime);
+            }
         } catch (e) { console.error(e); }
         setLoading(false);
     };
@@ -758,7 +767,7 @@ export default function Settings() {
                         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                             {[['accountant', t('accountant_role') || 'Accountant'], ['user', t('user_role') || 'User']].map(([r, label]) => (
                                 <button key={r} onClick={() => { setSelRole(r); if (!permLoaded) loadPerms(); }} style={{
-                                    padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                                    padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
                                     fontSize: '.875rem', fontWeight: selRole === r ? 700 : 400, transition: 'all .15s',
                                     background: selRole === r ? roleColor(r) : 'var(--bg-secondary)',
                                     color: selRole === r ? '#fff' : 'var(--text-secondary)',
@@ -1107,6 +1116,88 @@ export default function Settings() {
                                 <Upload size={14} /> {t('restore_from_backup') || 'Restore from Backup'}
                             </button>
                         </div>
+                    </Card>
+
+                    <Card title={t('automatic_backup') || 'النسخة الاحتياطية الآلية'} icon={HardDrive}>
+                        <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
+                            اختر مسار احتياطي بديل لحفظ نسخة من البيانات تلقائياً عند كل عملية تحديث
+                        </p>
+                        <Fld label="مسار النسخة الاحتياطية">
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                                <input 
+                                    className="form-input" 
+                                    value={backupPath || ''} 
+                                    readOnly
+                                    placeholder="لم يتم تحديد مسار بعد"
+                                    style={{ ...inp, flex: 1, background: 'var(--bg-secondary)' }} 
+                                />
+                                <button 
+                                    style={{ ...btnStyle, background: 'var(--primary)', color: '#fff', flexShrink: 0 }} 
+                                    onClick={async () => {
+                                        setSaving(true);
+                                        try {
+                                            const res = await window.api.database.selectBackupPath();
+                                            if (res.success && res.path) {
+                                                // اختبر المسار أولاً
+                                                const testRes = await window.api.database.testBackupPath(res.path);
+                                                if (testRes.success) {
+                                                    // عيّن المسار
+                                                    const setRes = await window.api.database.setBackupPath(res.path);
+                                                    if (setRes.success) {
+                                                        setBackupPath(res.path);
+                                                        toast.success('تم تعيين مسار النسخة الاحتياطية بنجاح');
+                                                    } else {
+                                                        toast.error(setRes.error || 'فشل تعيين المسار');
+                                                    }
+                                                } else {
+                                                    toast.error(testRes.error || 'المسار غير قابل للكتابة');
+                                                }
+                                            }
+                                        } catch (e) {
+                                            toast.error('خطأ في اختيار المسار: ' + e.message);
+                                        }
+                                        setSaving(false);
+                                    }}
+                                    disabled={saving}
+                                >
+                                    <FolderOpen size={14} /> اختر المسار
+                                </button>
+                            </div>
+                        </Fld>
+                        {backupPath && (
+                            <div style={{ marginTop: 14, padding: '10px 12px', background: 'rgba(16,185,129,0.08)', borderLeft: '3px solid #10b981', borderRadius: 6 }}>
+                                <div style={{ fontSize: '.825rem', fontWeight: 500, marginBottom: 6, color: '#059669' }}>
+                                    ✓ مسار النسخة الاحتياطية نشط
+                                </div>
+                                <div style={{ fontSize: '.8rem', color: 'var(--text-muted)' }}>
+                                    {backupLastTime && <>آخر نسخة احتياطية: {new Date(backupLastTime).toLocaleString('ar-SA')}</>}
+                                </div>
+                            </div>
+                        )}
+                        {backupPath && (
+                            <button 
+                                style={{ ...btnStyle, marginTop: 10, background: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                onClick={async () => {
+                                    setSaving(true);
+                                    try {
+                                        const res = await window.api.database.setBackupPath(null);
+                                        if (res.success) {
+                                            setBackupPath(null);
+                                            setBackupLastTime(null);
+                                            toast.success('تم إلغاء النسخة الاحتياطية');
+                                        } else {
+                                            toast.error(res.error);
+                                        }
+                                    } catch (e) {
+                                        toast.error('خطأ: ' + e.message);
+                                    }
+                                    setSaving(false);
+                                }}
+                                disabled={saving}
+                            >
+                                <X size={14} /> إلغاء النسخة الاحتياطية
+                            </button>
+                        )}
                     </Card>
 
                     <Card title={t('reset_app') || 'Reset App'} icon={AlertTriangle} action={

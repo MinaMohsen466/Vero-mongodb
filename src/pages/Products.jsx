@@ -4,6 +4,7 @@ import Modal from '../components/Modal';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
 import { useShortcuts } from '../hooks/useShortcuts';
+import * as XLSX from 'xlsx';
 
 function Products() {
     const { user, t } = useAuth();
@@ -32,29 +33,40 @@ function Products() {
             return;
         }
         
-        const headers = ['Code', 'Name', 'Description', 'Category', 'Unit', 'Purchase_Price', 'Sale_Price', 'Min_Stock'].join(",");
-        const rows = products.map(p => {
-            return [
-                `"${p.code || ''}"`,
-                `"${(p.name || '').replace(/"/g, '""')}"`,
-                `"${(p.description || '').replace(/"/g, '""')}"`,
-                `"${(p.category || '').replace(/"/g, '""')}"`,
-                `"${p.unit || ''}"`,
+        try {
+            // Excel headers matching translated/localized labels or English fallback
+            const headers = [
+                t('code') || 'Code',
+                t('prod_name') || 'Name',
+                t('description') || 'Description',
+                t('prod_category') || 'Category',
+                t('prod_unit') || 'Unit',
+                t('prod_purchasePrice') || 'Purchase_Price',
+                t('prod_salePrice') || 'Sale_Price',
+                t('prod_minStock') || 'Min_Stock'
+            ];
+            
+            const rows = products.map(p => [
+                p.code || '',
+                p.name || '',
+                p.description || '',
+                p.category || '',
+                p.unit || '',
                 p.purchase_price || 0,
                 p.sale_price || 0,
                 p.min_stock || 0
-            ].join(",");
-        });
-        
-        const csvContent = headers + "\n" + rows.join("\n");
-        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", `products_export_${new Date().toISOString().split('T')[0]}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+            ]);
+            
+            const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Products");
+            
+            XLSX.writeFile(workbook, `products_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+            toast.success(t('savedSuccess') || 'Exported successfully');
+        } catch (error) {
+            console.error('Export error:', error);
+            toast.error(t('errorOccurred'));
+        }
     };
 
     const handleImportProducts = (e) => {
@@ -64,58 +76,40 @@ function Products() {
         const reader = new FileReader();
         reader.onload = async (event) => {
             try {
-                const buffer = event.target.result;
-                let text = new TextDecoder("utf-8").decode(buffer);
-                if (text.includes("")) {
-                    text = new TextDecoder("windows-1256").decode(buffer);
-                }
-                const lines = text.split(/\r?\n/);
-                if (lines.length < 2) {
+                const data = new Uint8Array(event.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                
+                if (rows.length < 2) {
                     toast.error(t('errorOccurred') || 'Invalid file format');
                     return;
                 }
 
                 let successCount = 0;
-                const parseCSVLine = (line) => {
-                    const result = [];
-                    let current = '';
-                    let inQuotes = false;
-                    for (let i = 0; i < line.length; i++) {
-                        const char = line[i];
-                        if (char === '"' && line[i+1] === '"') {
-                            current += '"';
-                            i++;
-                        } else if (char === '"') {
-                            inQuotes = !inQuotes;
-                        } else if (char === ',' && !inQuotes) {
-                            result.push(current);
-                            current = '';
-                        } else {
-                            current += char;
-                        }
+                
+                for (let i = 1; i < rows.length; i++) {
+                    const values = rows[i];
+                    if (!values || values.length === 0 || !values.some(v => v !== null && v !== undefined && v !== '')) {
+                        continue;
                     }
-                    result.push(current);
-                    return result;
-                };
-
-                for (let i = 1; i < lines.length; i++) {
-                    const line = lines[i].trim();
-                    if (!line) continue;
                     
-                    const values = parseCSVLine(line);
-                    if (values.length >= 2 && values[1]) {
-                        const productData = {
-                            code: values[0] || '',
-                            name: values[1] || '',
-                            description: values[2] || '',
-                            category: values[3] || '',
-                            unit: values[4] || t('prod_piece') || 'Piece',
-                            purchase_price: parseFloat(values[5]) || 0,
-                            sale_price: parseFloat(values[6]) || 0,
-                            min_stock: parseFloat(values[7]) || 0,
-                            stock_quantity: 0,
-                            is_active: true
-                        };
+                    const productData = {
+                        code: values[0] !== undefined && values[0] !== null ? String(values[0]).trim() : '',
+                        name: values[1] !== undefined && values[1] !== null ? String(values[1]).trim() : '',
+                        description: values[2] !== undefined && values[2] !== null ? String(values[2]).trim() : '',
+                        category: values[3] !== undefined && values[3] !== null ? String(values[3]).trim() : '',
+                        unit: values[4] !== undefined && values[4] !== null ? String(values[4]).trim() : t('prod_piece') || 'Piece',
+                        purchase_price: parseFloat(values[5]) || 0,
+                        sale_price: parseFloat(values[6]) || 0,
+                        min_stock: parseFloat(values[7]) || 0,
+                        stock_quantity: 0,
+                        is_active: true
+                    };
+
+                    if (productData.name) {
                         await window.api.products.create(productData);
                         successCount++;
                     }
@@ -346,7 +340,7 @@ function Products() {
                             <button className="btn btn-secondary" onClick={handleExportProducts} title={t('prod_export')}>
                                 <Download size={18} /> {t('prod_export')}
                             </button>
-                            <input type="file" accept=".csv" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImportProducts} />
+                            <input type="file" accept=".xlsx,.xls,.csv" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImportProducts} />
                             <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} title={t('prod_import')}>
                                 <Upload size={18} /> {t('prod_import')}
                             </button>

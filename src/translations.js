@@ -98,6 +98,13 @@ const translations = {
         finish_setup: 'إنهاء وبدء الاستخدام',
         next: 'التالي',
         previous: 'السابق',
+        setup_gate_title: 'تأكيد صلاحية الإعداد',
+        setup_gate_desc: 'أدخل بيانات الأدمن للسماح بإنشاء شركة جديدة',
+        setup_gate_verify: 'تحقق وابدأ الإعداد',
+        setup_gate_wrong_password: 'اسم المستخدم أو كلمة المرور غير صحيحة',
+        setup_gate_fields_required: 'يرجى إدخال اسم المستخدم وكلمة المرور',
+        setup_gate_success: 'تم التحقق بنجاح',
+        start_setup: 'بدء الإعداد',
 
         // Dashboard
         dash_totalSales: 'إجمالي المبيعات',

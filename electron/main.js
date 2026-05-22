@@ -2,8 +2,10 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const db = require('./database/db');
+const AdminConfig = require('./admin-config');
 
 let mainWindow;
+let adminConfig = null;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -30,6 +32,12 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+    // Initialize admin config first
+    const userDataPath = app.getPath('userData');
+    adminConfig = new AdminConfig(userDataPath);
+    adminConfig.init();
+    db.setAdminConfig(adminConfig);
+    
     await db.init(app);
     console.log('Database initialized successfully');
     createWindow();
@@ -67,6 +75,19 @@ function logActivity(action, module, entity_id, entity_ref, data) {
 // --- System Setup ---
 ipcMain.handle('system:isFirstRun', async () => db.system.isFirstRun());
 ipcMain.handle('system:runSetup', async (event, data) => db.system.runSetup(data));
+
+// Setup gate: verify master admin credentials before allowing company creation
+const SETUP_ADMIN_USERNAME = 'admin';
+ipcMain.handle('system:verifySetupAccess', async (event, { username, password }) => {
+    if (!adminConfig) {
+        return { success: false, message: 'Configuration not initialized' };
+    }
+    const SETUP_ADMIN_PASSWORD = adminConfig.getAdminPassword();
+    if (username === SETUP_ADMIN_USERNAME && password === SETUP_ADMIN_PASSWORD) {
+        return { success: true };
+    }
+    return { success: false, message: 'Invalid admin credentials' };
+});
 
 // --- Users & Auth ---
 ipcMain.handle('users:login', async (event, { username, password }) => {
@@ -512,7 +533,53 @@ ipcMain.handle('file:saveText', async (event, { content, defaultName, filters })
     }
 });
 
+// --- Database Backup Management ---
+ipcMain.handle('database:getBackupPath', async () => {
+    try {
+        return db.getBackupPath();
+    } catch (e) {
+        console.error('[database:getBackupPath] Error:', e);
+        return { backupDbPath: null, lastBackupTime: null };
+    }
+});
 
+ipcMain.handle('database:setBackupPath', async (event, backupPath) => {
+    try {
+        const result = db.setBackupPath(backupPath);
+        return result;
+    } catch (e) {
+        console.error('[database:setBackupPath] Error:', e);
+        return { success: false, error: 'خطأ في تعيين مسار النسخة الاحتياطية' };
+    }
+});
+
+ipcMain.handle('database:testBackupPath', async (event, testPath) => {
+    try {
+        const result = db.testBackupPath(testPath);
+        return result;
+    } catch (e) {
+        console.error('[database:testBackupPath] Error:', e);
+        return { success: false, error: 'فشل اختبار المسار' };
+    }
+});
+
+ipcMain.handle('database:selectBackupPath', async () => {
+    try {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openDirectory'],
+            title: 'اختر مجلد لحفظ النسخة الاحتياطية'
+        });
+        if (result.canceled || !result.filePaths.length) {
+            return { success: false, canceled: true };
+        }
+        const selectedDir = result.filePaths[0];
+        const backupPath = path.join(selectedDir, 'accapp_backup.db');
+        return { success: true, path: backupPath };
+    } catch (e) {
+        console.error('[database:selectBackupPath] Error:', e);
+        return { success: false, error: e.message };
+    }
+});
 
 // Start logging
 console.log('All IPC handlers registered successfully');
