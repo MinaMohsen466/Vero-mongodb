@@ -161,7 +161,7 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS employee_leaves (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL, leave_type TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, days INTEGER NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', approved_by INTEGER, notes TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
       CREATE TABLE IF NOT EXISTS employee_deductions (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL, month TEXT NOT NULL, amount REAL NOT NULL, reason TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
       CREATE TABLE IF NOT EXISTS salary_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_number TEXT UNIQUE NOT NULL, employee_id INTEGER NOT NULL, month TEXT NOT NULL, base_salary REAL DEFAULT 0, deductions REAL DEFAULT 0, net_salary REAL DEFAULT 0, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, journal_entry_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (employee_id) REFERENCES employees(id));
-      CREATE TABLE IF NOT EXISTS expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_number TEXT UNIQUE NOT NULL, category TEXT NOT NULL, date TEXT NOT NULL, amount REAL NOT NULL, description TEXT, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, journal_entry_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_number TEXT UNIQUE NOT NULL, category TEXT NOT NULL, date TEXT NOT NULL, amount REAL NOT NULL, description TEXT, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, journal_entry_id INTEGER, source_type TEXT, source_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS coupons (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, discount_type TEXT NOT NULL, discount_value REAL NOT NULL, max_uses INTEGER DEFAULT 0, current_uses INTEGER DEFAULT 0, valid_from TEXT, valid_to TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS offers (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, offer_type TEXT NOT NULL, discount_value REAL DEFAULT 0, target_type TEXT NOT NULL, target_id TEXT, buy_qty INTEGER DEFAULT 0, get_qty INTEGER DEFAULT 0, valid_from TEXT, valid_to TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, user_name TEXT NOT NULL, action TEXT NOT NULL, module TEXT NOT NULL, entity_id INTEGER, entity_ref TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -236,6 +236,15 @@ class AppDatabase {
                     this.exec("UPDATE expenses SET date = month || '-01' WHERE date IS NULL");
                 }
             }
+            const expColsAfter = this.all("PRAGMA table_info(expenses)");
+            const hasSourceType = expColsAfter.some(col => col.name === 'source_type');
+            const hasSourceId = expColsAfter.some(col => col.name === 'source_id');
+            if (!hasSourceType) {
+                this.exec("ALTER TABLE expenses ADD COLUMN source_type TEXT");
+            }
+            if (!hasSourceId) {
+                this.exec("ALTER TABLE expenses ADD COLUMN source_id INTEGER");
+            }
         } catch (e) { console.log('Expenses migration:', e.message); }
 
         // HR migrations - fix incompatible employees table
@@ -262,6 +271,32 @@ class AppDatabase {
         } catch (e) {
             console.log('HR Migration:', e.message);
         }
+
+        // Migration: expose already-paid salaries in expenses without creating duplicate journal entries.
+        try {
+            const expCols = this.all("PRAGMA table_info(expenses)");
+            const hasSourceType = expCols.some(col => col.name === 'source_type');
+            const hasSourceId = expCols.some(col => col.name === 'source_id');
+            if (hasSourceType && hasSourceId) {
+                const paidSalaries = this.all(`
+                    SELECT sp.*, e.name as employee_name, je.date as journal_date
+                    FROM salary_payments sp
+                    LEFT JOIN employees e ON sp.employee_id = e.id
+                    LEFT JOIN journal_entries je ON sp.journal_entry_id = je.id
+                `);
+                for (const sp of paidSalaries) {
+                    const exists = this.get("SELECT id FROM expenses WHERE source_type = 'salary' AND source_id = ?", [sp.id]);
+                    if (exists) continue;
+                    const payNumExists = this.get("SELECT id FROM expenses WHERE payment_number = ?", [sp.payment_number]);
+                    const payNum = payNumExists ? `SAL-EXP-${String(sp.id).padStart(6, '0')}` : sp.payment_number;
+                    const date = sp.journal_date || (sp.created_at ? String(sp.created_at).substring(0, 10) : new Date().toISOString().split('T')[0]);
+                    this.run(
+                        "INSERT INTO expenses (payment_number, category, date, amount, description, payment_method, payment_account_id, journal_entry_id, source_type, source_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        [payNum, 'salary', date, sp.net_salary || 0, `راتب ${sp.employee_name || ''} - ${sp.month}`, sp.payment_method || 'cash', sp.payment_account_id || null, sp.journal_entry_id || null, 'salary', sp.id, sp.notes || null, sp.created_by || null]
+                    );
+                }
+            }
+        } catch (e) { console.log('Salary expenses migration:', e.message); }
     }
 
     seedDefaultData() {
@@ -1491,9 +1526,11 @@ class SalaryRepo {
     getAll() {
         return this.db.all(`
             SELECT sp.*, e.name as employee_name, e.job_title, e.department,
+                   je.date as payment_date,
                    a.name as payment_account_name
             FROM salary_payments sp
             LEFT JOIN employees e ON sp.employee_id = e.id
+            LEFT JOIN journal_entries je ON sp.journal_entry_id = je.id
             LEFT JOIN accounts a ON sp.payment_account_id = a.id
             ORDER BY sp.created_at DESC
         `);
@@ -1555,10 +1592,11 @@ class SalaryRepo {
                 jeAttempt++;
             } while (jeAttempt < 100);
 
+            const paymentDate = payment.date || new Date().toISOString().split('T')[0];
             const jeDesc = `قيد راتب ${emp.name} - ${payment.month}`;
             const jeR = this.db.run(
                 "INSERT INTO journal_entries (entry_number, date, description, reference, created_by) VALUES (?, ?, ?, ?, ?)",
-                [jeNum, payment.date || new Date().toISOString().split('T')[0], jeDesc, payNum, n(payment.created_by)]
+                [jeNum, paymentDate, jeDesc, payNum, n(payment.created_by)]
             );
             const jeId = jeR.lastInsertRowid;
 
@@ -1586,8 +1624,14 @@ class SalaryRepo {
                 [payNum, payment.employee_id, payment.month, baseSalary, totalDeductions, netSalary,
                     n(payment.payment_method) || 'cash', n(paymentAccountId), jeId, n(payment.notes), n(payment.created_by)]
             );
+            const salaryId = r.lastInsertRowid;
 
-            return { success: true, id: r.lastInsertRowid, payment_number: payNum, net_salary: netSalary };
+            this.db.run(
+                "INSERT INTO expenses (payment_number, category, date, amount, description, payment_method, payment_account_id, journal_entry_id, source_type, source_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [payNum, 'salary', paymentDate, netSalary, `راتب ${emp.name} - ${payment.month}`, n(payment.payment_method) || 'cash', n(paymentAccountId), jeId, 'salary', salaryId, n(payment.notes), n(payment.created_by)]
+            );
+
+            return { success: true, id: salaryId, payment_number: payNum, net_salary: netSalary };
         } catch (e) {
             return { success: false, error: e.message };
         }
@@ -1622,6 +1666,7 @@ class SalaryRepo {
                 this.db.run('DELETE FROM journal_entries WHERE id = ?', [payment.journal_entry_id]);
             }
 
+            this.db.run("DELETE FROM expenses WHERE source_type = 'salary' AND source_id = ?", [id]);
             this.db.run('DELETE FROM salary_payments WHERE id = ?', [id]);
             return { success: true };
         } catch (e) {
@@ -1746,7 +1791,26 @@ class ExpensesRepo {
             if (category && category !== 'all') { sql += ' AND category = ?'; params.push(category); }
             
             const r = this.db.get(sql, params);
-            return r?.total || 0;
+            let total = r?.total || 0;
+
+            if (!category || category === 'all' || category === 'salary') {
+                let salarySql = `
+                    SELECT COALESCE(SUM(sp.net_salary), 0) as total
+                    FROM salary_payments sp
+                    LEFT JOIN journal_entries je ON sp.journal_entry_id = je.id
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM expenses ex
+                        WHERE ex.source_type = 'salary' AND ex.source_id = sp.id
+                    )
+                `;
+                const salaryParams = [];
+                if (startDate) { salarySql += " AND COALESCE(je.date, substr(sp.created_at, 1, 10)) >= ?"; salaryParams.push(startDate); }
+                if (endDate) { salarySql += " AND COALESCE(je.date, substr(sp.created_at, 1, 10)) <= ?"; salaryParams.push(endDate); }
+                const salaryTotal = this.db.get(salarySql, salaryParams)?.total || 0;
+                total += salaryTotal;
+            }
+
+            return total;
         } catch (e) { return 0; }
     }
 
@@ -1762,6 +1826,7 @@ class ExpensesRepo {
             const category = payment.category || 'other';
             let targetAccountCode = '57'; // other
             if (category === 'rent') targetAccountCode = '53';
+            else if (category === 'salary') targetAccountCode = '521';
             else if (category === 'hospitality') targetAccountCode = '54';
             else if (category === 'utilities') targetAccountCode = '55';
             else if (category === 'maintenance') targetAccountCode = '56';
@@ -1821,8 +1886,8 @@ class ExpensesRepo {
 
             // Save expense payment record
             const r = this.db.run(
-                "INSERT INTO expenses (payment_number, category, date, amount, description, payment_method, payment_account_id, journal_entry_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [payNum, category, payment.date, amount, desc, n(payment.payment_method) || 'cash', n(paymentAccountId), jeId, n(payment.notes), n(payment.created_by)]
+                "INSERT INTO expenses (payment_number, category, date, amount, description, payment_method, payment_account_id, journal_entry_id, source_type, source_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [payNum, category, payment.date, amount, desc, n(payment.payment_method) || 'cash', n(paymentAccountId), jeId, n(payment.source_type), n(payment.source_id), n(payment.notes), n(payment.created_by)]
             );
 
             return { success: true, id: r.lastInsertRowid, payment_number: payNum };
@@ -1835,6 +1900,9 @@ class ExpensesRepo {
         try {
             const payment = this.db.get('SELECT * FROM expenses WHERE id = ?', [id]);
             if (!payment) return { success: false, error: 'السجل غير موجود' };
+            if (payment.source_type === 'salary') {
+                return { success: false, error: 'مصروف الراتب مرتبط بسجل الرواتب. احذف صرف الراتب من شاشة الرواتب.' };
+            }
 
             // Reverse journal entry
             if (payment.journal_entry_id) {

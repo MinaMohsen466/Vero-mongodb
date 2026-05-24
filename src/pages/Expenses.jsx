@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast';
 
 // ─── Category Config ─────────────────────────────────────────────────────────
 const CATEGORIES = [
+    { id: 'salary',       labelAr: 'رواتب',           labelEn: 'Salaries',      icon: DollarSign,    color: '#0f766e' },
     { id: 'rent',         labelAr: 'إيجار',          labelEn: 'Rent',          icon: Home,          color: '#6366f1' },
     { id: 'hospitality',  labelAr: 'ضيافة',           labelEn: 'Hospitality',   icon: Coffee,        color: '#f59e0b' },
     { id: 'utilities',    labelAr: 'كهرباء وماء',     labelEn: 'Utilities',     icon: Zap,           color: '#10b981' },
@@ -83,8 +84,28 @@ export default function Expenses() {
 
     const load = async () => {
         try {
-            const data = await window.api.expenses.getAll();
-            setExpenses(data || []);
+            const [data, salaries] = await Promise.all([
+                window.api.expenses.getAll(),
+                window.api.salaries.getAll()
+            ]);
+            const expenseRows = data || [];
+            const salaryRows = (salaries || [])
+                .filter(s => !expenseRows.some(ex => ex.source_type === 'salary' && Number(ex.source_id) === Number(s.id)))
+                .map(s => ({
+                    id: `salary-${s.id}`,
+                    payment_number: s.payment_number,
+                    category: 'salary',
+                    date: s.payment_date || (s.created_at ? String(s.created_at).substring(0, 10) : ''),
+                    amount: s.net_salary || 0,
+                    description: `${isAr ? 'راتب' : 'Salary'} ${s.employee_name || ''} - ${s.month}`,
+                    payment_method: s.payment_method || 'cash',
+                    payment_account_id: s.payment_account_id,
+                    payment_account_name: s.payment_account_name,
+                    source_type: 'salary',
+                    source_id: s.id,
+                    notes: s.notes
+                }));
+            setExpenses([...expenseRows, ...salaryRows].sort((a, b) => String(b.date).localeCompare(String(a.date))));
         } catch (e) { console.error(e); }
     };
 
@@ -381,6 +402,11 @@ export default function Expenses() {
                                             <span title={ex.description} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                 {ex.description || '-'}
                                             </span>
+                                            {ex.source_type === 'salary' && (
+                                                <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                    {isAr ? 'مسجل تلقائيا من صرف الرواتب' : 'Recorded automatically from payroll'}
+                                                </span>
+                                            )}
                                             {ex.notes && (
                                                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{ex.notes}</span>
                                             )}
@@ -411,14 +437,20 @@ export default function Expenses() {
                                         </td>
                                         {/* Actions */}
                                         <td style={{ padding: '12px 16px' }}>
-                                            <button
-                                                className="btn btn-ghost btn-icon"
-                                                onClick={() => handleDelete(ex.id, ex.payment_number)}
-                                                title={isAr ? 'حذف' : 'Delete'}
-                                                style={{ color: '#ef4444' }}
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+                                            {ex.source_type === 'salary' ? (
+                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                                                    {isAr ? 'من الرواتب' : 'Payroll'}
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    className="btn btn-ghost btn-icon"
+                                                    onClick={() => handleDelete(ex.id, ex.payment_number)}
+                                                    title={isAr ? 'حذف' : 'Delete'}
+                                                    style={{ color: '#ef4444' }}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 );

@@ -16,7 +16,7 @@ function Products() {
     const [showCustomUnit, setShowCustomUnit] = useState(false);
     const [categoryFilter, setCategoryFilter] = useState('');
     const [formData, setFormData] = useState({
-        name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', min_stock: '', image: ''
+        name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', stock_quantity: '', min_stock: '', image: ''
     });
     const [showMovementsModal, setShowMovementsModal] = useState(false);
     const [selectedProductForTracking, setSelectedProductForTracking] = useState(null);
@@ -43,6 +43,7 @@ function Products() {
                 t('prod_unit') || 'Unit',
                 t('prod_purchasePrice') || 'Purchase_Price',
                 t('prod_salePrice') || 'Sale_Price',
+                t('prod_stock') || 'Stock_Quantity',
                 t('prod_minStock') || 'Min_Stock'
             ];
             
@@ -54,6 +55,7 @@ function Products() {
                 p.unit || '',
                 p.purchase_price || 0,
                 p.sale_price || 0,
+                p.stock_quantity || 0,
                 p.min_stock || 0
             ]);
             
@@ -104,8 +106,8 @@ function Products() {
                         unit: values[4] !== undefined && values[4] !== null ? String(values[4]).trim() : t('prod_piece') || 'Piece',
                         purchase_price: parseFloat(values[5]) || 0,
                         sale_price: parseFloat(values[6]) || 0,
-                        min_stock: parseFloat(values[7]) || 0,
-                        stock_quantity: 0,
+                        stock_quantity: values.length > 8 ? (parseFloat(values[7]) || 0) : 0,
+                        min_stock: parseFloat(values.length > 8 ? values[8] : values[7]) || 0,
                         is_active: true
                     };
 
@@ -160,10 +162,10 @@ function Products() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const data = { ...formData, purchase_price: parseFloat(formData.purchase_price) || 0, sale_price: parseFloat(formData.sale_price) || 0, min_stock: parseFloat(formData.min_stock) || 0, stock_quantity: 0 };
+            const data = { ...formData, purchase_price: parseFloat(formData.purchase_price) || 0, sale_price: parseFloat(formData.sale_price) || 0, stock_quantity: parseFloat(formData.stock_quantity) || 0, min_stock: parseFloat(formData.min_stock) || 0 };
 
             if (editingProduct) {
-                await window.api.products.update({ ...data, id: editingProduct.id, stock_quantity: editingProduct.stock_quantity, is_active: true });
+                await window.api.products.update({ ...data, id: editingProduct.id, is_active: true });
                 toast.success(t('savedSuccess') || 'Product updated successfully');
             } else {
                 await window.api.products.create(data);
@@ -197,11 +199,11 @@ function Products() {
             setShowCustomUnit(isCustomUnit);
             setFormData({
                 name: product.name, description: product.description || '', unit: isCustomUnit ? product.unit : product.unit,
-                category: product.category || '', purchase_price: product.purchase_price || '', sale_price: product.sale_price || '', min_stock: product.min_stock || '', image: product.image || ''
+                category: product.category || '', purchase_price: product.purchase_price || '', sale_price: product.sale_price || '', stock_quantity: product.stock_quantity || '', min_stock: product.min_stock || '', image: product.image || ''
             });
         } else {
             setShowCustomUnit(false);
-            setFormData({ name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', min_stock: '', image: '' });
+            setFormData({ name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', stock_quantity: '', min_stock: '', image: '' });
         }
         setShowModal(true);
     };
@@ -482,6 +484,10 @@ function Products() {
                     <div className="form-group">
                         <label className="form-label">{t('prod_minStock')}</label>
                         <input type="number" className="form-input" value={formData.min_stock} onChange={(e) => setFormData({ ...formData, min_stock: e.target.value })} min="0" />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">{t('prod_stock') || 'Stock Quantity'}</label>
+                        <input type="number" className="form-input" value={formData.stock_quantity} onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })} min="0" step="0.001" />
                     </div>
                 </form>
             </Modal>

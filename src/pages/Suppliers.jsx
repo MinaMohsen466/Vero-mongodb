@@ -113,8 +113,53 @@ function Suppliers() {
     const showSupplierInvoices = async (supplier) => {
         setSelectedSupplier(supplier);
         try {
-            const invoices = await window.api.invoices.getBySupplier(supplier.id);
-            setSupplierInvoices(invoices || []);
+            const [invoices, vouchers] = await Promise.all([
+                window.api.invoices.getBySupplier(supplier.id),
+                window.api.vouchers.getAll('payment')
+            ]);
+            const paymentVouchers = (vouchers || []).filter(v => Number(v.supplier_id) === Number(supplier.id));
+            let seq = 0;
+            const rows = [];
+
+            (invoices || []).forEach(inv => {
+                rows.push({
+                    date: inv.date,
+                    description: `${t('inv_number') || 'Invoice'} ${inv.invoice_number}`,
+                    debit: inv.total || 0,
+                    credit: 0,
+                    seq: seq++
+                });
+                const hasVoucherPayment = paymentVouchers.some(v => Number(v.invoice_id) === Number(inv.id));
+                const paidWithoutVoucher = !hasVoucherPayment && ((inv.status === 'paid' && !(inv.paid > 0)) || inv.paid > 0);
+                if (paidWithoutVoucher) {
+                    rows.push({
+                        date: inv.date,
+                        description: `${t('inv_paid') || 'Paid'} ${inv.invoice_number}`,
+                        debit: 0,
+                        credit: inv.paid > 0 ? inv.paid : inv.total || 0,
+                        seq: seq++
+                    });
+                }
+            });
+
+            paymentVouchers.forEach(v => {
+                rows.push({
+                    date: v.date,
+                    description: v.description || `${t('vouchers') || 'Voucher'} ${v.voucher_number}`,
+                    debit: 0,
+                    credit: v.amount || 0,
+                    seq: seq++
+                });
+            });
+
+            let balance = 0;
+            const statement = rows
+                .sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.seq - b.seq)
+                .map(row => {
+                    balance += (row.debit || 0) - (row.credit || 0);
+                    return { ...row, balance };
+                });
+            setSupplierInvoices(statement);
         } catch (e) { console.error(e); setSupplierInvoices([]); }
         setShowInvoicesModal(true);
     };
@@ -256,8 +301,8 @@ function Suppliers() {
                 </form>
             </Modal>
 
-            {/* Supplier Invoices Modal */}
-            <Modal isOpen={showInvoicesModal} onClose={() => setShowInvoicesModal(false)} title={`${t('supp_invoices')}: ${selectedSupplier?.name || ''}`} size="lg"
+            {/* Supplier Statement Modal */}
+            <Modal isOpen={showInvoicesModal} onClose={() => setShowInvoicesModal(false)} title={`${t('rep_supplierStatement') || 'Supplier Statement'}: ${selectedSupplier?.name || ''}`} size="lg"
                 footer={<button className="btn btn-secondary" onClick={() => setShowInvoicesModal(false)}>{t('close')}</button>}>
                 <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
                     <strong>{t('supp_currentBalance')}: </strong>
@@ -270,16 +315,16 @@ function Suppliers() {
                 ) : (
                     <table>
                         <thead>
-                            <tr><th>{t('inv_number')}</th><th>{t('date')}</th><th>{t('total')}</th><th>{t('supp_paidAmount')}</th><th>{t('status')}</th></tr>
+                            <tr><th>{t('date')}</th><th>{t('vouch_description') || 'Description'}</th><th>{t('debit') || 'Debit'}</th><th>{t('credit') || 'Credit'}</th><th>{t('balance')}</th></tr>
                         </thead>
                         <tbody>
-                            {supplierInvoices.map(inv => (
-                                <tr key={inv.id}>
-                                    <td className="font-bold">{inv.invoice_number}</td>
-                                    <td>{new Date(inv.date).toLocaleDateString('en-GB')}</td>
-                                    <td>{formatCurrency(inv.total)}</td>
-                                    <td>{formatCurrency(inv.paid || 0)}</td>
-                                    <td><span className={`badge ${inv.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{inv.status === 'paid' ? t('inv_paid') : t('supp_creditLabel')}</span></td>
+                            {supplierInvoices.map((row, i) => (
+                                <tr key={i}>
+                                    <td>{new Date(row.date).toLocaleDateString('en-GB')}</td>
+                                    <td className="font-bold">{row.description}</td>
+                                    <td className="text-danger">{row.debit > 0 ? formatCurrency(row.debit) : '-'}</td>
+                                    <td className="text-success">{row.credit > 0 ? formatCurrency(row.credit) : '-'}</td>
+                                    <td className={row.balance > 0 ? 'text-danger font-bold' : 'text-success font-bold'}>{formatCurrency(Math.abs(row.balance))}</td>
                                 </tr>
                             ))}
                         </tbody>
