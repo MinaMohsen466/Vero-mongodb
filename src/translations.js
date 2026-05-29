@@ -216,6 +216,8 @@ const translations = {
         inv_view: 'عرض الفاتورة',
         inv_print: 'طباعة',
         inv_paymentAccount: 'حساب الدفع',
+        paid_amount: 'المبلغ المدفوع',
+        remaining_amount: 'المبلغ المتبقي',
 
         // Purchase Invoices
         pinv_title: 'فواتير المشتريات',
@@ -277,6 +279,11 @@ const translations = {
         vouch_remaining: 'المتبقي',
         vouch_linkNote: 'عند الربط سيتم تحديث حالة الفاتورة تلقائياً',
         vouch_unpaidCount: 'فاتورة غير مدفوعة',
+        vouch_customer_required: 'يرجى اختيار العميل أولاً',
+        vouch_supplier_required: 'يرجى اختيار المورد أولاً',
+        vouch_invoice_required: 'يجب اختيار فاتورة لربط السند بها',
+        vouch_invoice_required_short: 'إلزامي',
+        rep_cashBankBalance: 'رصيد الصندوق والبنوك',
 
         // Reports - Account Statement
         rep_customerStatement: 'كشف حساب عميل',
@@ -552,6 +559,8 @@ const translations = {
         cust_deleteConfirm: 'هل أنت متأكد من حذف هذا العميل؟',
         activeOnly: 'النشط فقط',
         inactive: 'غير نشط',
+        cust_hasBalance: 'ذمم مدينة مستحقة',
+        supp_hasBalance: 'ذمم دائنة مستحقة',
         welcome_message: 'مرحباً بك في نظام المحاسبة',
         dash_customersCount: 'العملاء',
         dash_suppliersCount: 'الموردين',
@@ -795,7 +804,7 @@ const translations = {
         my_company: 'شركتي',
         sale_completed: 'تمت عملية البيع بنجاح',
         error_checkout: 'خطأ أثناء الدفع',
-        search_product_barcode: 'البحث بالاسم أو الباركود...',
+        search_product_barcode: 'البحث بالاسم...',
         no_products: 'لا توجد منتجات',
         out_of_stock: 'غير متوفر',
         in_stock: 'متوفر',
@@ -852,7 +861,7 @@ const translations = {
         inv_unitPrice: 'السعر',
         inv_total: 'الإجمالي',
         inv_paid: 'المدفوع',
-        inv_credit: 'المتبقي',
+        inv_credit: 'آجل',
         pinv_edit: 'تعديل فاتورة المشتريات',
         pinv_add: 'فاتورة مشتريات جديدة',
         savingProgress: 'جاري الحفظ...',
@@ -1109,6 +1118,12 @@ const translations = {
         rep_totalRent: 'إجمالي الإيجار',
         rep_totalExpenses: 'إجمالي المصروفات',
         rep_grossProfit: 'إجمالي الربح',
+        rep_cogs: 'تكلفة المبيعات',
+        rep_pl_item: 'البند',
+        rep_pl_revenue: 'إيرادات النشاط',
+        rep_pl_cogs: 'تكلفة المبيعات',
+        rep_pl_expenses: 'المصروفات التشغيلية',
+        rep_cashBankPosition: 'السيولة والمركز النقدي (الصندوق والبنوك)',
         rep_salaries: 'الرواتب',
         rep_rent: 'الإيجار',
 
@@ -1227,7 +1242,9 @@ const translations = {
         select_department: 'اختر القسم',
         enter_emp_name: 'أدخل اسم الموظف',
         payroll_account: 'حساب الرواتب',
-
+        opening_balance: 'رصيد افتتاحي',
+        opening_balance_date: 'تاريخ الرصيد الافتتاحي',
+        rep_openingBalance: 'رصيد افتتاحي',
     },
     en: {
 
@@ -1437,6 +1454,8 @@ const translations = {
         inv_view: 'View Invoice',
         inv_print: 'Print',
         inv_paymentAccount: 'Payment Account',
+        paid_amount: 'Amount Paid',
+        remaining_amount: 'Remaining Amount',
 
         // Purchase Invoices
         pinv_title: 'Purchase Invoices',
@@ -1498,6 +1517,11 @@ const translations = {
         vouch_remaining: 'Remaining',
         vouch_linkNote: 'Linking will automatically update the invoice status',
         vouch_unpaidCount: 'unpaid invoices',
+        vouch_customer_required: 'Please select a customer first',
+        vouch_supplier_required: 'Please select a supplier first',
+        vouch_invoice_required: 'An invoice must be selected to link with the voucher',
+        vouch_invoice_required_short: 'Required',
+        rep_cashBankBalance: 'Cash & Bank Balance',
 
         // Reports - Account Statement
         rep_customerStatement: 'Customer Statement',
@@ -1748,6 +1772,8 @@ const translations = {
         cust_deleteConfirm: 'Are you sure you want to delete this customer?',
         activeOnly: 'Active Only',
         inactive: 'Inactive',
+        cust_hasBalance: 'Outstanding Receivables',
+        supp_hasBalance: 'Outstanding Payables',
         welcome_message: 'Welcome to Accounting System',
         dash_customersCount: 'Customers',
         dash_suppliersCount: 'Suppliers',
@@ -1958,7 +1984,7 @@ const translations = {
         my_company: 'My Company',
         sale_completed: 'Sale completed',
         error_checkout: 'Error during checkout',
-        search_product_barcode: 'Search product or barcode...',
+        search_product_barcode: 'Search product...',
         no_products: 'No Products',
         out_of_stock: 'Out of Stock',
         in_stock: 'In Stock',
@@ -2263,6 +2289,12 @@ const translations = {
         rep_totalRent: 'Total Rent',
         rep_totalExpenses: 'Total Expenses',
         rep_grossProfit: 'Gross Profit',
+        rep_cogs: 'Cost of Goods Sold',
+        rep_pl_item: 'Item',
+        rep_pl_revenue: 'Revenues',
+        rep_pl_cogs: 'Cost of Goods Sold',
+        rep_pl_expenses: 'Operating Expenses',
+        rep_cashBankPosition: 'Cash & Liquidity Position',
         rep_salaries: 'Salaries',
         rep_rent: 'Rent',
 
@@ -2414,6 +2446,9 @@ const translations = {
         select_department: 'Select Department',
         enter_emp_name: 'Enter employee name',
         payroll_account: 'Payroll Account',
+        opening_balance: 'Opening Balance',
+        opening_balance_date: 'Opening Balance Date',
+        rep_openingBalance: 'Opening Balance',
     }
 };
 

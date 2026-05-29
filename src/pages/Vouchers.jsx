@@ -99,6 +99,11 @@ function Vouchers() {
     };
 
     const handleInvoiceSelect = (invoiceId) => {
+        if (String(formData.invoice_id) === String(invoiceId)) {
+            // Deselect if clicking the same invoice
+            setFormData({ ...formData, invoice_id: '', amount: 0 });
+            return;
+        }
         const invoice = pendingInvoices.find(inv => inv.id === parseInt(invoiceId));
         if (invoice) {
             setFormData({ ...formData, invoice_id: String(invoiceId), amount: invoice.total - (invoice.paid || 0) });
@@ -109,6 +114,25 @@ function Vouchers() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!editMode) {
+            if (formData.type === 'receipt' && !formData.customer_id) {
+                toast.error(t('vouch_customer_required') || 'Customer is required');
+                return;
+            }
+            if (formData.type === 'payment' && !formData.supplier_id) {
+                toast.error(t('vouch_supplier_required') || 'Supplier is required');
+                return;
+            }
+            if (parseFloat(formData.amount) <= 0) {
+                toast.error(t('vouch_amount_required') || 'Amount must be greater than zero');
+                return;
+            }
+            // If there are pending invoices, user MUST select one
+            if (pendingInvoices.length > 0 && !formData.invoice_id) {
+                toast.error(t('vouch_invoice_required') || 'يجب اختيار فاتورة لربط السند بها');
+                return;
+            }
+        }
         try {
             const voucherData = {
                 ...formData,
@@ -352,15 +376,52 @@ function Vouchers() {
                         </div>
                     </div>
 
-                    {/* Invoice linking section - always visible when customer/supplier is selected */}
+                     {/* Invoice linking section - always visible when customer/supplier is selected */}
                     {((formData.type === 'receipt' && formData.customer_id) || (formData.type === 'payment' && formData.supplier_id)) && (
                         <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-                            <label className="form-label" style={{ color: 'var(--primary)', marginBottom: '8px' }}>🔗 {t('vouch_linkInvoice')}</label>
+                            <label className="form-label" style={{ color: 'var(--primary)', marginBottom: '8px' }}>🔗 {t('vouch_linkInvoice')} {pendingInvoices.length > 0 ? <span style={{ fontSize: '0.8rem', color: 'var(--danger, #ef4444)', fontWeight: 'bold' }}>* ({t('vouch_invoice_required_short') || 'إلزامي'})</span> : <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({t('vouch_optional') || 'اختياري'})</span>}</label>
 
-                            {pendingInvoices.length === 0 ? (
-                                <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>
-                                    {t('vouch_noUnpaidInvoices')}
-                                </p>
+                            {editMode ? (
+                                <div style={{ 
+                                    padding: '10px 12px', 
+                                    border: '1px solid var(--border)', 
+                                    borderRadius: '6px', 
+                                    backgroundColor: 'var(--bg-primary)', 
+                                    display: 'flex', 
+                                    justifyContent: 'space-between', 
+                                    alignItems: 'center',
+                                    opacity: 0.85
+                                }}>
+                                    {(() => {
+                                        const selectedInvoice = pendingInvoices.find(inv => String(inv.id) === String(formData.invoice_id));
+                                        if (selectedInvoice) {
+                                            return (
+                                                <>
+                                                    <div>
+                                                        <span style={{ fontWeight: 'bold', marginLeft: '8px' }}>{selectedInvoice.invoice_number}</span>
+                                                        <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                                                            {new Date(selectedInvoice.date).toLocaleDateString('en-GB')}
+                                                        </span>
+                                                    </div>
+                                                    <div style={{ textAlign: 'left' }}>
+                                                        <span style={{ fontWeight: 'bold' }}>{formatCurrency(selectedInvoice.total)}</span>
+                                                    </div>
+                                                </>
+                                            );
+                                        } else {
+                                            return <span style={{ color: 'var(--text-muted)' }}>{t('vouch_noLink') || 'بدون ربط بفاتورة'}</span>;
+                                        }
+                                    })()}
+                                </div>
+                            ) : pendingInvoices.length === 0 ? (
+                                <div style={{ padding: '10px 12px', border: '1px dashed var(--border)', borderRadius: '6px', backgroundColor: 'var(--bg-primary)' }}>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>
+                                        ℹ️ {t('vouch_noUnpaidInvoices') || 'لا توجد فواتير غير مدفوعة'}
+                                    </p>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: '4px 0 0 0' }}>
+                                        {t('vouch_payWithoutInvoice') || 'يمكنك الدفع بدون ربط بفاتورة - أدخل المبلغ يدوياً'}
+                                    </p>
+                                </div>
                             ) : (
                                 <>
                                     {/* Search box for invoices */}
@@ -376,20 +437,6 @@ function Vouchers() {
 
                                     {/* Invoice list */}
                                     <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px', backgroundColor: 'var(--bg-primary)' }}>
-                                        {/* No link option */}
-                                        <div
-                                            onClick={() => handleInvoiceSelect('')}
-                                            style={{
-                                                padding: '10px 12px',
-                                                cursor: 'pointer',
-                                                borderBottom: '1px solid var(--border)',
-                                                backgroundColor: !formData.invoice_id ? 'var(--primary-light, rgba(59,130,246,0.1))' : 'transparent',
-                                                fontWeight: !formData.invoice_id ? 'bold' : 'normal'
-                                            }}
-                                        >
-                                            -- {t('vouch_noLink')} --
-                                        </div>
-
                                         {filteredInvoices.map(inv => {
                                             const remaining = inv.total - (inv.paid || 0);
                                             const isSelected = String(formData.invoice_id) === String(inv.id);
@@ -409,6 +456,7 @@ function Vouchers() {
                                                     }}
                                                 >
                                                     <div>
+                                                        {isSelected && <span style={{ color: 'var(--primary)', marginLeft: '4px' }}>✓</span>}
                                                         <span style={{ fontWeight: 'bold', marginLeft: '8px' }}>{inv.invoice_number}</span>
                                                         <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
                                                             {new Date(inv.date).toLocaleDateString('en-GB')}
@@ -429,8 +477,8 @@ function Vouchers() {
                                         )}
                                     </div>
 
-                                    <small style={{ color: 'var(--text-muted)', marginTop: '6px', display: 'block' }}>
-                                        {t('vouch_linkNote')} ({pendingInvoices.length} {t('vouch_unpaidCount')})
+                                    <small style={{ color: 'var(--danger, #ef4444)', marginTop: '6px', display: 'block', fontWeight: 600 }}>
+                                        ⚠️ {t('vouch_linkNote')} ({pendingInvoices.length} {t('vouch_unpaidCount')}) — {t('vouch_invoice_required') || 'يجب اختيار فاتورة لربط السند بها'}
                                     </small>
                                 </>
                             )}

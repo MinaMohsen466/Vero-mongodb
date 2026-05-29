@@ -31,7 +31,7 @@ function PurchaseInvoices() {
 
     const emptyForm = () => ({
         supplier_id: '', date: new Date().toISOString().split('T')[0], due_date: '', notes: '',
-        status: 'paid', payment_method: 'cash', payment_account_id: '',
+        status: 'paid', payment_method: 'cash', payment_account_id: '', paid: 0,
         items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }]
     });
 
@@ -125,9 +125,28 @@ function PurchaseInvoices() {
             return;
         }
 
+        if (formData.status === 'partial') {
+            const totals = calculateTotals();
+            const paidVal = parseFloat(formData.paid) || 0;
+            if (paidVal <= 0) {
+                setError('يجب إدخال مبلغ مدفوع أكبر من الصفر للدفع الجزئي');
+                return;
+            }
+            if (paidVal >= totals.total) {
+                setError('المبلغ المدفوع يجب أن يكون أقل من إجمالي الفاتورة للدفع الجزئي');
+                return;
+            }
+        }
+
         setSaving(true);
         try {
             const totals = calculateTotals();
+            let paidAmount = 0;
+            if (formData.status === 'paid') {
+                paidAmount = totals.total;
+            } else if (formData.status === 'partial') {
+                paidAmount = parseFloat(formData.paid) || 0;
+            }
             const invoiceData = {
                 type: 'purchase',
                 supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
@@ -138,8 +157,9 @@ function PurchaseInvoices() {
                 discount: 0,
                 tax: 0,
                 total: totals.total,
+                paid: paidAmount,
                 status: formData.status,
-                payment_method: formData.status === 'paid' ? formData.payment_method : 'credit',
+                payment_method: (formData.status === 'paid' || formData.status === 'partial') ? formData.payment_method : 'credit',
                 payment_account_id: formData.payment_account_id ? parseInt(formData.payment_account_id) : null,
                 items: validItems.map(item => ({
                     product_id: item.product_id ? parseInt(item.product_id) : null,
@@ -256,6 +276,7 @@ function PurchaseInvoices() {
                 status: invoice.status || 'paid',
                 payment_method: invoice.payment_method || 'cash',
                 payment_account_id: invoice.payment_account_id != null ? String(invoice.payment_account_id) : '',
+                paid: invoice.paid || 0,
                 items: mappedItems
             });
 
@@ -470,18 +491,42 @@ function PurchaseInvoices() {
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">{t('inv_status')}</label>
-                            <select className="form-select" value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
+                            <select className="form-select" value={formData.status} onChange={(e) => {
+                                const newStatus = e.target.value;
+                                let newPaid = formData.paid;
+                                if (newStatus === 'paid') {
+                                    newPaid = calculateTotals().total;
+                                } else if (newStatus === 'pending') {
+                                    newPaid = 0;
+                                }
+                                setFormData({ ...formData, status: newStatus, paid: newPaid });
+                            }}>
                                 <option value="paid">{t('inv_paid')}</option>
+                                <option value="partial">{t('inv_partial')}</option>
                                 <option value="pending">{t('inv_credit')}</option>
                             </select>
                         </div>
-                        {formData.status === 'paid' && (
+                        {(formData.status === 'paid' || formData.status === 'partial') && (
                             <div className="form-group">
                                 <label className="form-label">{t('inv_paymentMethod')}</label>
                                 <select className="form-select" value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}>
                                     <option value="cash">{t('inv_cash')}</option>
                                     <option value="bank">{t('inv_bank')}</option>
                                 </select>
+                            </div>
+                        )}
+                        {formData.status === 'partial' && (
+                            <div className="form-group">
+                                <label className="form-label">{t('paid_amount')} *</label>
+                                <input 
+                                    type="number" 
+                                    className="form-input" 
+                                    value={formData.paid} 
+                                    onChange={(e) => setFormData({ ...formData, paid: parseFloat(e.target.value) || 0 })} 
+                                    step="0.250"
+                                    min="0"
+                                    required 
+                                />
                             </div>
                         )}
                     </div>

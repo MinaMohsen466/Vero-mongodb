@@ -99,7 +99,11 @@ function InvoicePrintPreview({ invoice, settings, onClose, type = 'sales' }) {
         <tr><td>${t('subtotal') || 'Subtotal'}</td><td style="text-align:left;font-weight:600">${formatCurrency(invoice.subtotal || invoice.total)}</td></tr>
         ${invoice.discount > 0 ? `<tr><td>${t('discount') || 'Discount'}</td><td style="text-align:left;color:#c00">- ${formatCurrency(invoice.discount)}</td></tr>` : ''}
         ${invoice.tax > 0 ? `<tr><td>${t('tax') || 'Tax'}</td><td style="text-align:left">${formatCurrency(invoice.tax)}</td></tr>` : ''}
-        <tr style="background:${bgColor};color:${textColor};font-weight:700;font-size:14px"><td>${t('final_total') || 'Total'}</td><td style="text-align:left">${formatCurrency(invoice.total)}</td></tr>`;
+        <tr style="background:${bgColor};color:${textColor};font-weight:700;font-size:14px"><td>${t('final_total') || 'Total'}</td><td style="text-align:left">${formatCurrency(invoice.total)}</td></tr>
+        ${invoice.paid > 0 && invoice.paid < invoice.total ? `
+        <tr><td>${t('paid_amount') || 'Amount Paid'}</td><td style="text-align:left;color:#059669;font-weight:600">${formatCurrency(invoice.paid)}</td></tr>
+        <tr><td>${t('remaining_amount') || 'Remaining Amount'}</td><td style="text-align:left;color:#d97706;font-weight:600">${formatCurrency(invoice.total - invoice.paid)}</td></tr>
+        ` : ''}`;
 
     const notesBlock = (borderColor = '#ccc') => showNotes && invoice.notes
         ? `<div style="padding:10px 12px;border:1px solid ${borderColor};border-right:3px solid ${printColor};margin-bottom:12px;font-size:12px"><strong>${t('notes_label') || 'Notes:'}</strong> ${invoice.notes}</div>` : '';
@@ -249,6 +253,16 @@ ${extraCss}
                     <td style="padding:15px; border-radius:${isRtl ? '0 4px 4px 0' : '4px 0 0 4px'};">${t('final_total') || 'Total'}</td>
                     <td style="text-align:${alignLeft}; padding:15px; border-radius:${isRtl ? '4px 0 0 4px' : '0 4px 4px 0'};">${formatCurrWithSymbol(invoice.total)}</td>
                 </tr>
+                ${invoice.paid > 0 && invoice.paid < invoice.total ? `
+                <tr>
+                    <td>${t('paid_amount') || 'Amount Paid'}</td>
+                    <td style="text-align:${alignLeft};color:#059669;font-weight:600">${formatCurrWithSymbol(invoice.paid)}</td>
+                </tr>
+                <tr>
+                    <td>${t('remaining_amount') || 'Remaining Amount'}</td>
+                    <td style="text-align:${alignLeft};color:#d97706;font-weight:600">${formatCurrWithSymbol(invoice.total - invoice.paid)}</td>
+                </tr>
+                ` : ''}
             </table>
         </div>
 
@@ -677,6 +691,18 @@ ${notesBlock()}${termsBlock()}${sigBlock()}${footerBlock(printColor)}`;
                                         <td style={{ padding: '14px 14px', fontWeight: 800, fontSize: 14, textAlign: 'right' }}>{t('final_total') || 'الإجمالي النهائي'}</td>
                                         <td style={{ padding: '14px 14px', textAlign: 'left', fontWeight: 800, fontSize: 14 }}>{formatCurrency(invoice.total)}</td>
                                     </tr>
+                                    {invoice.paid > 0 && invoice.paid < invoice.total && (
+                                        <>
+                                            <tr>
+                                                <td style={{ padding: '10px 14px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151', textAlign: 'right', fontWeight: 600 }}>{t('paid_amount') || 'المبلغ المدفوع'}</td>
+                                                <td style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, borderBottom: '1px solid #e5e7eb', color: '#059669' }}>{formatCurrency(invoice.paid)}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style={{ padding: '10px 14px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151', textAlign: 'right', fontWeight: 600 }}>{t('remaining_amount') || 'المبلغ المتبقي'}</td>
+                                                <td style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, borderBottom: '1px solid #e5e7eb', color: '#d97706' }}>{formatCurrency(invoice.total - invoice.paid)}</td>
+                                            </tr>
+                                        </>
+                                    )}
                                 </tbody>
                             </table>
                         </div>

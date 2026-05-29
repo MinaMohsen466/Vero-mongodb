@@ -147,13 +147,13 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, full_name TEXT, role TEXT DEFAULT 'user', is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS permissions (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, module TEXT NOT NULL, can_view INTEGER DEFAULT 1, can_create INTEGER DEFAULT 0, can_edit INTEGER DEFAULT 0, can_delete INTEGER DEFAULT 0, UNIQUE(role, module));
       CREATE TABLE IF NOT EXISTS user_permissions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, module TEXT NOT NULL, can_view INTEGER DEFAULT 1, can_create INTEGER DEFAULT 0, can_edit INTEGER DEFAULT 0, can_delete INTEGER DEFAULT 0, UNIQUE(user_id, module), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);
-      CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, phone TEXT, email TEXT, address TEXT, tax_number TEXT, balance REAL DEFAULT 0, credit_limit REAL DEFAULT 0, notes TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-      CREATE TABLE IF NOT EXISTS suppliers (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, phone TEXT, email TEXT, address TEXT, tax_number TEXT, balance REAL DEFAULT 0, notes TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, phone TEXT, email TEXT, address TEXT, tax_number TEXT, balance REAL DEFAULT 0, credit_limit REAL DEFAULT 0, notes TEXT, is_active INTEGER DEFAULT 1, opening_balance REAL DEFAULT 0, opening_balance_date TEXT, opening_balance_je_id INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS suppliers (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, phone TEXT, email TEXT, address TEXT, tax_number TEXT, balance REAL DEFAULT 0, notes TEXT, is_active INTEGER DEFAULT 1, opening_balance REAL DEFAULT 0, opening_balance_date TEXT, opening_balance_je_id INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, parent_id INTEGER, account_type TEXT NOT NULL, nature TEXT NOT NULL, balance REAL DEFAULT 0, is_active INTEGER DEFAULT 1, can_post INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (parent_id) REFERENCES accounts(id));
       CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, description TEXT, unit TEXT DEFAULT 'قطعة', category TEXT, purchase_price REAL DEFAULT 0, sale_price REAL DEFAULT 0, stock_quantity REAL DEFAULT 0, min_stock REAL DEFAULT 0, image TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_number TEXT UNIQUE NOT NULL, type TEXT NOT NULL, customer_id INTEGER, supplier_id INTEGER, date TEXT NOT NULL, due_date TEXT, subtotal REAL DEFAULT 0, discount REAL DEFAULT 0, tax REAL DEFAULT 0, total REAL DEFAULT 0, paid REAL DEFAULT 0, status TEXT DEFAULT 'pending', payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS invoice_items (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id INTEGER NOT NULL, product_id INTEGER, description TEXT, quantity REAL NOT NULL, unit_price REAL NOT NULL, discount REAL DEFAULT 0, tax REAL DEFAULT 0, total REAL NOT NULL, FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE);
-      CREATE TABLE IF NOT EXISTS vouchers (id INTEGER PRIMARY KEY AUTOINCREMENT, voucher_number TEXT UNIQUE NOT NULL, type TEXT NOT NULL, date TEXT NOT NULL, amount REAL NOT NULL, account_id INTEGER, customer_id INTEGER, supplier_id INTEGER, payment_method TEXT DEFAULT 'cash', invoice_id INTEGER, reference TEXT, description TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS vouchers (id INTEGER PRIMARY KEY AUTOINCREMENT, voucher_number TEXT UNIQUE NOT NULL, type TEXT NOT NULL, date TEXT NOT NULL, amount REAL NOT NULL, applied_amount REAL DEFAULT 0, account_id INTEGER, customer_id INTEGER, supplier_id INTEGER, payment_method TEXT DEFAULT 'cash', invoice_id INTEGER, reference TEXT, description TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS journal_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, entry_number TEXT UNIQUE NOT NULL, date TEXT NOT NULL, description TEXT, reference TEXT, is_posted INTEGER DEFAULT 0, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS journal_entry_lines (id INTEGER PRIMARY KEY AUTOINCREMENT, entry_id INTEGER NOT NULL, account_id INTEGER NOT NULL, debit REAL DEFAULT 0, credit REAL DEFAULT 0, description TEXT, FOREIGN KEY (entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE NOT NULL, value TEXT, category TEXT DEFAULT 'general');
@@ -200,11 +200,35 @@ class AppDatabase {
                 this.exec("ALTER TABLE vouchers ADD COLUMN journal_entry_id INTEGER");
             }
 
+            // Check vouchers for applied_amount
+            const hasVchApplied = voucherCols.some(col => col.name === 'applied_amount');
+            if (!hasVchApplied) {
+                this.exec("ALTER TABLE vouchers ADD COLUMN applied_amount REAL DEFAULT 0");
+            }
+
             // Check products for image
             const productCols = this.all("PRAGMA table_info(products)");
             const hasImage = productCols.some(col => col.name === 'image');
             if (!hasImage) {
                 this.exec("ALTER TABLE products ADD COLUMN image TEXT");
+            }
+
+            // Check customers for opening_balance
+            const customerCols = this.all("PRAGMA table_info(customers)");
+            const hasCustOpening = customerCols.some(col => col.name === 'opening_balance');
+            if (!hasCustOpening) {
+                this.exec("ALTER TABLE customers ADD COLUMN opening_balance REAL DEFAULT 0");
+                this.exec("ALTER TABLE customers ADD COLUMN opening_balance_date TEXT");
+                this.exec("ALTER TABLE customers ADD COLUMN opening_balance_je_id INTEGER");
+            }
+
+            // Check suppliers for opening_balance
+            const supplierCols = this.all("PRAGMA table_info(suppliers)");
+            const hasSuppOpening = supplierCols.some(col => col.name === 'opening_balance');
+            if (!hasSuppOpening) {
+                this.exec("ALTER TABLE suppliers ADD COLUMN opening_balance REAL DEFAULT 0");
+                this.exec("ALTER TABLE suppliers ADD COLUMN opening_balance_date TEXT");
+                this.exec("ALTER TABLE suppliers ADD COLUMN opening_balance_je_id INTEGER");
             }
         } catch (e) {
             console.log('Migration check:', e.message);
@@ -319,6 +343,7 @@ class AppDatabase {
                 ['1', 'الأصول', null, 'asset', 'debit'], ['2', 'الخصوم', null, 'liability', 'credit'], ['3', 'حقوق الملكية', null, 'equity', 'credit'], ['4', 'الإيرادات', null, 'revenue', 'credit'], ['5', 'المصروفات', null, 'expense', 'debit'],
                 ['11', 'الأصول المتداولة', '1', 'asset', 'debit'], ['111', 'الصندوق', '11', 'asset', 'debit'], ['112', 'البنك', '11', 'asset', 'debit'], ['113', 'العملاء', '11', 'asset', 'debit'],
                 ['21', 'الخصوم المتداولة', '2', 'liability', 'credit'], ['211', 'الموردون', '21', 'liability', 'credit'],
+                ['399', 'الأرصدة الافتتاحية', '3', 'equity', 'credit'],
                 ['41', 'إيرادات المبيعات', '4', 'revenue', 'credit'], ['51', 'تكلفة المبيعات', '5', 'expense', 'debit'],
                 ['52', 'مصروفات الرواتب', '5', 'expense', 'debit'],
                 ['521', 'رواتب الموظفين', '52', 'expense', 'debit'],
@@ -369,6 +394,14 @@ class AppDatabase {
                     ['56', 'مصروفات الصيانة', expenseParent?.id || null, 'expense', 'debit']);
                 this.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
                     ['57', 'مصروفات أخرى', expenseParent?.id || null, 'expense', 'debit']);
+            }
+
+            // Ensure opening balances account exists
+            const openingBalAccount = this.get("SELECT id FROM accounts WHERE code = '399'");
+            if (!openingBalAccount) {
+                const equityParent = this.get("SELECT id FROM accounts WHERE code = '3'");
+                this.run("INSERT OR IGNORE INTO accounts (code, name, parent_id, account_type, nature) VALUES (?, ?, ?, ?, ?)",
+                    ['399', 'الأرصدة الافتتاحية', equityParent?.id || null, 'equity', 'credit']);
             }
         }
 
@@ -461,6 +494,84 @@ class AppDatabase {
                 }
             } catch (e) { console.log('Expenses permission migration:', e.message); }
         }
+    }
+
+    _handleOpeningBalance(type, entityId, oldBalance, oldJeId, newBalance, newDate, entityCode, entityName) {
+        if (oldJeId) {
+            try {
+                this.journal.delete(oldJeId);
+            } catch (e) {
+                console.error(`Error deleting old opening balance journal entry:`, e);
+            }
+        }
+
+        if (!newBalance || parseFloat(newBalance) === 0) {
+            return null;
+        }
+
+        const accountsPayable = this.get("SELECT id FROM accounts WHERE code = '211'");
+        const accountsReceivable = this.get("SELECT id FROM accounts WHERE code = '113'");
+        const openingBalancesAcc = this.get("SELECT id FROM accounts WHERE code = '399'");
+
+        if (!openingBalancesAcc) {
+            console.error("Opening balances account (399) not found!");
+            return null;
+        }
+
+        const amt = parseFloat(newBalance);
+        const lines = [];
+
+        if (type === 'supplier') {
+            if (accountsPayable) {
+                lines.push({
+                    account_id: openingBalancesAcc.id,
+                    debit: amt,
+                    credit: 0,
+                    description: `رصيد افتتاحي للمورد ${entityName} (${entityCode})`
+                });
+                lines.push({
+                    account_id: accountsPayable.id,
+                    debit: 0,
+                    credit: amt,
+                    description: `رصيد افتتاحي للمورد ${entityName} (${entityCode})`
+                });
+            }
+        } else if (type === 'customer') {
+            if (accountsReceivable) {
+                lines.push({
+                    account_id: accountsReceivable.id,
+                    debit: amt,
+                    credit: 0,
+                    description: `رصيد افتتاحي للعميل ${entityName} (${entityCode})`
+                });
+                lines.push({
+                    account_id: openingBalancesAcc.id,
+                    debit: 0,
+                    credit: amt,
+                    description: `رصيد افتتاحي للعميل ${entityName} (${entityCode})`
+                });
+            }
+        }
+
+        if (lines.length > 0) {
+            const entryDesc = type === 'supplier' 
+                ? `رصيد افتتاحي للمورد ${entityName}` 
+                : `رصيد افتتاحي للعميل ${entityName}`;
+            
+            const jeResult = this.journal.create({
+                date: newDate || new Date().toISOString().split('T')[0],
+                description: entryDesc,
+                reference: entityCode,
+                lines: lines
+            });
+
+            if (jeResult.success) {
+                return jeResult.id;
+            } else {
+                console.error("Failed to create opening balance journal entry:", jeResult.error);
+            }
+        }
+        return null;
     }
 
     initRepositories() {
@@ -653,18 +764,146 @@ class CustomersRepo {
     constructor(db) { this.db = db; }
     getAll() { return this.db.all('SELECT * FROM customers ORDER BY name'); }
     getById(id) { return this.db.get('SELECT * FROM customers WHERE id = ?', [id]); }
-    create(c) { try { const count = this.db.get('SELECT COUNT(*) as count FROM customers').count; const code = c.code || `C${String(count + 1).padStart(4, '0')}`; const r = this.db.run("INSERT INTO customers (code, name, phone, email, address, tax_number, credit_limit, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [code, c.name, c.phone, c.email, c.address, c.tax_number, c.credit_limit || 0, c.notes]); return { success: true, id: r.lastInsertRowid }; } catch (e) { return { success: false, error: e.message }; } }
-    update(c) { try { this.db.run("UPDATE customers SET name=?, phone=?, email=?, address=?, tax_number=?, credit_limit=?, notes=?, is_active=? WHERE id=?", [c.name, c.phone, c.email, c.address, c.tax_number, c.credit_limit, c.notes, c.is_active ? 1 : 0, c.id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
-    delete(id) { try { this.db.run('DELETE FROM customers WHERE id = ?', [id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+    create(c) {
+        try {
+            const count = this.db.get('SELECT COUNT(*) as count FROM customers').count;
+            const code = c.code || `C${String(count + 1).padStart(4, '0')}`;
+            const openingBalance = parseFloat(c.opening_balance) || 0;
+            const openingDate = c.opening_balance_date || new Date().toISOString().split('T')[0];
+            
+            const r = this.db.run(
+                "INSERT INTO customers (code, name, phone, email, address, tax_number, credit_limit, notes, opening_balance, opening_balance_date, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [code, c.name, c.phone, c.email, c.address, c.tax_number, c.credit_limit || 0, c.notes, openingBalance, openingDate, openingBalance]
+            );
+            const customerId = r.lastInsertRowid;
+            
+            if (openingBalance > 0) {
+                const jeId = this.db._handleOpeningBalance('customer', customerId, 0, null, openingBalance, openingDate, code, c.name);
+                if (jeId) {
+                    this.db.run("UPDATE customers SET opening_balance_je_id = ? WHERE id = ?", [jeId, customerId]);
+                }
+            }
+            return { success: true, id: customerId };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    update(c) {
+        try {
+            const old = this.db.get("SELECT * FROM customers WHERE id = ?", [c.id]);
+            if (!old) return { success: false, error: 'Customer not found' };
+
+            const oldOpeningBalance = parseFloat(old.opening_balance) || 0;
+            const newOpeningBalance = parseFloat(c.opening_balance) || 0;
+            const oldJeId = old.opening_balance_je_id;
+            const openingDate = c.opening_balance_date || new Date().toISOString().split('T')[0];
+            
+            const balanceDiff = newOpeningBalance - oldOpeningBalance;
+            const newBalance = (old.balance || 0) + balanceDiff;
+
+            let newJeId = oldJeId;
+            if (newOpeningBalance !== oldOpeningBalance || openingDate !== old.opening_balance_date) {
+                newJeId = this.db._handleOpeningBalance('customer', c.id, oldOpeningBalance, oldJeId, newOpeningBalance, openingDate, old.code, c.name);
+            }
+
+            this.db.run(
+                "UPDATE customers SET name=?, phone=?, email=?, address=?, tax_number=?, credit_limit=?, notes=?, is_active=?, opening_balance=?, opening_balance_date=?, opening_balance_je_id=?, balance=? WHERE id=?",
+                [c.name, c.phone, c.email, c.address, c.tax_number, c.credit_limit, c.notes, c.is_active ? 1 : 0, newOpeningBalance, openingDate, newJeId, newBalance, c.id]
+            );
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    delete(id) {
+        try {
+            const old = this.db.get("SELECT * FROM customers WHERE id = ?", [id]);
+            if (old && old.opening_balance_je_id) {
+                try {
+                    this.db.journal.delete(old.opening_balance_je_id);
+                } catch (e) {
+                    console.error("Error deleting opening balance journal entry:", e);
+                }
+            }
+            this.db.run('DELETE FROM customers WHERE id = ?', [id]);
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
 }
 
 class SuppliersRepo {
     constructor(db) { this.db = db; }
     getAll() { return this.db.all('SELECT * FROM suppliers ORDER BY name'); }
     getById(id) { return this.db.get('SELECT * FROM suppliers WHERE id = ?', [id]); }
-    create(s) { try { const count = this.db.get('SELECT COUNT(*) as count FROM suppliers').count; const code = s.code || `S${String(count + 1).padStart(4, '0')}`; const r = this.db.run("INSERT INTO suppliers (code, name, phone, email, address, tax_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?)", [code, s.name, s.phone, s.email, s.address, s.tax_number, s.notes]); return { success: true, id: r.lastInsertRowid }; } catch (e) { return { success: false, error: e.message }; } }
-    update(s) { try { this.db.run("UPDATE suppliers SET name=?, phone=?, email=?, address=?, tax_number=?, notes=?, is_active=? WHERE id=?", [s.name, s.phone, s.email, s.address, s.tax_number, s.notes, s.is_active ? 1 : 0, s.id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
-    delete(id) { try { this.db.run('DELETE FROM suppliers WHERE id = ?', [id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+    create(s) {
+        try {
+            const count = this.db.get('SELECT COUNT(*) as count FROM suppliers').count;
+            const code = s.code || `S${String(count + 1).padStart(4, '0')}`;
+            const openingBalance = parseFloat(s.opening_balance) || 0;
+            const openingDate = s.opening_balance_date || new Date().toISOString().split('T')[0];
+            
+            const r = this.db.run(
+                "INSERT INTO suppliers (code, name, phone, email, address, tax_number, notes, opening_balance, opening_balance_date, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [code, s.name, s.phone, s.email, s.address, s.tax_number, s.notes, openingBalance, openingDate, openingBalance]
+            );
+            const supplierId = r.lastInsertRowid;
+            
+            if (openingBalance > 0) {
+                const jeId = this.db._handleOpeningBalance('supplier', supplierId, 0, null, openingBalance, openingDate, code, s.name);
+                if (jeId) {
+                    this.db.run("UPDATE suppliers SET opening_balance_je_id = ? WHERE id = ?", [jeId, supplierId]);
+                }
+            }
+            return { success: true, id: supplierId };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    update(s) {
+        try {
+            const old = this.db.get("SELECT * FROM suppliers WHERE id = ?", [s.id]);
+            if (!old) return { success: false, error: 'Supplier not found' };
+
+            const oldOpeningBalance = parseFloat(old.opening_balance) || 0;
+            const newOpeningBalance = parseFloat(s.opening_balance) || 0;
+            const oldJeId = old.opening_balance_je_id;
+            const openingDate = s.opening_balance_date || new Date().toISOString().split('T')[0];
+            
+            const balanceDiff = newOpeningBalance - oldOpeningBalance;
+            const newBalance = (old.balance || 0) + balanceDiff;
+
+            let newJeId = oldJeId;
+            if (newOpeningBalance !== oldOpeningBalance || openingDate !== old.opening_balance_date) {
+                newJeId = this.db._handleOpeningBalance('supplier', s.id, oldOpeningBalance, oldJeId, newOpeningBalance, openingDate, old.code, s.name);
+            }
+
+            this.db.run(
+                "UPDATE suppliers SET name=?, phone=?, email=?, address=?, tax_number=?, notes=?, is_active=?, opening_balance=?, opening_balance_date=?, opening_balance_je_id=?, balance=? WHERE id=?",
+                [s.name, s.phone, s.email, s.address, s.tax_number, s.notes, s.is_active ? 1 : 0, newOpeningBalance, openingDate, newJeId, newBalance, s.id]
+            );
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    delete(id) {
+        try {
+            const old = this.db.get("SELECT * FROM suppliers WHERE id = ?", [id]);
+            if (old && old.opening_balance_je_id) {
+                try {
+                    this.db.journal.delete(old.opening_balance_je_id);
+                } catch (e) {
+                    console.error("Error deleting opening balance journal entry:", e);
+                }
+            }
+            this.db.run('DELETE FROM suppliers WHERE id = ?', [id]);
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
 }
 
 class AccountsRepo {
@@ -757,24 +996,32 @@ class InvoicesRepo {
         const costAccount = this.db.get("SELECT id FROM accounts WHERE code = '51'");
 
         if (inv.type === 'sales') {
-            // Debit: cash/bank (paid) or customers (pending)
-            if (inv.status === 'paid') {
+            const paid = parseFloat(inv.paid) || 0;
+            const remaining = total - paid;
+            // Debit: cash/bank (paid)
+            if (paid > 0) {
                 const debitAcct = (inv.payment_method === 'bank' && bankAccount) ? bankAccount : cashAccount;
-                if (debitAcct) lines.push({ account_id: debitAcct.id, debit: total, credit: 0, description: `فاتورة مبيعات ${num}` });
-            } else {
-                if (customersAccount) lines.push({ account_id: customersAccount.id, debit: total, credit: 0, description: `فاتورة مبيعات آجلة ${num}` });
+                if (debitAcct) lines.push({ account_id: debitAcct.id, debit: paid, credit: 0, description: `فاتورة مبيعات ${num}` });
+            }
+            // Debit: customers (remaining)
+            if (remaining > 0) {
+                if (customersAccount) lines.push({ account_id: customersAccount.id, debit: remaining, credit: 0, description: `فاتورة مبيعات آجلة ${num}` });
             }
             // Credit: revenue
             if (revenueAccount) lines.push({ account_id: revenueAccount.id, debit: 0, credit: total, description: `فاتورة مبيعات ${num}` });
         } else if (inv.type === 'purchase') {
+            const paid = parseFloat(inv.paid) || 0;
+            const remaining = total - paid;
             // Debit: cost of sales
             if (costAccount) lines.push({ account_id: costAccount.id, debit: total, credit: 0, description: `فاتورة مشتريات ${num}` });
-            // Credit: cash/bank (paid) or suppliers (pending)
-            if (inv.status === 'paid') {
+            // Credit: cash/bank (paid)
+            if (paid > 0) {
                 const creditAcct = (inv.payment_method === 'bank' && bankAccount) ? bankAccount : cashAccount;
-                if (creditAcct) lines.push({ account_id: creditAcct.id, debit: 0, credit: total, description: `فاتورة مشتريات ${num}` });
-            } else {
-                if (suppliersAccount) lines.push({ account_id: suppliersAccount.id, debit: 0, credit: total, description: `فاتورة مشتريات آجلة ${num}` });
+                if (creditAcct) lines.push({ account_id: creditAcct.id, debit: 0, credit: paid, description: `فاتورة مشتريات ${num}` });
+            }
+            // Credit: suppliers (remaining)
+            if (remaining > 0) {
+                if (suppliersAccount) lines.push({ account_id: suppliersAccount.id, debit: 0, credit: remaining, description: `فاتورة مشتريات آجلة ${num}` });
             }
         }
 
@@ -822,8 +1069,8 @@ class InvoicesRepo {
             const n = (v) => v === undefined ? null : v;
 
             const r = this.db.run(
-                "INSERT INTO invoices (invoice_number, type, customer_id, supplier_id, date, due_date, subtotal, discount, tax, total, status, payment_method, payment_account_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [num, inv.type, n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.payment_account_id), n(inv.notes), n(inv.created_by)]
+                "INSERT INTO invoices (invoice_number, type, customer_id, supplier_id, date, due_date, subtotal, discount, tax, total, paid, status, payment_method, payment_account_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [num, inv.type, n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.paid) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.payment_account_id), n(inv.notes), n(inv.created_by)]
             );
             const invId = Number(r.lastInsertRowid);
 
@@ -849,10 +1096,11 @@ class InvoicesRepo {
                 }
             }
 
-            // Update customer/supplier balance ONLY for pending invoices
-            if (inv.status !== 'paid') {
-                if (inv.type === 'sales' && inv.customer_id) this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [inv.total, inv.customer_id]);
-                else if (inv.type === 'purchase' && inv.supplier_id) this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [inv.total, inv.supplier_id]);
+            // Update customer/supplier balance by remaining amount
+            const remaining = (parseFloat(inv.total) || 0) - (parseFloat(inv.paid) || 0);
+            if (remaining > 0) {
+                if (inv.type === 'sales' && inv.customer_id) this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [remaining, inv.customer_id]);
+                else if (inv.type === 'purchase' && inv.supplier_id) this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [remaining, inv.supplier_id]);
             }
 
             // Auto-create journal entry
@@ -883,12 +1131,13 @@ class InvoicesRepo {
                 }
             }
 
-            // 2. Reverse old customer/supplier balance (if was pending)
-            if (oldInvoice.status !== 'paid') {
+            // 2. Reverse old customer/supplier balance
+            const oldRemaining = (oldInvoice.total || 0) - (oldInvoice.paid || 0);
+            if (oldRemaining > 0) {
                 if (oldInvoice.type === 'sales' && oldInvoice.customer_id) {
-                    this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [oldInvoice.total, oldInvoice.customer_id]);
+                    this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [oldRemaining, oldInvoice.customer_id]);
                 } else if (oldInvoice.type === 'purchase' && oldInvoice.supplier_id) {
-                    this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [oldInvoice.total, oldInvoice.supplier_id]);
+                    this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [oldRemaining, oldInvoice.supplier_id]);
                 }
             }
 
@@ -898,8 +1147,8 @@ class InvoicesRepo {
             }
 
             // 4. Update invoice header
-            this.db.run("UPDATE invoices SET customer_id=?, supplier_id=?, date=?, due_date=?, subtotal=?, discount=?, tax=?, total=?, status=?, payment_method=?, notes=? WHERE id=?",
-                [n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.notes), invId]);
+            this.db.run("UPDATE invoices SET customer_id=?, supplier_id=?, date=?, due_date=?, subtotal=?, discount=?, tax=?, total=?, paid=?, status=?, payment_method=?, notes=? WHERE id=?",
+                [n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.paid) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.notes), invId]);
 
             // 5. Delete old items and insert new ones
             this.db.run("DELETE FROM invoice_items WHERE invoice_id = ?", [invId]);
@@ -925,12 +1174,13 @@ class InvoicesRepo {
                 }
             }
 
-            // 6. Apply new customer/supplier balance (if pending)
-            if (inv.status !== 'paid') {
+            // 6. Apply new customer/supplier balance
+            const newRemaining = (parseFloat(inv.total) || 0) - (parseFloat(inv.paid) || 0);
+            if (newRemaining > 0) {
                 if (oldInvoice.type === 'sales' && inv.customer_id) {
-                    this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [inv.total, inv.customer_id]);
+                    this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [newRemaining, inv.customer_id]);
                 } else if (oldInvoice.type === 'purchase' && inv.supplier_id) {
-                    this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [inv.total, inv.supplier_id]);
+                    this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [newRemaining, inv.supplier_id]);
                 }
             }
 
@@ -957,12 +1207,13 @@ class InvoicesRepo {
                 }
             }
 
-            // Reverse balance changes ONLY for pending invoices
-            if (invoice.status !== 'paid') {
+            // Reverse balance changes
+            const remaining = (invoice.total || 0) - (invoice.paid || 0);
+            if (remaining > 0) {
                 if (invoice.type === 'sales' && invoice.customer_id) {
-                    this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [invoice.total, invoice.customer_id]);
+                    this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [remaining, invoice.customer_id]);
                 } else if (invoice.type === 'purchase' && invoice.supplier_id) {
-                    this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [invoice.total, invoice.supplier_id]);
+                    this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [remaining, invoice.supplier_id]);
                 }
             }
 
@@ -1072,8 +1323,30 @@ class VouchersRepo {
             const count = countResult ? countResult.count : 0;
             const prefix = v.type === 'receipt' ? 'RV-' : 'PV-';
             const num = v.voucher_number || `${prefix}${String(count + 1).padStart(6, '0')}`;
-            const r = this.db.run("INSERT INTO vouchers (voucher_number, type, date, amount, account_id, customer_id, supplier_id, payment_method, invoice_id, reference, description, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [num, v.type, v.date, n(v.amount) || 0, n(v.account_id), n(v.customer_id), n(v.supplier_id), n(v.payment_method), n(v.invoice_id), n(v.reference), n(v.description), n(v.created_by)]);
+
+            let appliedAmount = parseFloat(v.amount) || 0;
+            if (v.invoice_id) {
+                let remainingOB = 0;
+                if (v.type === 'receipt' && v.customer_id) {
+                    const customer = this.db.get("SELECT balance FROM customers WHERE id = ?", [v.customer_id]);
+                    const unpaidInvoicesSum = this.db.get("SELECT SUM(total - paid) as sum FROM invoices WHERE customer_id = ? AND status != 'paid'", [v.customer_id])?.sum || 0;
+                    if (customer) {
+                        remainingOB = Math.max(0, (customer.balance || 0) - unpaidInvoicesSum);
+                    }
+                } else if (v.type === 'payment' && v.supplier_id) {
+                    const supplier = this.db.get("SELECT balance FROM suppliers WHERE id = ?", [v.supplier_id]);
+                    const unpaidInvoicesSum = this.db.get("SELECT SUM(total - paid) as sum FROM invoices WHERE supplier_id = ? AND status != 'paid'", [v.supplier_id])?.sum || 0;
+                    if (supplier) {
+                        remainingOB = Math.max(0, (supplier.balance || 0) - unpaidInvoicesSum);
+                    }
+                }
+                appliedAmount = Math.max(0, (parseFloat(v.amount) || 0) - remainingOB);
+            } else {
+                appliedAmount = 0;
+            }
+
+            const r = this.db.run("INSERT INTO vouchers (voucher_number, type, date, amount, applied_amount, account_id, customer_id, supplier_id, payment_method, invoice_id, reference, description, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [num, v.type, v.date, n(v.amount) || 0, appliedAmount, n(v.account_id), n(v.customer_id), n(v.supplier_id), n(v.payment_method), n(v.invoice_id), n(v.reference), n(v.description), n(v.created_by)]);
 
             // Update customer/supplier balance
             if (v.type === 'receipt' && v.customer_id) this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [v.amount, v.customer_id]);
@@ -1081,7 +1354,7 @@ class VouchersRepo {
 
             // Update linked invoice paid amount
             if (v.invoice_id) {
-                this.db.run("UPDATE invoices SET paid = paid + ? WHERE id = ?", [v.amount, v.invoice_id]);
+                this.db.run("UPDATE invoices SET paid = paid + ? WHERE id = ?", [appliedAmount, v.invoice_id]);
                 // Smart status: check if fully paid, partially paid, or still pending
                 const inv = this.db.get("SELECT total, paid FROM invoices WHERE id = ?", [v.invoice_id]);
                 if (inv) {
@@ -1140,8 +1413,9 @@ class VouchersRepo {
 
             // 2. Reverse old invoice paid amount if linked
             if (old.invoice_id) {
+                const oldApplied = old.applied_amount !== undefined ? old.applied_amount : old.amount;
                 this.db.run("UPDATE invoices SET status = 'pending', paid = CASE WHEN paid - ? < 0 THEN 0 ELSE paid - ? END WHERE id = ?",
-                    [old.amount, old.amount, old.invoice_id]);
+                    [oldApplied, oldApplied, old.invoice_id]);
             }
 
             // 3. Delete old journal entry (also reverses account balances)
@@ -1149,23 +1423,45 @@ class VouchersRepo {
                 this._deleteJournalEntry(old.journal_entry_id);
             }
 
-            // 4. Update the voucher record
-            this.db.run("UPDATE vouchers SET date=?, amount=?, payment_method=?, reference=?, description=?, journal_entry_id=NULL WHERE id=?",
-                [v.date, n(v.amount) || 0, n(v.payment_method) || 'cash', n(v.reference), n(v.description), v.id]);
+            // 4. Calculate new applied amount after reversing
+            let appliedAmount = parseFloat(v.amount) || 0;
+            if (old.invoice_id) {
+                let remainingOB = 0;
+                if (old.type === 'receipt' && old.customer_id) {
+                    const customer = this.db.get("SELECT balance FROM customers WHERE id = ?", [old.customer_id]);
+                    const unpaidInvoicesSum = this.db.get("SELECT SUM(total - paid) as sum FROM invoices WHERE customer_id = ? AND status != 'paid'", [old.customer_id])?.sum || 0;
+                    if (customer) {
+                        remainingOB = Math.max(0, (customer.balance || 0) - unpaidInvoicesSum);
+                    }
+                } else if (old.type === 'payment' && old.supplier_id) {
+                    const supplier = this.db.get("SELECT balance FROM suppliers WHERE id = ?", [old.supplier_id]);
+                    const unpaidInvoicesSum = this.db.get("SELECT SUM(total - paid) as sum FROM invoices WHERE supplier_id = ? AND status != 'paid'", [old.supplier_id])?.sum || 0;
+                    if (supplier) {
+                        remainingOB = Math.max(0, (supplier.balance || 0) - unpaidInvoicesSum);
+                    }
+                }
+                appliedAmount = Math.max(0, (parseFloat(v.amount) || 0) - remainingOB);
+            } else {
+                appliedAmount = 0;
+            }
+
+            // 5. Update the voucher record
+            this.db.run("UPDATE vouchers SET date=?, amount=?, applied_amount=?, payment_method=?, reference=?, description=?, journal_entry_id=NULL WHERE id=?",
+                [v.date, n(v.amount) || 0, appliedAmount, n(v.payment_method) || 'cash', n(v.reference), n(v.description), v.id]);
 
             // Re-read the voucher with updated values to build journal entry
             const amount = parseFloat(v.amount) || 0;
 
-            // 5. Apply new customer/supplier balance
+            // 6. Apply new customer/supplier balance
             if (old.type === 'receipt' && old.customer_id) {
                 this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [amount, old.customer_id]);
             } else if (old.type === 'payment' && old.supplier_id) {
                 this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [amount, old.supplier_id]);
             }
 
-            // 6. Re-apply linked invoice paid amount if linked
+            // 7. Re-apply linked invoice paid amount if linked
             if (old.invoice_id) {
-                this.db.run("UPDATE invoices SET paid = paid + ? WHERE id = ?", [amount, old.invoice_id]);
+                this.db.run("UPDATE invoices SET paid = paid + ? WHERE id = ?", [appliedAmount, old.invoice_id]);
                 // Smart status: check if fully paid, partially paid, or still pending
                 const inv = this.db.get("SELECT total, paid FROM invoices WHERE id = ?", [old.invoice_id]);
                 if (inv) {
@@ -1174,7 +1470,7 @@ class VouchersRepo {
                 }
             }
 
-            // 7. Create new journal entry
+            // 8. Create new journal entry
             const newVoucher = { ...old, amount, payment_method: v.payment_method || 'cash', date: v.date };
             const jeId = this._createVoucherJournalEntry(newVoucher, v.id, old.voucher_number);
             if (jeId) {
@@ -1202,7 +1498,8 @@ class VouchersRepo {
 
                 // Revert invoice status if linked
                 if (voucher.invoice_id) {
-                    this.db.run("UPDATE invoices SET paid = CASE WHEN paid - ? < 0 THEN 0 ELSE paid - ? END WHERE id = ?", [voucher.amount, voucher.amount, voucher.invoice_id]);
+                    const applied = voucher.applied_amount !== undefined ? voucher.applied_amount : voucher.amount;
+                    this.db.run("UPDATE invoices SET paid = CASE WHEN paid - ? < 0 THEN 0 ELSE paid - ? END WHERE id = ?", [applied, applied, voucher.invoice_id]);
                     // Smart status: check remaining paid amount
                     const inv = this.db.get("SELECT total, paid FROM invoices WHERE id = ?", [voucher.invoice_id]);
                     if (inv) {

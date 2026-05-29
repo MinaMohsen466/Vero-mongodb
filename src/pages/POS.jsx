@@ -168,8 +168,6 @@ function POS() {
     };
 
     const searchRef = useRef(null);
-    const barcodeBuffer = useRef('');
-    const barcodeTimer = useRef(null);
 
     useEffect(() => {
         loadData();
@@ -181,37 +179,6 @@ function POS() {
         const interval = setInterval(() => refreshStock(false), 30000);
         return () => clearInterval(interval);
     }, []);
-
-    // Barcode scanner
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            const tag = document.activeElement?.tagName;
-            const activeId = document.activeElement?.id;
-            if (tag === 'INPUT' && activeId !== 'barcode-input') return;
-            if (e.key === 'Enter' && barcodeBuffer.current.length > 2) {
-                handleBarcodeSearch(barcodeBuffer.current.trim());
-                barcodeBuffer.current = '';
-                return;
-            }
-            if (e.key.length === 1) {
-                barcodeBuffer.current += e.key;
-                clearTimeout(barcodeTimer.current);
-                barcodeTimer.current = setTimeout(() => { barcodeBuffer.current = ''; }, 300);
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [allProducts]);
-
-    const handleBarcodeSearch = (code) => {
-        const product = allProducts.find(p => p.code === code || p.barcode === code);
-        if (product) {
-            addToCart(product);
-            toast.success(`✓ ${product.name}`, { duration: 1200 });
-        } else {
-            setSearchQuery(code);
-        }
-    };
 
     const loadData = async () => {
         setLoading(true);
@@ -474,11 +441,11 @@ function POS() {
                     <div style={{ position: 'relative', width: '100%' }}>
                         <Search size={16} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                         <input
-                            id="barcode-input"
+                            id="search-input"
                             ref={searchRef}
                             type="text"
                             className="form-input"
-                            placeholder={t('search_product_barcode') || 'Search product or barcode...'}
+                            placeholder={t('search_product_barcode') || 'Search product...'}
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             style={{ paddingRight: '36px', width: '100%', height: '42px', fontSize: '0.95rem', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-primary)' }}
@@ -488,18 +455,41 @@ function POS() {
                     <style>{`
                         .hide-scrollbar::-webkit-scrollbar { display: none; }
                         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+                        .category-btn {
+                            padding: 8px 20px;
+                            border-radius: 30px;
+                            border: 1px solid var(--border);
+                            cursor: pointer;
+                            font-size: 0.88rem;
+                            font-weight: 600;
+                            white-space: nowrap;
+                            background: var(--bg-primary);
+                            color: var(--text-secondary);
+                            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+                            flex-shrink: 0;
+                            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+                        }
+                        .category-btn:hover {
+                            background: var(--bg-secondary);
+                            color: var(--text-primary);
+                            border-color: rgba(99, 102, 241, 0.3);
+                            transform: translateY(-1px);
+                            box-shadow: 0 4px 8px rgba(0,0,0,0.04);
+                        }
+                        .category-btn.active {
+                            background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
+                            border-color: transparent;
+                            color: white !important;
+                            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+                        }
                     `}</style>
-                    <div className="hide-scrollbar" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', width: '100%' }}>
+                    <div className="hide-scrollbar" style={{ display: 'flex', gap: '10px', overflowX: 'auto', padding: '6px 4px 10px 4px', margin: '-4px -4px 0 -4px', width: 'calc(100% + 8px)' }}>
                         {categories.map(cat => (
-                            <button key={cat} onClick={() => setCategoryFilter(cat)} style={{
-                                padding: '8px 16px', borderRadius: '10px', border: '1px solid',
-                                cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap',
-                                borderColor: categoryFilter === cat ? 'var(--primary)' : 'var(--border)',
-                                background: categoryFilter === cat ? 'var(--primary)' : 'var(--surface)',
-                                color: categoryFilter === cat ? 'white' : 'var(--text-primary)',
-                                transition: 'all 0.2s', flexShrink: 0,
-                                boxShadow: categoryFilter === cat ? '0 2px 8px rgba(var(--primary-rgb, 99,102,241), 0.25)' : 'none'
-                            }}>
+                            <button
+                                key={cat}
+                                onClick={() => setCategoryFilter(cat)}
+                                className={`category-btn ${categoryFilter === cat ? 'active' : ''}`}
+                            >
                                 {cat === 'all' ? (t('all') || 'All') : cat}
                             </button>
                         ))}

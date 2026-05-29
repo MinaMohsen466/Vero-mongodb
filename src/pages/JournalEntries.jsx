@@ -133,7 +133,7 @@ function JournalEntries() {
                         <div className="empty-state"><BookOpen size={48} /><h3>{t('no_journal_entries') || 'No Journal Entries'}</h3></div>
                     ) : (
                         <table>
-                            <thead><tr><th>{t('entry_number') || 'Entry No.'}</th><th>{t('date') || 'Date'}</th><th>{t('description') || 'Description'}</th><th>{t('debit') || 'Debit'}</th><th>{t('credit') || 'Credit'}</th><th>{t('actions') || 'Actions'}</th></tr></thead>
+                            <thead><tr><th>{t('entry_number') || 'Entry No.'}</th><th>{t('date') || 'Date'}</th><th>{t('description') || 'Description'}</th><th>{t('acc_debit') || 'Debit'}</th><th>{t('acc_credit') || 'Credit'}</th><th>{t('actions') || 'Actions'}</th></tr></thead>
                             <tbody>
                                 {entries.map(entry => {
                                     const debit = entry.lines?.reduce((sum, l) => sum + (l.debit || 0), 0) || 0;
@@ -172,7 +172,7 @@ function JournalEntries() {
 
                     <div className="flex justify-between items-center mb-2 mt-4"><h4>{t('entry_details') || 'Entry Details'}</h4><button type="button" className="btn btn-secondary btn-sm" onClick={addLine}><Plus size={16} /> {t('line') || 'Line'}</button></div>
                     <table>
-                        <thead><tr><th>{t('account') || 'Account'}</th><th style={{ width: '120px' }}>{t('debit') || 'Debit'}</th><th style={{ width: '120px' }}>{t('credit') || 'Credit'}</th><th>{t('description') || 'Description'}</th><th></th></tr></thead>
+                        <thead><tr><th>{t('account') || 'Account'}</th><th style={{ width: '120px' }}>{t('acc_debit') || 'Debit'}</th><th style={{ width: '120px' }}>{t('acc_credit') || 'Credit'}</th><th>{t('description') || 'Description'}</th><th></th></tr></thead>
                         <tbody>
                             {formData.lines.map((line, i) => (
                                 <tr key={i}>
@@ -198,7 +198,7 @@ function JournalEntries() {
                 {selectedEntry && (
                     <div>
                         <p className="mb-4"><strong>{t('date') || 'Date'}:</strong> {new Date(selectedEntry.date).toLocaleDateString('en-GB')} | <strong>{t('description') || 'Description'}:</strong> {selectedEntry.description || '-'}</p>
-                        <table><thead><tr><th>{t('account') || 'Account'}</th><th>{t('debit') || 'Debit'}</th><th>{t('credit') || 'Credit'}</th></tr></thead><tbody>
+                        <table><thead><tr><th>{t('account') || 'Account'}</th><th>{t('acc_debit') || 'Debit'}</th><th>{t('acc_credit') || 'Credit'}</th></tr></thead><tbody>
                             {selectedEntry.lines?.map((line, i) => <tr key={i}><td>{line.account_code} - {line.account_name}</td><td>{formatCurrency(line.debit)}</td><td>{formatCurrency(line.credit)}</td></tr>)}
                         </tbody></table>
                     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, Truck, FileText, ToggleLeft, ToggleRight, Filter } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Truck, FileText, ToggleLeft, ToggleRight, Filter, Printer } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
@@ -17,7 +17,8 @@ function Suppliers() {
     const [supplierInvoices, setSupplierInvoices] = useState([]);
     const [editingSupplier, setEditingSupplier] = useState(null);
     const [formData, setFormData] = useState({
-        name: '', phone: '', email: '', address: '', tax_number: '', notes: '', is_active: 1
+        name: '', phone: '', email: '', address: '', tax_number: '', notes: '', is_active: 1,
+        opening_balance: 0, opening_balance_date: new Date().toISOString().split('T')[0]
     });
 
     const searchInputRef = React.useRef(null);
@@ -99,16 +100,152 @@ function Suppliers() {
             setFormData({
                 name: supplier.name || '', phone: supplier.phone || '', email: supplier.email || '',
                 address: supplier.address || '', tax_number: supplier.tax_number || '',
-                notes: supplier.notes || '', is_active: supplier.is_active !== undefined ? supplier.is_active : 1
+                notes: supplier.notes || '', is_active: supplier.is_active !== undefined ? supplier.is_active : 1,
+                opening_balance: supplier.opening_balance || 0,
+                opening_balance_date: supplier.opening_balance_date || new Date().toISOString().split('T')[0]
             });
         } else {
             setEditingSupplier(null);
-            setFormData({ name: '', phone: '', email: '', address: '', tax_number: '', notes: '', is_active: 1 });
+            setFormData({
+                name: '', phone: '', email: '', address: '', tax_number: '', notes: '', is_active: 1,
+                opening_balance: 0,
+                opening_balance_date: new Date().toISOString().split('T')[0]
+            });
         }
         setShowModal(true);
     };
 
     const closeModal = () => { setShowModal(false); setEditingSupplier(null); };
+
+    const handlePrintStatement = async () => {
+        if (!selectedSupplier) return;
+        try {
+            const settings = await window.api.settings.getAll();
+            const companyName = settings?.company?.company_name || 'ڤيرو المحاسبي';
+            const companyPhone = settings?.company?.company_phone || '';
+            const companyAddress = settings?.company?.company_address || '';
+            const currency = settings?.general?.currency || t('currency_kd') || 'د.ك';
+
+            const totalDebit = supplierInvoices.reduce((acc, row) => acc + (row.debit || 0), 0);
+            const totalCredit = supplierInvoices.reduce((acc, row) => acc + (row.credit || 0), 0);
+            const finalBalance = Math.abs(selectedSupplier.balance || 0);
+            const balanceText = selectedSupplier.balance > 0 ? (t('acc_credit') || 'دائن') : (t('acc_debit') || 'مدين');
+
+            const rowsHtml = supplierInvoices.map(row => `
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px;">${new Date(row.date).toLocaleDateString('en-GB')}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; font-weight: bold;">${row.description}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; text-align: left; direction: ltr; color: ${row.debit > 0 ? '#ef4444' : '#64748b'}">${row.debit > 0 ? (new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(row.debit) + ' ' + currency) : '-'}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; text-align: left; direction: ltr; color: ${row.credit > 0 ? '#10b981' : '#64748b'}">${row.credit > 0 ? (new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(row.credit) + ' ' + currency) : '-'}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; text-align: left; direction: ltr; font-weight: bold;">${(new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(Math.abs(row.balance))) + ' ' + currency}</td>
+                </tr>
+            `).join('');
+
+            const html = `
+            <!DOCTYPE html>
+            <html dir="rtl" lang="ar">
+            <head>
+                <meta charset="UTF-8">
+                <title>${t('rep_supplierStatement') || 'كشف حساب مورد'} - ${selectedSupplier.name}</title>
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; color: #1e293b; background: #fff; }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 20px; }
+                    .company-info { text-align: right; }
+                    .company-name { font-size: 22px; font-weight: bold; color: #1e3a8a; margin-bottom: 5px; }
+                    .company-details { font-size: 13px; color: #64748b; line-height: 1.5; }
+                    .statement-title { text-align: left; }
+                    .title-text { font-size: 24px; font-weight: 800; color: #0f172a; margin-bottom: 5px; }
+                    .date-text { font-size: 12px; color: #64748b; }
+                    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+                    .info-col { font-size: 14px; line-height: 1.8; }
+                    .info-col strong { color: #475569; }
+                    .table-container { margin-bottom: 30px; }
+                    table { width: 100%; border-collapse: collapse; text-align: right; }
+                    th { background: #1e293b; color: #fff; padding: 12px 10px; font-size: 13px; font-weight: bold; }
+                    .summary-container { display: flex; justify-content: flex-end; gap: 30px; border-top: 2px solid #cbd5e1; padding-top: 15px; margin-top: 10px; }
+                    .summary-item { font-size: 15px; line-height: 1.8; text-align: left; }
+                    .summary-item strong { display: inline-block; width: 120px; text-align: right; margin-left: 10px; }
+                    .balance-box { background: #fef2f2; border: 1px solid #fee2e2; padding: 12px 20px; border-radius: 6px; font-size: 18px; font-weight: bold; color: #ef4444; margin-top: 10px; display: inline-flex; align-items: center; gap: 10px; }
+                    .balance-box.credit { background: #f0fdf4; border: 1px solid #dcfce7; color: #16a34a; }
+                    @media print {
+                        body { padding: 0; }
+                        .no-print { display: none; }
+                        @page { margin: 10mm; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="company-info">
+                        <div class="company-name">${companyName}</div>
+                        <div class="company-details">
+                            ${companyAddress ? `<div>${companyAddress}</div>` : ''}
+                            ${companyPhone ? `<div>هاتف: ${companyPhone}</div>` : ''}
+                        </div>
+                    </div>
+                    <div class="statement-title">
+                        <div class="title-text">${t('rep_supplierStatement') || 'كشف حساب مورد'}</div>
+                        <div class="date-text">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-KW')}</div>
+                    </div>
+                </div>
+
+                <div class="info-grid">
+                    <div class="info-col">
+                        <div><strong>الكود:</strong> ${selectedSupplier.code}</div>
+                        <div><strong>المورد:</strong> ${selectedSupplier.name}</div>
+                    </div>
+                    <div class="info-col">
+                        <div><strong>الهاتف:</strong> ${selectedSupplier.phone || '-'}</div>
+                        <div><strong>العنوان:</strong> ${selectedSupplier.address || '-'}</div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="border-radius: 0 6px 6px 0;">التاريخ</th>
+                                <th>البيان</th>
+                                <th style="text-align: left;">مدين</th>
+                                <th style="text-align: left;">دائن</th>
+                                <th style="text-align: left; border-radius: 6px 0 0 6px;">الرصيد التراكمي</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="text-align: left;">
+                    <div class="summary-container">
+                        <div class="summary-item">
+                            <div><strong>إجمالي المدين:</strong> <span style="direction: ltr; display: inline-block;">${new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(totalDebit)} ${currency}</span></div>
+                            <div><strong>إجمالي الدائن:</strong> <span style="direction: ltr; display: inline-block;">${new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(totalCredit)} ${currency}</span></div>
+                        </div>
+                    </div>
+                    <div class="balance-box ${selectedSupplier.balance > 0 ? '' : 'credit'}">
+                        <span>الرصيد الحالي المستحق:</span>
+                        <span style="direction: ltr; display: inline-block;">${new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(finalBalance)} ${currency} (${balanceText})</span>
+                    </div>
+                </div>
+            </body>
+            </html>
+            `;
+
+            if (window.api?.print?.invoice) {
+                await window.api.print.invoice(html);
+            } else {
+                const win = window.open('', '_blank');
+                win.document.write(html);
+                win.document.close();
+                win.onload = () => setTimeout(() => win.print(), 300);
+            }
+        } catch (e) {
+            console.error("Error printing statement:", e);
+            toast.error("حدث خطأ أثناء طباعة كشف الحساب");
+        }
+    };
 
     const showSupplierInvoices = async (supplier) => {
         setSelectedSupplier(supplier);
@@ -121,12 +258,23 @@ function Suppliers() {
             let seq = 0;
             const rows = [];
 
+            const opBalance = parseFloat(supplier.opening_balance) || 0;
+            if (opBalance > 0) {
+                rows.push({
+                    date: supplier.opening_balance_date || supplier.created_at?.substring(0, 10) || new Date().toISOString().split('T')[0],
+                    description: t('rep_openingBalance') || 'رصيد افتتاحي',
+                    debit: 0,
+                    credit: opBalance,
+                    seq: seq++
+                });
+            }
+
             (invoices || []).forEach(inv => {
                 rows.push({
                     date: inv.date,
                     description: `${t('inv_number') || 'Invoice'} ${inv.invoice_number}`,
-                    debit: inv.total || 0,
-                    credit: 0,
+                    debit: 0,
+                    credit: inv.total || 0,
                     seq: seq++
                 });
                 const hasVoucherPayment = paymentVouchers.some(v => Number(v.invoice_id) === Number(inv.id));
@@ -135,8 +283,8 @@ function Suppliers() {
                     rows.push({
                         date: inv.date,
                         description: `${t('inv_paid') || 'Paid'} ${inv.invoice_number}`,
-                        debit: 0,
-                        credit: inv.paid > 0 ? inv.paid : inv.total || 0,
+                        debit: inv.paid > 0 ? inv.paid : inv.total || 0,
+                        credit: 0,
                         seq: seq++
                     });
                 }
@@ -146,8 +294,8 @@ function Suppliers() {
                 rows.push({
                     date: v.date,
                     description: v.description || `${t('vouchers') || 'Voucher'} ${v.voucher_number}`,
-                    debit: 0,
-                    credit: v.amount || 0,
+                    debit: v.amount || 0,
+                    credit: 0,
                     seq: seq++
                 });
             });
@@ -156,7 +304,7 @@ function Suppliers() {
             const statement = rows
                 .sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.seq - b.seq)
                 .map(row => {
-                    balance += (row.debit || 0) - (row.credit || 0);
+                    balance += (row.credit || 0) - (row.debit || 0);
                     return { ...row, balance };
                 });
             setSupplierInvoices(statement);
@@ -169,7 +317,8 @@ function Suppliers() {
             s.phone?.includes(searchQuery) || s.code?.includes(searchQuery);
         const matchesStatus = statusFilter === 'all' ||
             (statusFilter === 'active' && s.is_active) ||
-            (statusFilter === 'inactive' && !s.is_active);
+            (statusFilter === 'inactive' && !s.is_active) ||
+            (statusFilter === 'has_balance' && s.balance > 0);
         return matchesSearch && matchesStatus;
     }).sort((a, b) => (a.code || '').localeCompare((b.code || ''), undefined, {numeric: true, sensitivity: 'base'}));
 
@@ -198,10 +347,11 @@ function Suppliers() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <Filter size={16} style={{ color: 'var(--text-muted)' }} />
                         <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-                            style={{ width: '140px' }}>
+                            style={{ width: '180px' }}>
                             <option value="all">{t('all')}</option>
                             <option value="active">{t('activeOnly')}</option>
                             <option value="inactive">{t('inactive')}</option>
+                            <option value="has_balance">{t('supp_hasBalance') || 'ذمم دائنة مستحقة'}</option>
                         </select>
                     </div>
                     <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
@@ -289,6 +439,19 @@ function Suppliers() {
                     <div className="form-group"><label className="form-label">{t('address')}</label><input type="text" className="form-input" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} /></div>
                     <div className="form-row">
                         <div className="form-group">
+                            <label className="form-label">{t('opening_balance')}</label>
+                            <input type="number" className="form-input" value={formData.opening_balance}
+                                onChange={(e) => setFormData({ ...formData, opening_balance: parseFloat(e.target.value) || 0 })}
+                                min="0" step="0.001" />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">{t('opening_balance_date')}</label>
+                            <input type="date" className="form-input" value={formData.opening_balance_date}
+                                onChange={(e) => setFormData({ ...formData, opening_balance_date: e.target.value })} />
+                        </div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
                             <label className="form-label">{t('status')}</label>
                             <select className="form-select" value={formData.is_active}
                                 onChange={(e) => setFormData({ ...formData, is_active: parseInt(e.target.value) })}>
@@ -303,32 +466,70 @@ function Suppliers() {
 
             {/* Supplier Statement Modal */}
             <Modal isOpen={showInvoicesModal} onClose={() => setShowInvoicesModal(false)} title={`${t('rep_supplierStatement') || 'Supplier Statement'}: ${selectedSupplier?.name || ''}`} size="lg"
-                footer={<button className="btn btn-secondary" onClick={() => setShowInvoicesModal(false)}>{t('close')}</button>}>
-                <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
-                    <strong>{t('supp_currentBalance')}: </strong>
-                    <span className={selectedSupplier?.balance > 0 ? 'text-danger' : 'text-success'} style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>
-                        {formatCurrency(selectedSupplier?.balance)}
-                    </span>
+                footer={
+                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: '10px' }}>
+                        <button className="btn btn-primary" onClick={handlePrintStatement} disabled={supplierInvoices.length === 0}>
+                            <Printer size={18} /> {t('print') || 'Print'}
+                        </button>
+                        <button className="btn btn-secondary" onClick={() => setShowInvoicesModal(false)}>{t('close')}</button>
+                    </div>
+                }>
+                {/* Details Bar */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '16px', padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '0.9rem' }}>
+                    <div><strong>{t('code')}:</strong> {selectedSupplier?.code}</div>
+                    {selectedSupplier?.phone && <div><strong>{t('phone')}:</strong> {selectedSupplier?.phone}</div>}
+                    {selectedSupplier?.email && <div><strong>{t('email')}:</strong> {selectedSupplier?.email}</div>}
+                    {selectedSupplier?.address && <div><strong>{t('address')}:</strong> {selectedSupplier?.address}</div>}
                 </div>
+
                 {supplierInvoices.length === 0 ? (
                     <div className="empty-state"><FileText size={48} /><h3>{t('noData')}</h3></div>
                 ) : (
-                    <table>
-                        <thead>
-                            <tr><th>{t('date')}</th><th>{t('vouch_description') || 'Description'}</th><th>{t('debit') || 'Debit'}</th><th>{t('credit') || 'Credit'}</th><th>{t('balance')}</th></tr>
-                        </thead>
-                        <tbody>
-                            {supplierInvoices.map((row, i) => (
-                                <tr key={i}>
-                                    <td>{new Date(row.date).toLocaleDateString('en-GB')}</td>
-                                    <td className="font-bold">{row.description}</td>
-                                    <td className="text-danger">{row.debit > 0 ? formatCurrency(row.debit) : '-'}</td>
-                                    <td className="text-success">{row.credit > 0 ? formatCurrency(row.credit) : '-'}</td>
-                                    <td className={row.balance > 0 ? 'text-danger font-bold' : 'text-success font-bold'}>{formatCurrency(Math.abs(row.balance))}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <>
+                        <div className="table-container" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>{t('date')}</th>
+                                        <th>{t('vouch_description') || 'Description'}</th>
+                                        <th style={{ textAlign: 'left' }}>{t('acc_debit') || 'Debit'}</th>
+                                        <th style={{ textAlign: 'left' }}>{t('acc_credit') || 'Credit'}</th>
+                                        <th style={{ textAlign: 'left' }}>{t('balance')}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {supplierInvoices.map((row, i) => (
+                                        <tr key={i}>
+                                            <td>{new Date(row.date).toLocaleDateString('en-GB')}</td>
+                                            <td className="font-bold">{row.description}</td>
+                                            <td className="text-danger" style={{ textAlign: 'left', direction: 'ltr' }}>{row.debit > 0 ? formatCurrency(row.debit) : '-'}</td>
+                                            <td className="text-success" style={{ textAlign: 'left', direction: 'ltr' }}>{row.credit > 0 ? formatCurrency(row.credit) : '-'}</td>
+                                            <td className={row.balance > 0 ? 'text-danger font-bold' : 'text-success font-bold'} style={{ textAlign: 'left', direction: 'ltr' }}>{formatCurrency(Math.abs(row.balance))}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'flex-end', borderTop: '2px solid var(--border-color)', paddingTop: '16px' }}>
+                            <div style={{ display: 'flex', gap: '24px', fontSize: '0.95rem' }}>
+                                <div>
+                                    <span style={{ color: 'var(--text-muted)' }}>{t('rep_totalDebit') || 'إجمالي المدين'}: </span>
+                                    <strong style={{ direction: 'ltr', display: 'inline-block' }}>{formatCurrency(supplierInvoices.reduce((s, r) => s + (r.debit || 0), 0))}</strong>
+                                </div>
+                                <div>
+                                    <span style={{ color: 'var(--text-muted)' }}>{t('rep_totalCredit') || 'إجمالي الدائن'}: </span>
+                                    <strong style={{ direction: 'ltr', display: 'inline-block' }}>{formatCurrency(supplierInvoices.reduce((s, r) => s + (r.credit || 0), 0))}</strong>
+                                </div>
+                            </div>
+                            <div style={{ padding: '12px', backgroundColor: selectedSupplier?.balance > 0 ? '#fef2f2' : '#f0fdf4', border: `1px solid ${selectedSupplier?.balance > 0 ? '#fee2e2' : '#dcfce7'}`, borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{t('supp_currentBalance') || 'الرصيد الحالي المستحق'}:</span>
+                                <span className={selectedSupplier?.balance > 0 ? 'text-danger' : 'text-success'} style={{ fontSize: '1.25rem', fontWeight: 'bold', direction: 'ltr' }}>
+                                    {formatCurrency(Math.abs(selectedSupplier?.balance || 0))} {selectedSupplier?.balance > 0 ? `(${t('acc_credit') || 'دائن'})` : `(${t('acc_debit') || 'مدين'})`}
+                                </span>
+                            </div>
+                        </div>
+                    </>
                 )}
             </Modal>
         </div>

@@ -118,12 +118,13 @@ function Reports() {
                 data = { chartData, total, count: filtered.length, invoices: filtered.slice(0, 50) };
 
             } else if (activeReport === 'profit_loss') {
-                const [sales, purchases, expensesRows, salaries, allProducts] = await Promise.all([
+                const [sales, purchases, expensesRows, salaries, allProducts, allAccounts] = await Promise.all([
                     window.api.invoices.getAll('sales'),
                     window.api.invoices.getAll('purchase'),
                     window.api.expenses.getAll(),
                     window.api.salaries.getAll(),
-                    window.api.products.getAll()
+                    window.api.products.getAll(),
+                    window.api.accounts.getAll()
                 ]);
                 const filterFn = inv => {
                     if (filters.start_date && inv.date < filters.start_date) return false;
@@ -153,8 +154,16 @@ function Reports() {
                 const totalPurchasesAmt = filteredPurchases.reduce((s, i) => s + (i.total || 0), 0);
                 const activeProducts = (allProducts || []).filter(p => p.is_active);
                 const totalInventoryValue = activeProducts.reduce((s, p) => s + ((p.stock_quantity || 0) * (p.purchase_price || 0)), 0);
-                const grossProfit = totalSalesAmt - totalPurchasesAmt;
-                const netProfit = grossProfit + totalInventoryValue - totalExpensesAmt;
+                const cogs = totalPurchasesAmt - totalInventoryValue;
+                const grossProfit = totalSalesAmt - cogs;
+                // Calculate cash & bank balances (codes 111=Cash, 112=Bank)
+                const cashAccounts = (allAccounts || []).filter(a => a.code === '111' || a.code?.startsWith('111.'));
+                const bankAccounts = (allAccounts || []).filter(a => a.code === '112' || a.code?.startsWith('112.'));
+                const cashBalance = cashAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+                const bankBalance = bankAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+                const cashBankBalance = cashBalance + bankBalance;
+                // Net Profit = Gross Profit - Operating Expenses
+                const netProfit = grossProfit - totalExpensesAmt;
                 const lowStock = activeProducts.filter(p => (p.stock_quantity || 0) <= 5);
                 // Monthly both
                 const byMonth = {};
@@ -174,7 +183,7 @@ function Reports() {
                     const [y, m] = r.month.split('-');
                     return { ...r, label: `${MONTHS_AR[parseInt(m) - 1]}`, profit: r['sales'] - r['purchases'] };
                 });
-                data = { totalSales: totalSalesAmt, totalPurchases: totalPurchasesAmt, totalExpenses: totalExpensesAmt, grossProfit, profit: netProfit, chartData, products: activeProducts, totalInventoryValue, lowStock };
+                data = { totalSales: totalSalesAmt, totalPurchases: totalPurchasesAmt, totalExpenses: totalExpensesAmt, cogs, grossProfit, profit: netProfit, chartData, products: activeProducts, totalInventoryValue, lowStock, cashBankBalance, cashBalance, bankBalance };
 
             } else if (activeReport === 'customer_statement') {
                 if (!filters.customer_id) { setLoading(false); return; }
@@ -268,10 +277,14 @@ function Reports() {
             rows.push([t('vouch_description') || 'Description', t('total') || 'Total']);
             rows.push([t('rep_totalSales') || 'Total Sales', reportData.totalSales]);
             rows.push([t('rep_totalPurchases') || 'Total Purchases', reportData.totalPurchases]);
+            rows.push([t('rep_stockValue') || 'Stock Value', reportData.totalInventoryValue || 0]);
+            rows.push([t('rep_cogs') || 'Cost of Goods Sold', reportData.cogs || 0]);
             rows.push([t('rep_grossProfit') || 'Gross Profit', reportData.grossProfit]);
             rows.push([t('rep_totalExpenses') || 'Total Expenses', reportData.totalExpenses]);
             rows.push([t('rep_netProfit') || 'Net Profit', reportData.profit]);
-            rows.push([t('rep_stockValue') || 'Stock Value', reportData.totalInventoryValue || 0]);
+            rows.push([t('rep_cashBankPosition') || 'Cash & Liquidity Position', reportData.cashBankBalance || 0]);
+            rows.push([t('cb_cash') || 'Cash', reportData.cashBalance || 0]);
+            rows.push([t('cb_bank') || 'Bank', reportData.bankBalance || 0]);
             if (reportData.chartData?.length) {
                 rows.push([]);
                 rows.push([t('rep_month') || 'Month', t('dash_sales') || 'Sales', t('dash_purchases') || 'Purchases', t('rep_profit') || 'Profit']);
@@ -286,13 +299,13 @@ function Reports() {
             }
         } else if (activeReport === 'customer_statement' || activeReport === 'supplier_statement') {
             fileName = `statement_${reportData.name || ''}.csv`;
-            rows.push([t('date') || 'Date', t('vouch_description') || 'Description', t('debit') || 'Debit', t('credit') || 'Credit', t('balance') || 'Balance']);
+            rows.push([t('date') || 'Date', t('vouch_description') || 'Description', t('acc_debit') || 'Debit', t('acc_credit') || 'Credit', t('balance') || 'Balance']);
             (reportData.statement || []).forEach(r => rows.push([r.date, r.description, r.debit || 0, r.credit || 0, r.balance || 0]));
             rows.push([]);
             rows.push([t('rep_total') || 'Total', '', reportData.totalDebit, reportData.totalCredit, reportData.balance]);
         } else if (activeReport === 'trial_balance') {
             fileName = 'trial_balance.csv';
-            rows.push([t('code') || 'Code', t('acc_name') || 'Account Name', t('debit') || 'Debit', t('credit') || 'Credit']);
+            rows.push([t('code') || 'Code', t('acc_name') || 'Account Name', t('acc_debit') || 'Debit', t('acc_credit') || 'Credit']);
             (reportData.accounts || []).filter(a => a.total_debit || a.total_credit).forEach(a => {
                 rows.push([a.code, a.name, a.total_debit || 0, a.total_credit || 0]);
             });
@@ -517,7 +530,8 @@ function Reports() {
                                     <h2 style={{ marginBottom: '16px' }}>💰 {t('rep_profitLoss') || 'Profit & Loss Report'}</h2>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))', gap: '12px', marginBottom: '24px' }}>
                                         <StatCard label={t('rep_totalSales') || 'Total Sales'} val={fmt(reportData.totalSales)} color="#6366F1" />
-                                        <StatCard label={t('rep_totalPurchases') || 'Total Purchases'} val={fmt(reportData.totalPurchases)} color="#EF4444" />
+                                        <StatCard label={t('rep_cogs') || 'Cost of Goods Sold'} val={fmt(reportData.cogs)} color="#F59E0B" />
+                                        <StatCard label={t('rep_grossProfit') || 'Gross Profit'} val={fmt(reportData.grossProfit)} color="#10B981" />
                                         <StatCard label={t('rep_totalExpenses') || 'Total Expenses'} val={fmt(reportData.totalExpenses)} color="#8B5CF6" />
                                         <StatCard label={t('rep_stockValue') || 'Stock Value'} val={fmt(reportData.totalInventoryValue)} color="#0F766E" />
                                         <div style={{
@@ -556,17 +570,84 @@ function Reports() {
                                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                                 <thead>
                                                     <tr style={{ background: 'var(--bg-secondary)' }}>
-                                                        <th style={thStyle}>{t('vouch_description') || 'Description'}</th>
+                                                        <th style={thStyle}>{t('rep_pl_item') || 'Item'}</th>
                                                         <th style={thStyle}>{t('total') || 'Total'}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    <tr><td style={tdStyle}>{t('rep_totalSales') || 'Total Sales'}</td><td style={{ ...tdStyle, color: '#6366F1', fontWeight: 700 }}>{fmt(reportData.totalSales)}</td></tr>
-                                                    <tr><td style={tdStyle}>{t('rep_totalPurchases') || 'Total Purchases'}</td><td style={{ ...tdStyle, color: '#EF4444', fontWeight: 700 }}>{fmt(reportData.totalPurchases)}</td></tr>
-                                                    <tr style={{ background: '#f0f9ff' }}><td style={{ ...tdStyle, fontWeight: 600 }}>{t('rep_grossProfit') || 'Gross Profit'}</td><td style={{ ...tdStyle, fontWeight: 700, color: reportData.grossProfit >= 0 ? '#059669' : '#DC2626' }}>{fmt(reportData.grossProfit)}</td></tr>
-                                                    <tr><td style={tdStyle}>+ {t('rep_stockValue') || 'Stock Value'}</td><td style={{ ...tdStyle, color: '#0F766E', fontWeight: 600 }}>{fmt(reportData.totalInventoryValue)}</td></tr>
-                                                    <tr><td style={tdStyle}>➖ {t('rep_totalExpenses') || 'Total Expenses'}</td><td style={{ ...tdStyle, color: '#8B5CF6', fontWeight: 600 }}>{fmt(reportData.totalExpenses)}</td></tr>
-                                                    <tr style={{ background: reportData.profit >= 0 ? '#D1FAE5' : '#FEE2E2', fontWeight: 700 }}><td style={tdStyle}>{reportData.profit >= 0 ? `✅ ${t('rep_netProfit') || 'Net Profit'}` : `❌ ${t('rep_netLoss') || 'Net Loss'}`}</td><td style={{ ...tdStyle, fontSize: '1.1rem', color: reportData.profit >= 0 ? '#059669' : '#DC2626' }}>{fmt(Math.abs(reportData.profit))}</td></tr>
+                                                    {/* Revenues */}
+                                                    <tr style={{ background: 'var(--bg-secondary)', fontWeight: 'bold' }}>
+                                                        <td style={tdStyle} colSpan="2">{t('rep_pl_revenue') || 'Operating Revenues'}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={{ ...tdStyle, paddingRight: '24px' }}>{t('rep_totalSales') || 'Total Sales'}</td>
+                                                        <td style={{ ...tdStyle, color: '#6366F1', fontWeight: 600 }}>{fmt(reportData.totalSales)}</td>
+                                                    </tr>
+                                                    
+                                                    {/* COGS */}
+                                                    <tr style={{ background: 'var(--bg-secondary)', fontWeight: 'bold' }}>
+                                                        <td style={tdStyle} colSpan="2">{t('rep_pl_cogs') || 'Cost of Goods Sold'}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={{ ...tdStyle, paddingRight: '24px' }}>{t('rep_totalPurchases') || 'Total Purchases'}</td>
+                                                        <td style={{ ...tdStyle, color: '#EF4444' }}>{fmt(reportData.totalPurchases)}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={{ ...tdStyle, paddingRight: '24px' }}>يخصم: {t('rep_stockValue') || 'Stock Value'}</td>
+                                                        <td style={{ ...tdStyle, color: '#0F766E' }}>({fmt(reportData.totalInventoryValue)})</td>
+                                                    </tr>
+                                                    <tr style={{ borderTop: '1px dashed var(--border)' }}>
+                                                        <td style={{ ...tdStyle, paddingRight: '24px', fontWeight: 600 }}>{t('rep_cogs') || 'Total Cost of Goods Sold'}</td>
+                                                        <td style={{ ...tdStyle, color: '#F59E0B', fontWeight: 600 }}>{fmt(reportData.cogs)}</td>
+                                                    </tr>
+
+                                                    {/* Gross Profit */}
+                                                    <tr style={{ background: '#f0fdf4', fontWeight: 'bold', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+                                                        <td style={tdStyle}>{t('rep_grossProfit') || 'Gross Profit (Loss)'}</td>
+                                                        <td style={{ ...tdStyle, color: reportData.grossProfit >= 0 ? '#059669' : '#DC2626', fontWeight: 700 }}>{fmt(reportData.grossProfit)}</td>
+                                                    </tr>
+
+                                                    {/* Expenses */}
+                                                    <tr style={{ background: 'var(--bg-secondary)', fontWeight: 'bold' }}>
+                                                        <td style={tdStyle} colSpan="2">{t('rep_pl_expenses') || 'Operating Expenses'}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={{ ...tdStyle, paddingRight: '24px' }}>{t('rep_totalExpenses') || 'Expenses & Salaries'}</td>
+                                                        <td style={{ ...tdStyle, color: '#8B5CF6' }}>{fmt(reportData.totalExpenses)}</td>
+                                                    </tr>
+
+                                                    {/* Net Profit */}
+                                                    <tr style={{ background: reportData.profit >= 0 ? '#D1FAE5' : '#FEE2E2', fontWeight: 700, borderTop: '2px solid var(--border)' }}>
+                                                        <td style={tdStyle}>{reportData.profit >= 0 ? `✅ ${t('rep_netProfit') || 'Net Profit'}` : `❌ ${t('rep_netLoss') || 'Net Loss'}`}</td>
+                                                        <td style={{ ...tdStyle, fontSize: '1.1rem', color: reportData.profit >= 0 ? '#059669' : '#DC2626' }}>{fmt(Math.abs(reportData.profit))}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                    {/* Cash & Liquidity Position */}
+                                    {reportData && (
+                                        <div style={{ marginTop: '24px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+                                            <div style={{ padding: '12px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span>🏦 {t('rep_cashBankPosition') || 'Cash & Liquidity Position (Cash & Banks)'}</span>
+                                                <span style={{ fontSize: '1.1rem', color: reportData.cashBankBalance >= 0 ? '#0D9488' : '#DC2626', fontWeight: 'bold' }}>
+                                                    {fmt(reportData.cashBankBalance)}
+                                                </span>
+                                            </div>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                <tbody>
+                                                    <tr>
+                                                        <td style={tdStyle}>{t('cb_cash') || 'Cash'}</td>
+                                                        <td style={{ ...tdStyle, fontWeight: 600, color: reportData.cashBalance >= 0 ? 'var(--text-main)' : '#DC2626' }}>{fmt(reportData.cashBalance)}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={tdStyle}>{t('cb_bank') || 'Bank'}</td>
+                                                        <td style={{ ...tdStyle, fontWeight: 600, color: reportData.bankBalance >= 0 ? 'var(--text-main)' : '#DC2626' }}>{fmt(reportData.bankBalance)}</td>
+                                                    </tr>
+                                                    <tr style={{ background: '#f8fafc', fontWeight: 'bold', borderTop: '1px solid var(--border)' }}>
+                                                        <td style={tdStyle}>{t('rep_cashBankBalance') || 'Total Available Cash'}</td>
+                                                        <td style={{ ...tdStyle, color: reportData.cashBankBalance >= 0 ? '#0D9488' : '#DC2626' }}>{fmt(reportData.cashBankBalance)}</td>
+                                                    </tr>
                                                 </tbody>
                                             </table>
                                         </div>
@@ -720,7 +801,7 @@ function Reports() {
                                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('rep_finalBalance') || 'Final Balance'}</div>
                                             <div style={{ fontWeight: 800, fontSize: '1.2rem', color: reportData.balance > 0 ? '#D97706' : '#059669' }}>
                                                 {fmt(Math.abs(reportData.balance))}
-                                                <span style={{ fontSize: '0.75rem', marginRight: '4px' }}>{reportData.balance > 0 ? `(${t('debit') || 'Debit'})` : `(${t('credit') || 'Credit'})`}</span>
+                                                <span style={{ fontSize: '0.75rem', marginRight: '4px' }}>{reportData.balance > 0 ? `(${t('acc_debit') || 'Debit'})` : `(${t('acc_credit') || 'Credit'})`}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -734,8 +815,8 @@ function Reports() {
                                                 <tr style={{ background: 'var(--bg-secondary)' }}>
                                                     <th style={thStyle}>{t('date') || 'Date'}</th>
                                                     <th style={thStyle}>{t('vouch_description') || 'Description'}</th>
-                                                    <th style={thStyle}>{t('debit') || 'Debit'}</th>
-                                                    <th style={thStyle}>{t('credit') || 'Credit'}</th>
+                                                    <th style={thStyle}>{t('acc_debit') || 'Debit'}</th>
+                                                    <th style={thStyle}>{t('acc_credit') || 'Credit'}</th>
                                                     <th style={thStyle}>{t('balance') || 'Balance'}</th>
                                                 </tr>
                                             </thead>
@@ -790,8 +871,8 @@ function Reports() {
                                                 <tr style={{ background: 'var(--bg-secondary)' }}>
                                                     <th style={thStyle}>{t('code') || 'Code'}</th>
                                                     <th style={thStyle}>{t('acc_name') || 'Account Name'}</th>
-                                                    <th style={thStyle}>{t('debit') || 'Debit'}</th>
-                                                    <th style={thStyle}>{t('credit') || 'Credit'}</th>
+                                                    <th style={thStyle}>{t('acc_debit') || 'Debit'}</th>
+                                                    <th style={thStyle}>{t('acc_credit') || 'Credit'}</th>
                                                 </tr>
                                             </thead>
                                             <tbody>

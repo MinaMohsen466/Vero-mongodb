@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, Users, FileText, ToggleLeft, ToggleRight, Filter } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Users, FileText, ToggleLeft, ToggleRight, Filter, Printer } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
@@ -17,7 +17,8 @@ function Customers() {
     const [customerInvoices, setCustomerInvoices] = useState([]);
     const [editingCustomer, setEditingCustomer] = useState(null);
     const [formData, setFormData] = useState({
-        name: '', phone: '', email: '', address: '', tax_number: '', credit_limit: 0, notes: '', is_active: 1
+        name: '', phone: '', email: '', address: '', tax_number: '', credit_limit: 0, notes: '', is_active: 1,
+        opening_balance: 0, opening_balance_date: new Date().toISOString().split('T')[0]
     });
 
     const searchInputRef = React.useRef(null);
@@ -100,16 +101,152 @@ function Customers() {
                 name: customer.name || '', phone: customer.phone || '', email: customer.email || '',
                 address: customer.address || '', tax_number: customer.tax_number || '',
                 credit_limit: customer.credit_limit || 0, notes: customer.notes || '',
-                is_active: customer.is_active !== undefined ? customer.is_active : 1
+                is_active: customer.is_active !== undefined ? customer.is_active : 1,
+                opening_balance: customer.opening_balance || 0,
+                opening_balance_date: customer.opening_balance_date || new Date().toISOString().split('T')[0]
             });
         } else {
             setEditingCustomer(null);
-            setFormData({ name: '', phone: '', email: '', address: '', tax_number: '', credit_limit: 0, notes: '', is_active: 1 });
+            setFormData({
+                name: '', phone: '', email: '', address: '', tax_number: '', credit_limit: 0, notes: '', is_active: 1,
+                opening_balance: 0,
+                opening_balance_date: new Date().toISOString().split('T')[0]
+            });
         }
         setShowModal(true);
     };
 
     const closeModal = () => { setShowModal(false); setEditingCustomer(null); };
+
+    const handlePrintStatement = async () => {
+        if (!selectedCustomer) return;
+        try {
+            const settings = await window.api.settings.getAll();
+            const companyName = settings?.company?.company_name || 'ڤيرو المحاسبي';
+            const companyPhone = settings?.company?.company_phone || '';
+            const companyAddress = settings?.company?.company_address || '';
+            const currency = settings?.general?.currency || t('currency_kd') || 'د.ك';
+
+            const totalDebit = customerInvoices.reduce((acc, row) => acc + (row.debit || 0), 0);
+            const totalCredit = customerInvoices.reduce((acc, row) => acc + (row.credit || 0), 0);
+            const finalBalance = Math.abs(selectedCustomer.balance || 0);
+            const balanceText = selectedCustomer.balance > 0 ? (t('acc_debit') || 'مدين') : (t('acc_credit') || 'دائن');
+
+            const rowsHtml = customerInvoices.map(row => `
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px;">${new Date(row.date).toLocaleDateString('en-GB')}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; font-weight: bold;">${row.description}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; text-align: left; direction: ltr; color: ${row.debit > 0 ? '#ef4444' : '#64748b'}">${row.debit > 0 ? (new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(row.debit) + ' ' + currency) : '-'}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; text-align: left; direction: ltr; color: ${row.credit > 0 ? '#10b981' : '#64748b'}">${row.credit > 0 ? (new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(row.credit) + ' ' + currency) : '-'}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; text-align: left; direction: ltr; font-weight: bold;">${(new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(Math.abs(row.balance))) + ' ' + currency}</td>
+                </tr>
+            `).join('');
+
+            const html = `
+            <!DOCTYPE html>
+            <html dir="rtl" lang="ar">
+            <head>
+                <meta charset="UTF-8">
+                <title>${t('rep_customerStatement') || 'كشف حساب عميل'} - ${selectedCustomer.name}</title>
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; color: #1e293b; background: #fff; }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 20px; }
+                    .company-info { text-align: right; }
+                    .company-name { font-size: 22px; font-weight: bold; color: #1e3a8a; margin-bottom: 5px; }
+                    .company-details { font-size: 13px; color: #64748b; line-height: 1.5; }
+                    .statement-title { text-align: left; }
+                    .title-text { font-size: 24px; font-weight: 800; color: #0f172a; margin-bottom: 5px; }
+                    .date-text { font-size: 12px; color: #64748b; }
+                    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+                    .info-col { font-size: 14px; line-height: 1.8; }
+                    .info-col strong { color: #475569; }
+                    .table-container { margin-bottom: 30px; }
+                    table { width: 100%; border-collapse: collapse; text-align: right; }
+                    th { background: #1e293b; color: #fff; padding: 12px 10px; font-size: 13px; font-weight: bold; }
+                    .summary-container { display: flex; justify-content: flex-end; gap: 30px; border-top: 2px solid #cbd5e1; padding-top: 15px; margin-top: 10px; }
+                    .summary-item { font-size: 15px; line-height: 1.8; text-align: left; }
+                    .summary-item strong { display: inline-block; width: 120px; text-align: right; margin-left: 10px; }
+                    .balance-box { background: #fef2f2; border: 1px solid #fee2e2; padding: 12px 20px; border-radius: 6px; font-size: 18px; font-weight: bold; color: #ef4444; margin-top: 10px; display: inline-flex; align-items: center; gap: 10px; }
+                    .balance-box.credit { background: #f0fdf4; border: 1px solid #dcfce7; color: #16a34a; }
+                    @media print {
+                        body { padding: 0; }
+                        .no-print { display: none; }
+                        @page { margin: 10mm; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="company-info">
+                        <div class="company-name">${companyName}</div>
+                        <div class="company-details">
+                            ${companyAddress ? `<div>${companyAddress}</div>` : ''}
+                            ${companyPhone ? `<div>هاتف: ${companyPhone}</div>` : ''}
+                        </div>
+                    </div>
+                    <div class="statement-title">
+                        <div class="title-text">${t('rep_customerStatement') || 'كشف حساب عميل'}</div>
+                        <div class="date-text">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-KW')}</div>
+                    </div>
+                </div>
+
+                <div class="info-grid">
+                    <div class="info-col">
+                        <div><strong>الكود:</strong> ${selectedCustomer.code}</div>
+                        <div><strong>العميل:</strong> ${selectedCustomer.name}</div>
+                    </div>
+                    <div class="info-col">
+                        <div><strong>الهاتف:</strong> ${selectedCustomer.phone || '-'}</div>
+                        <div><strong>العنوان:</strong> ${selectedCustomer.address || '-'}</div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="border-radius: 0 6px 6px 0;">التاريخ</th>
+                                <th>البيان</th>
+                                <th style="text-align: left;">مدين</th>
+                                <th style="text-align: left;">دائن</th>
+                                <th style="text-align: left; border-radius: 6px 0 0 6px;">الرصيد التراكمي</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="text-align: left;">
+                    <div class="summary-container">
+                        <div class="summary-item">
+                            <div><strong>إجمالي المدين:</strong> <span style="direction: ltr; display: inline-block;">${new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(totalDebit)} ${currency}</span></div>
+                            <div><strong>إجمالي الدائن:</strong> <span style="direction: ltr; display: inline-block;">${new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(totalCredit)} ${currency}</span></div>
+                        </div>
+                    </div>
+                    <div class="balance-box ${selectedCustomer.balance > 0 ? '' : 'credit'}">
+                        <span>الرصيد الحالي المستحق:</span>
+                        <span style="direction: ltr; display: inline-block;">${new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(finalBalance)} ${currency} (${balanceText})</span>
+                    </div>
+                </div>
+            </body>
+            </html>
+            `;
+
+            if (window.api?.print?.invoice) {
+                await window.api.print.invoice(html);
+            } else {
+                const win = window.open('', '_blank');
+                win.document.write(html);
+                win.document.close();
+                win.onload = () => setTimeout(() => win.print(), 300);
+            }
+        } catch (e) {
+            console.error("Error printing statement:", e);
+            toast.error("حدث خطأ أثناء طباعة كشف الحساب");
+        }
+    };
 
     const showCustomerInvoices = async (customer) => {
         setSelectedCustomer(customer);
@@ -121,6 +258,17 @@ function Customers() {
             const receiptVouchers = (vouchers || []).filter(v => Number(v.customer_id) === Number(customer.id));
             let seq = 0;
             const rows = [];
+
+            const opBalance = parseFloat(customer.opening_balance) || 0;
+            if (opBalance > 0) {
+                rows.push({
+                    date: customer.opening_balance_date || customer.created_at?.substring(0, 10) || new Date().toISOString().split('T')[0],
+                    description: t('rep_openingBalance') || 'رصيد افتتاحي',
+                    debit: opBalance,
+                    credit: 0,
+                    seq: seq++
+                });
+            }
 
             (invoices || []).forEach(inv => {
                 rows.push({
@@ -170,7 +318,8 @@ function Customers() {
             c.phone?.includes(searchQuery) || c.code?.includes(searchQuery);
         const matchesStatus = statusFilter === 'all' ||
             (statusFilter === 'active' && c.is_active) ||
-            (statusFilter === 'inactive' && !c.is_active);
+            (statusFilter === 'inactive' && !c.is_active) ||
+            (statusFilter === 'has_balance' && c.balance > 0);
         return matchesSearch && matchesStatus;
     }).sort((a, b) => (a.code || '').localeCompare((b.code || ''), undefined, {numeric: true, sensitivity: 'base'}));
 
@@ -198,10 +347,11 @@ function Customers() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <Filter size={16} style={{ color: 'var(--text-muted)' }} />
                         <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-                            style={{ width: '140px' }}>
+                            style={{ width: '180px' }}>
                             <option value="all">{t('all') || 'All'}</option>
                             <option value="active">{t('activeOnly') || 'Active Only'}</option>
                             <option value="inactive">{t('inactive') || 'Inactive'}</option>
+                            <option value="has_balance">{t('cust_hasBalance') || 'ذمم مدينة مستحقة'}</option>
                         </select>
                     </div>
                     {/* Count badge */}
@@ -323,51 +473,104 @@ function Customers() {
                             </select>
                         </div>
                     </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">{t('opening_balance')}</label>
+                            <input type="number" className="form-input" value={formData.opening_balance}
+                                onChange={(e) => setFormData({ ...formData, opening_balance: parseFloat(e.target.value) || 0 })}
+                                min="0" step="0.001" />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">{t('opening_balance_date')}</label>
+                            <input type="date" className="form-input" value={formData.opening_balance_date}
+                                onChange={(e) => setFormData({ ...formData, opening_balance_date: e.target.value })} />
+                        </div>
+                    </div>
                     <div className="form-group"><label className="form-label">{t('notes')}</label><textarea className="form-textarea" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} /></div>
                 </form>
             </Modal>
 
             {/* Customer Statement Modal */}
             <Modal isOpen={showInvoicesModal} onClose={() => setShowInvoicesModal(false)} title={`${t('rep_customerStatement') || 'Customer Statement'}: ${selectedCustomer?.name || ''}`} size="lg"
-                footer={<button className="btn btn-secondary" onClick={() => setShowInvoicesModal(false)}>{t('close')}</button>}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-                    <div style={{ padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>{t('cust_currentBalance')}</div>
-                        <div className={selectedCustomer?.balance > 0 ? 'text-danger' : 'text-success'} style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
-                            {formatCurrency(selectedCustomer?.balance)}
-                        </div>
+                footer={
+                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: '10px' }}>
+                        <button className="btn btn-primary" onClick={handlePrintStatement} disabled={customerInvoices.length === 0}>
+                            <Printer size={18} /> {t('print') || 'Print'}
+                        </button>
+                        <button className="btn btn-secondary" onClick={() => setShowInvoicesModal(false)}>{t('close')}</button>
                     </div>
-                    {selectedCustomer?.credit_limit > 0 && (
-                        <div style={{ padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>{t('cust_creditLimit')}</div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formatCurrency(selectedCustomer?.credit_limit)}</div>
-                            <div style={{ fontSize: '0.8rem', marginTop: '4px', color: selectedCustomer?.balance >= selectedCustomer?.credit_limit ? '#ef4444' : '#22c55e' }}>
-                                {selectedCustomer?.balance >= selectedCustomer?.credit_limit
-                                    ? '⚠'
-                                    : `✓ ${formatCurrency(selectedCustomer?.credit_limit - selectedCustomer?.balance)}`}
-                            </div>
-                        </div>
-                    )}
+                }>
+                {/* Details Bar */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '16px', padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '0.9rem' }}>
+                    <div><strong>{t('code')}:</strong> {selectedCustomer?.code}</div>
+                    {selectedCustomer?.phone && <div><strong>{t('phone')}:</strong> {selectedCustomer?.phone}</div>}
+                    {selectedCustomer?.email && <div><strong>{t('email')}:</strong> {selectedCustomer?.email}</div>}
+                    {selectedCustomer?.address && <div><strong>{t('address')}:</strong> {selectedCustomer?.address}</div>}
                 </div>
+
                 {customerInvoices.length === 0 ? (
                     <div className="empty-state"><FileText size={48} /><h3>{t('noData')}</h3></div>
                 ) : (
-                    <table>
-                        <thead>
-                            <tr><th>{t('date')}</th><th>{t('vouch_description') || 'Description'}</th><th>{t('debit') || 'Debit'}</th><th>{t('credit') || 'Credit'}</th><th>{t('balance')}</th></tr>
-                        </thead>
-                        <tbody>
-                            {customerInvoices.map((row, i) => (
-                                <tr key={i}>
-                                    <td>{new Date(row.date).toLocaleDateString('en-GB')}</td>
-                                    <td className="font-bold">{row.description}</td>
-                                    <td className="text-danger">{row.debit > 0 ? formatCurrency(row.debit) : '-'}</td>
-                                    <td className="text-success">{row.credit > 0 ? formatCurrency(row.credit) : '-'}</td>
-                                    <td className={row.balance > 0 ? 'text-danger font-bold' : 'text-success font-bold'}>{formatCurrency(Math.abs(row.balance))}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <>
+                        <div className="table-container" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>{t('date')}</th>
+                                        <th>{t('vouch_description') || 'Description'}</th>
+                                        <th style={{ textAlign: 'left' }}>{t('acc_debit') || 'Debit'}</th>
+                                        <th style={{ textAlign: 'left' }}>{t('acc_credit') || 'Credit'}</th>
+                                        <th style={{ textAlign: 'left' }}>{t('balance')}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {customerInvoices.map((row, i) => (
+                                        <tr key={i}>
+                                            <td>{new Date(row.date).toLocaleDateString('en-GB')}</td>
+                                            <td className="font-bold">{row.description}</td>
+                                            <td className="text-danger" style={{ textAlign: 'left', direction: 'ltr' }}>{row.debit > 0 ? formatCurrency(row.debit) : '-'}</td>
+                                            <td className="text-success" style={{ textAlign: 'left', direction: 'ltr' }}>{row.credit > 0 ? formatCurrency(row.credit) : '-'}</td>
+                                            <td className={row.balance > 0 ? 'text-danger font-bold' : 'text-success font-bold'} style={{ textAlign: 'left', direction: 'ltr' }}>{formatCurrency(Math.abs(row.balance))}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'flex-end', borderTop: '2px solid var(--border-color)', paddingTop: '16px' }}>
+                            <div style={{ display: 'flex', gap: '24px', fontSize: '0.95rem' }}>
+                                <div>
+                                    <span style={{ color: 'var(--text-muted)' }}>{t('rep_totalDebit') || 'إجمالي المدين'}: </span>
+                                    <strong style={{ direction: 'ltr', display: 'inline-block' }}>{formatCurrency(customerInvoices.reduce((s, r) => s + (r.debit || 0), 0))}</strong>
+                                </div>
+                                <div>
+                                    <span style={{ color: 'var(--text-muted)' }}>{t('rep_totalCredit') || 'إجمالي الدائن'}: </span>
+                                    <strong style={{ direction: 'ltr', display: 'inline-block' }}>{formatCurrency(customerInvoices.reduce((s, r) => s + (r.credit || 0), 0))}</strong>
+                                </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: selectedCustomer?.credit_limit > 0 ? '1fr 1fr' : '1fr', gap: '12px', width: '100%' }}>
+                                <div style={{ padding: '12px', backgroundColor: selectedCustomer?.balance > 0 ? '#fef2f2' : '#f0fdf4', border: `1px solid ${selectedCustomer?.balance > 0 ? '#fee2e2' : '#dcfce7'}`, borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{t('cust_currentBalance') || 'الرصيد الحالي المستحق'}:</span>
+                                    <span className={selectedCustomer?.balance > 0 ? 'text-danger' : 'text-success'} style={{ fontSize: '1.25rem', fontWeight: 'bold', direction: 'ltr' }}>
+                                        {formatCurrency(Math.abs(selectedCustomer?.balance || 0))} {selectedCustomer?.balance > 0 ? `(${t('acc_debit') || 'مدين'})` : `(${t('acc_credit') || 'دائن'})`}
+                                    </span>
+                                </div>
+                                {selectedCustomer?.credit_limit > 0 && (
+                                    <div style={{ padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontWeight: '600', color: 'var(--text-muted)' }}>{t('cust_creditLimit')}:</span>
+                                        <div style={{ textAlign: 'left' }}>
+                                            <strong style={{ fontSize: '1.1rem', direction: 'ltr' }}>{formatCurrency(selectedCustomer?.credit_limit)}</strong>
+                                            <div style={{ fontSize: '0.75rem', marginTop: '2px', color: selectedCustomer?.balance >= selectedCustomer?.credit_limit ? '#ef4444' : '#22c55e', fontWeight: 'bold' }}>
+                                                {selectedCustomer?.balance >= selectedCustomer?.credit_limit
+                                                    ? '⚠ تجاوز الحد'
+                                                    : `✓ المتبقي: ${formatCurrency(selectedCustomer?.credit_limit - selectedCustomer?.balance)}`}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </>
                 )}
             </Modal>
         </div>
