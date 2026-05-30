@@ -1571,8 +1571,26 @@ class ReportsRepo {
         if (date) sql += ` WHERE je.date <= ? OR je.date IS NULL`;
         sql += ` GROUP BY a.id ORDER BY a.code`;
         const accounts = date ? this.db.all(sql, [date]) : this.db.all(sql);
-        const result = accounts.map(a => ({ ...a, balance: a.total_debit - a.total_credit }));
-        const totals = { debit: result.reduce((s, a) => s + a.total_debit, 0), credit: result.reduce((s, a) => s + a.total_credit, 0) };
+        // Calculate net balance per account - show in one column only
+        const result = accounts.map(a => {
+            const netBalance = a.total_debit - a.total_credit;
+            // Debit-nature accounts: assets, expenses => positive balance goes to debit
+            // Credit-nature accounts: liabilities, equity, revenue => positive balance goes to credit
+            let debit_balance = 0;
+            let credit_balance = 0;
+            if (a.nature === 'debit') {
+                if (netBalance >= 0) debit_balance = netBalance;
+                else credit_balance = Math.abs(netBalance);
+            } else {
+                if (netBalance <= 0) credit_balance = Math.abs(netBalance);
+                else debit_balance = netBalance;
+            }
+            return { ...a, balance: netBalance, debit_balance, credit_balance };
+        });
+        const totals = {
+            debit: result.reduce((s, a) => s + a.debit_balance, 0),
+            credit: result.reduce((s, a) => s + a.credit_balance, 0)
+        };
         return { accounts: result, totals };
     }
     salesReport(startDate, endDate) {
