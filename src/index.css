@@ -1344,3 +1344,8 @@ select {
   color: #dc2626;
   border: 1px solid var(--danger);
 }
+
+/* Custom Override for Invoice Preview Sheet in Dark Mode */
+.invoice-preview-table tbody tr:hover {
+  background: transparent !important;
+}

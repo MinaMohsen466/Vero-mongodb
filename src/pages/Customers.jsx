@@ -181,7 +181,7 @@ function Customers() {
                         <div class="company-name">${companyName}</div>
                         <div class="company-details">
                             ${companyAddress ? `<div>${companyAddress}</div>` : ''}
-                            ${companyPhone ? `<div>هاتف: ${companyPhone}</div>` : ''}
+                            ${companyPhone ? `<div>تلفون: <span dir="ltr">${companyPhone}</span></div>` : ''}
                         </div>
                     </div>
                     <div class="statement-title">
@@ -196,7 +196,7 @@ function Customers() {
                         <div><strong>العميل:</strong> ${selectedCustomer.name}</div>
                     </div>
                     <div class="info-col">
-                        <div><strong>الهاتف:</strong> ${selectedCustomer.phone || '-'}</div>
+                        <div><strong>تلفون:</strong> <span dir="ltr">${selectedCustomer.phone || '-'}</span></div>
                         <div><strong>العنوان:</strong> ${selectedCustomer.address || '-'}</div>
                     </div>
                 </div>
@@ -386,7 +386,7 @@ function Customers() {
                                             onClick={() => showCustomerInvoices(customer)}>
                                             <td>{customer.code}</td>
                                             <td className="font-bold">{customer.name}</td>
-                                            <td>{customer.phone || '-'}</td>
+                                            <td><span dir="ltr">{customer.phone || '-'}</span></td>
                                             <td className={`font-bold ${customer.balance > 0 ? 'text-danger' : 'text-success'}`}>
                                                 {formatCurrency(customer.balance)}
                                             </td>
@@ -503,7 +503,7 @@ function Customers() {
                 {/* Details Bar */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '16px', padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '0.9rem' }}>
                     <div><strong>{t('code')}:</strong> {selectedCustomer?.code}</div>
-                    {selectedCustomer?.phone && <div><strong>{t('phone')}:</strong> {selectedCustomer?.phone}</div>}
+                    {selectedCustomer?.phone && <div><strong>{t('phone')}:</strong> <span dir="ltr">{selectedCustomer?.phone}</span></div>}
                     {selectedCustomer?.email && <div><strong>{t('email')}:</strong> {selectedCustomer?.email}</div>}
                     {selectedCustomer?.address && <div><strong>{t('address')}:</strong> {selectedCustomer?.address}</div>}
                 </div>

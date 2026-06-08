@@ -28,7 +28,7 @@ function ShortcutsHelpPanel({ isOpen, onClose }) {
 
     const ShortcutKey = ({ children }) => (
         <kbd style={{
-            background: 'var(--bg-tertiary, #f1f5f9)',
+            background: 'var(--border)',
             border: '1px solid var(--border)',
             borderBottomWidth: '2px',
             borderRadius: '4px',

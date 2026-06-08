@@ -136,7 +136,7 @@ function InvoicePrintPreview({ invoice, settings, onClose, type = 'sales' }) {
     };
     const previewWidth = getPreviewWidth();
 
-    const clientName = type === 'sales' ? (invoice.customer_name || '-') : (invoice.supplier_name || '-');
+    const clientName = type === 'sales' ? (invoice.customer_name && invoice.customer_name !== '-' ? invoice.customer_name : (t('cash_client') || 'نقدي')) : (invoice.supplier_name || '-');
     const clientLabel = type === 'sales' ? (t('customer') || 'Customer') : (t('supplier') || 'Supplier');
     
     const wrap = (body) => {
@@ -176,21 +176,19 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
             : '';
 
         const infoStandard = showCompanyInfo ? `
-            <div style="font-size: ${fonts.body}; line-height: 1.5; color: #000; text-align: left; white-space: nowrap; display: flex; flex-direction: column; gap: 4px; align-items: ${isRtl ? 'flex-end' : 'flex-start'};">
-              <h3 style="font-size: 16px; font-weight: 700; margin: 0 0 4px 0; color: #000;">${companyName}</h3>
-              ${companyPhone ? `<div style="white-space: nowrap;"><strong>${t('phone') || 'الهاتف'}:</strong> ${companyPhone}</div>` : ''}
-              ${companyAddress ? `<div style="white-space: nowrap;"><strong>${t('address') || 'العنوان'}:</strong> ${companyAddress}</div>` : ''}
-              ${companyEmail ? `<div style="white-space: nowrap;"><strong>${t('email') || 'البريد الإلكتروني'}:</strong> ${companyEmail}</div>` : ''}
-              ${companyTaxNumber ? `<div style="white-space: nowrap;"><strong>${t('tax_number_abbr') || 'الرقم الضريبي:'}</strong> ${companyTaxNumber}</div>` : ''}
+            <div style="font-size: ${fonts.body}; line-height: 1.5; color: #1f2937; text-align: ${alignLeft}; display: flex; flex-direction: column; gap: 3px;">
+              <h3 style="font-size: 18px; font-weight: 800; margin: 0; color: #111827; max-width: 250px; overflow-wrap: break-word; line-height: 1.3;">${companyName}</h3>
+              ${companyPhone ? `<div style="white-space: nowrap; font-size: 13px; color: #4b5563; margin-top: 2px;"><strong>${t('phone') || 'تلفون'}:</strong> <span dir="ltr">${companyPhone}</span></div>` : ''}
+              ${companyEmail ? `<div style="white-space: nowrap; font-size: 13px; color: #4b5563;"><strong>${t('email') || 'البريد الإلكتروني'}:</strong> ${companyEmail}</div>` : ''}
+              ${companyTaxNumber ? `<div style="white-space: nowrap; font-size: 13px; color: #4b5563;"><strong>${t('tax_number_abbr') || 'الرقم الضريبي:'}</strong> ${companyTaxNumber}</div>` : ''}
             </div>` : '';
 
         const infoThermal = showCompanyInfo ? `
-            <div style="font-size: 12px; line-height: 1.5; color: #000; text-align: center; display: flex; flex-direction: column; gap: 4px; align-items: center;">
-              <h3 style="font-size: 15px; font-weight: 700; margin: 0 0 4px 0; color: #000;">${companyName}</h3>
-              ${companyPhone ? `<div style="white-space: nowrap;"><strong>${t('phone') || 'الهاتف'}:</strong> ${companyPhone}</div>` : ''}
-              ${companyAddress ? `<div style="white-space: nowrap;"><strong>${t('address') || 'العنوان'}:</strong> ${companyAddress}</div>` : ''}
-              ${companyEmail ? `<div style="white-space: nowrap;"><strong>${t('email') || 'البريد الإلكتروني'}:</strong> ${companyEmail}</div>` : ''}
-              ${companyTaxNumber ? `<div style="white-space: nowrap;"><strong>${t('tax_number_abbr') || 'الرقم الضريبي:'}</strong> ${companyTaxNumber}</div>` : ''}
+            <div style="font-size: 12px; line-height: 1.5; color: #1f2937; text-align: center; display: flex; flex-direction: column; gap: 3px; align-items: center;">
+              <h3 style="font-size: 16px; font-weight: 800; margin: 0; color: #111827; max-width: 180px; overflow-wrap: break-word; line-height: 1.3;">${companyName}</h3>
+              ${companyPhone ? `<div style="white-space: nowrap; font-size: 12px; color: #4b5563;"><strong>${t('phone') || 'تلفون'}:</strong> <span dir="ltr">${companyPhone}</span></div>` : ''}
+              ${companyEmail ? `<div style="white-space: nowrap; font-size: 12px; color: #4b5563;"><strong>${t('email') || 'البريد الإلكتروني'}:</strong> ${companyEmail}</div>` : ''}
+              ${companyTaxNumber ? `<div style="white-space: nowrap; font-size: 12px; color: #4b5563;"><strong>${t('tax_number_abbr') || 'الرقم الضريبي:'}</strong> ${companyTaxNumber}</div>` : ''}
             </div>` : '';
 
         const invoiceDateStr = new Date(invoice.date).toLocaleDateString(isRtl ? 'ar-KW' : 'en-GB');
@@ -198,16 +196,16 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
         const combinedDateTime = `${invoiceDateStr} ${invoiceTimeStr}`;
 
         const invoiceDetailsStandard = `
-            <div style="font-size: ${fonts.body}; line-height: 1.6; color: #000; text-align: right; white-space: nowrap; display: flex; flex-direction: column; gap: 4px; align-items: ${isRtl ? 'flex-start' : 'flex-end'};">
-                <div style="white-space: nowrap;"><strong>${t('inv_number') || 'رقم الفاتورة'}:</strong> <span style="font-family: monospace; font-size: 13px; font-weight: 700;">${invoice.invoice_number}</span></div>
+            <div style="font-size: ${fonts.body}; line-height: 1.6; color: #1f2937; text-align: ${alignRight}; white-space: nowrap; display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
+                <div style="white-space: nowrap;"><strong>${t('inv_number') || 'رقم الفاتورة'}:</strong> <span style="font-family: monospace; font-size: 13px; font-weight: 700; color: #111827;">${invoice.invoice_number}</span></div>
                 <div style="white-space: nowrap;"><strong>${t('date') || 'التاريخ'}:</strong> ${combinedDateTime}</div>
                 <div style="white-space: nowrap;"><strong>${clientLabel}:</strong> ${clientName}</div>
             </div>
         `;
 
         const invoiceDetailsThermal = `
-            <div style="font-size: 12px; line-height: 1.6; color: #000; text-align: ${isRtl ? 'right' : 'left'}; display: flex; flex-direction: column; gap: 4px; align-items: flex-start;">
-                <div style="white-space: nowrap;"><strong>${t('inv_number') || 'رقم الفاتورة'}:</strong> <span style="font-family: monospace; font-size: 12px; font-weight: 700;">${invoice.invoice_number}</span></div>
+            <div style="font-size: 12px; line-height: 1.6; color: #1f2937; text-align: ${isRtl ? 'right' : 'left'}; display: flex; flex-direction: column; gap: 4px; align-items: flex-start;">
+                <div style="white-space: nowrap;"><strong>${t('inv_number') || 'رقم الفاتورة'}:</strong> <span style="font-family: monospace; font-size: 12px; font-weight: 700; color: #111827;">${invoice.invoice_number}</span></div>
                 <div style="white-space: nowrap;"><strong>${t('date') || 'التاريخ'}:</strong> ${combinedDateTime}</div>
                 <div style="white-space: nowrap;"><strong>${clientLabel}:</strong> ${clientName}</div>
             </div>
@@ -224,18 +222,17 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
                     ${invoiceDetailsThermal}
                 </div>`;
         } else {
-            const flexDir = isRtl ? 'row-reverse' : 'row';
             headerHtml = `
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; flex-direction: ${flexDir};">
-                    <!-- Column 1 (Left Column): Company logo & info -->
-                    <div style="display: flex; flex-direction: column; gap: 6px; align-items: ${isRtl ? 'flex-end' : 'flex-start'}; text-align: left; flex: 1;">
-                        ${logo ? `<div style="margin-bottom: 4px;">${logo}</div>` : ''}
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%; border-bottom: 2px solid #9ca3af; padding-bottom: 15px; margin-bottom: 20px;">
+                    <!-- Column 1 (Left/Right Group): Company logo & info side-by-side -->
+                    <div style="display: flex; align-items: flex-start; gap: 14px; flex: 1.5; text-align: ${alignLeft};">
+                        ${logo ? `<div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center;">${logo}</div>` : ''}
                         ${infoStandard}
                     </div>
                     
-                    <!-- Column 2 (Right Column): Invoice details -->
-                    <div style="display: flex; flex-direction: column; gap: 6px; align-items: ${isRtl ? 'flex-start' : 'flex-end'}; text-align: right; flex: 1;">
-                        <h2 style="font-size: ${fonts.title}; font-weight: 700; margin: 0 0 8px 0; color: #000; white-space: nowrap;">${invoiceTitle}</h2>
+                    <!-- Column 2 (Opposite Group): Invoice details -->
+                    <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end; text-align: ${alignRight}; flex: 1;">
+                        <h2 style="font-size: ${fonts.title}; font-weight: 800; margin: 0 0 6px 0; color: #111827; white-space: nowrap; letter-spacing: -0.5px;">${invoiceTitle}</h2>
                         ${invoiceDetailsStandard}
                     </div>
                 </div>`;
@@ -266,11 +263,11 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
                 <thead>
                     <tr>
-                        <th style="padding: 8px 10px; background: #111; color: #fff; font-size: 11px; font-weight: 700; text-align: center; border: 1px solid #111; width: 40px;">#</th>
-                        <th style="padding: 8px 10px; background: #111; color: #fff; font-size: 11px; font-weight: 700; text-align: ${alignLeft}; border: 1px solid #111;">${t('item_desc') || 'الصنف / الوصف'}</th>
-                        <th style="padding: 8px 10px; background: #111; color: #fff; font-size: 11px; font-weight: 700; text-align: center; border: 1px solid #111; width: 60px;">${t('quantity') || 'الكمية'}</th>
-                        <th style="padding: 8px 10px; background: #111; color: #fff; font-size: 11px; font-weight: 700; text-align: center; border: 1px solid #111; width: 90px;">${t('unit_price') || 'سعر الوحدة'}</th>
-                        <th style="padding: 8px 10px; background: #111; color: #fff; font-size: 11px; font-weight: 700; text-align: center; border: 1px solid #111; width: 100px;">${t('total') || 'الإجمالي'}</th>
+                        <th style="padding: 8px 10px; background: #f3f4f6; color: #1f2937; font-size: 11px; font-weight: 700; text-align: center; border: 1px solid #d1d5db; border-bottom: 2px solid #9ca3af; width: 40px;">#</th>
+                        <th style="padding: 8px 10px; background: #f3f4f6; color: #1f2937; font-size: 11px; font-weight: 700; text-align: ${alignLeft}; border: 1px solid #d1d5db; border-bottom: 2px solid #9ca3af;">${t('item_desc') || 'الصنف / الوصف'}</th>
+                        <th style="padding: 8px 10px; background: #f3f4f6; color: #1f2937; font-size: 11px; font-weight: 700; text-align: center; border: 1px solid #d1d5db; border-bottom: 2px solid #9ca3af; width: 60px;">${t('quantity') || 'الكمية'}</th>
+                        <th style="padding: 8px 10px; background: #f3f4f6; color: #1f2937; font-size: 11px; font-weight: 700; text-align: center; border: 1px solid #d1d5db; border-bottom: 2px solid #9ca3af; width: 90px;">${t('unit_price') || 'سعر الوحدة'}</th>
+                        <th style="padding: 8px 10px; background: #f3f4f6; color: #1f2937; font-size: 11px; font-weight: 700; text-align: center; border: 1px solid #d1d5db; border-bottom: 2px solid #9ca3af; width: 100px;">${t('total') || 'الإجمالي'}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -284,23 +281,23 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
             <div style="display: flex; justify-content: ${isRtl ? 'flex-start' : 'flex-end'}; margin-bottom: 20px;">
                 <table style="width: ${isThermo ? '100%' : '280px'}; border-collapse: collapse;">
                     <tbody>
-                        <tr style="font-size: ${fonts.body};">
+                        <tr style="font-size: ${fonts.body}; color: #1f2937;">
                             <td style="padding: 6px 10px; text-align: right; font-weight: 600;">${t('subtotal') || 'المجموع الفرعي'}</td>
                             <td style="padding: 6px 10px; text-align: left; width: 120px;">${formatCurrency(invoice.subtotal || invoice.total)}</td>
                         </tr>
                         ${invoice.discount > 0 ? `
-                        <tr style="font-size: ${fonts.body};">
+                        <tr style="font-size: ${fonts.body}; color: #1f2937;">
                             <td style="padding: 6px 10px; text-align: right; font-weight: 600;">${t('discount') || 'الخصم'}</td>
                             <td style="padding: 6px 10px; text-align: left; width: 120px; color: #000; font-weight: 700;">- ${formatCurrency(invoice.discount)}</td>
                         </tr>` : ''}
                         ${invoice.tax > 0 ? `
-                        <tr style="font-size: ${fonts.body};">
+                        <tr style="font-size: ${fonts.body}; color: #1f2937;">
                             <td style="padding: 6px 10px; text-align: right; font-weight: 600;">${t('tax') || 'الضريبة'}</td>
                             <td style="padding: 6px 10px; text-align: left; width: 120px;">${formatCurrency(invoice.tax)}</td>
                         </tr>` : ''}
-                        <tr style="font-size: ${fonts.body}; background: #000; color: #fff; font-weight: 700;">
-                            <td style="padding: 8px 10px; text-align: right; color: #fff;">${t('final_total') || 'الإجمالي النهائي'}</td>
-                            <td style="padding: 8px 10px; text-align: left; width: 120px; color: #fff; font-weight: 700;">${formatCurrency(invoice.total)}</td>
+                        <tr style="font-size: ${fonts.body}; border-top: 2px solid #9ca3af; border-bottom: 2px solid #9ca3af; font-weight: 700; color: #111827;">
+                            <td style="padding: 8px 10px; text-align: right; color: #111827;">${t('final_total') || 'الإجمالي النهائي'}</td>
+                            <td style="padding: 8px 10px; text-align: left; width: 120px; color: #111827; font-weight: 700;">${formatCurrency(invoice.total)}</td>
                         </tr>
                         ${invoice.paid > 0 && invoice.paid < invoice.total ? `
                         <tr style="font-size: ${fonts.body};">
@@ -354,8 +351,9 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
         // Footer HTML
         const footerHtml = `
             <div style="border-top: 1px solid #000; padding-top: 12px; text-align: center; color: #555; font-size: calc(${fonts.body} - 1px); margin-top: 15px;">
-                ${thankYouMsg ? `<p style="font-weight: 700; color: #000; margin-bottom: 4px; font-size: ${fonts.body};">${thankYouMsg}</p>` : ''}
-                ${invoiceFooter ? `<p>${invoiceFooter}</p>` : ''}
+                ${thankYouMsg ? `<p style="font-weight: 700; color: #111827; margin-bottom: 4px; font-size: ${fonts.body};">${thankYouMsg}</p>` : ''}
+                ${invoiceFooter ? `<p style="margin-bottom: 4px;">${invoiceFooter}</p>` : ''}
+                ${companyAddress ? `<p style="margin-bottom: 4px; font-weight: 600; color: #333;"><strong>${t('address') || 'العنوان'}:</strong> ${companyAddress}</p>` : ''}
                 <p style="margin-top: 6px; font-size: calc(${fonts.body} - 2px); color: #888;">${companyName} — ${new Date().getFullYear()}</p>
             </div>`;
 
@@ -399,9 +397,9 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
 
     const CompanyInfoComponent = showCompanyInfo ? (
         <div style={{ fontSize: 12, lineHeight: 1.5, color: '#333' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px 0', color: '#000' }}>{companyName}</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px 0', color: '#000', maxWidth: 200, overflowWrap: 'break-word', lineHeight: 1.3 }}>{companyName}</h3>
             {companyAddress && <div>{companyAddress}</div>}
-            {companyPhone && <div>{t('phone_label') || 'Phone:'} {companyPhone}</div>}
+            {companyPhone && <div>{t('phone_label') || 'Phone:'} <span dir="ltr">{companyPhone}</span></div>}
             {companyEmail && <div>{companyEmail}</div>}
             {companyTaxNumber && <div>{t('tax_number_label') || 'Tax Number:'} {companyTaxNumber}</div>}
         </div>
@@ -417,22 +415,20 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
         ) : null;
 
         const CompanyInfoStandard = showCompanyInfo ? (
-            <div style={{ fontSize: bodyFontSizeNum, lineHeight: 1.5, color: '#000', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 4, alignItems: isRtl ? 'flex-end' : 'flex-start' }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px 0', color: '#000' }}>{companyName}</h3>
-                {companyPhone && <div style={{ whiteSpace: 'nowrap' }}><strong>{t('phone') || 'الهاتف'}:</strong> {companyPhone}</div>}
-                {companyAddress && <div style={{ whiteSpace: 'nowrap' }}><strong>{t('address') || 'العنوان'}:</strong> {companyAddress}</div>}
-                {companyEmail && <div style={{ whiteSpace: 'nowrap' }}><strong>{t('email') || 'البريد الإلكتروني'}:</strong> {companyEmail}</div>}
-                {companyTaxNumber && <div style={{ whiteSpace: 'nowrap' }}><strong>{t('tax_number_abbr') || 'الرقم الضريبي:'}</strong> {companyTaxNumber}</div>}
+            <div style={{ fontSize: bodyFontSizeNum, lineHeight: 1.5, color: '#1f2937', textAlign: isRtl ? 'right' : 'left', display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
+                <h3 style={{ fontSize: 18, fontWeight: 800, margin: '0 0 2px 0', color: '#111827', maxWidth: 250, overflowWrap: 'break-word', lineHeight: 1.3 }}>{companyName}</h3>
+                {companyPhone && <div style={{ whiteSpace: 'nowrap', fontSize: 13, color: '#4b5563' }}><strong>{t('phone') || 'تلفون'}:</strong> <span dir="ltr">{companyPhone}</span></div>}
+                {companyEmail && <div style={{ whiteSpace: 'nowrap', fontSize: 13, color: '#4b5563' }}><strong>{t('email') || 'البريد الإلكتروني'}:</strong> {companyEmail}</div>}
+                {companyTaxNumber && <div style={{ whiteSpace: 'nowrap', fontSize: 13, color: '#4b5563' }}><strong>{t('tax_number_abbr') || 'الرقم الضريبي:'}</strong> {companyTaxNumber}</div>}
             </div>
         ) : null;
 
         const CompanyInfoThermal = showCompanyInfo ? (
-            <div style={{ fontSize: 12, lineHeight: 1.5, color: '#000', textAlign: 'center' }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 4px 0', color: '#000' }}>{companyName}</h3>
-                {companyPhone && <div style={{ whiteSpace: 'nowrap' }}><strong>{t('phone') || 'الهاتف'}:</strong> {companyPhone}</div>}
-                {companyAddress && <div style={{ whiteSpace: 'nowrap' }}><strong>{t('address') || 'العنوان'}:</strong> {companyAddress}</div>}
-                {companyEmail && <div style={{ whiteSpace: 'nowrap' }}><strong>{t('email') || 'البريد الإلكتروني'}:</strong> {companyEmail}</div>}
-                {companyTaxNumber && <div style={{ whiteSpace: 'nowrap' }}><strong>{t('tax_number_abbr') || 'الرقم الضريبي:'}</strong> {companyTaxNumber}</div>}
+            <div style={{ fontSize: 12, lineHeight: 1.5, color: '#1f2937', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
+                <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 2px 0', color: '#111827', maxWidth: 180, overflowWrap: 'break-word', lineHeight: 1.3 }}>{companyName}</h3>
+                {companyPhone && <div style={{ whiteSpace: 'nowrap', fontSize: 12, color: '#4b5563' }}><strong>{t('phone') || 'تلفون'}:</strong> <span dir="ltr">{companyPhone}</span></div>}
+                {companyEmail && <div style={{ whiteSpace: 'nowrap', fontSize: 12, color: '#4b5563' }}><strong>{t('email') || 'البريد الإلكتروني'}:</strong> {companyEmail}</div>}
+                {companyTaxNumber && <div style={{ whiteSpace: 'nowrap', fontSize: 12, color: '#4b5563' }}><strong>{t('tax_number_abbr') || 'الرقم الضريبي:'}</strong> {companyTaxNumber}</div>}
             </div>
         ) : null;
 
@@ -441,16 +437,16 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
         const combinedDateTime = `${invoiceDateStr} ${invoiceTimeStr}`;
 
         const InvoiceDetailsStandard = (
-            <div style={{ fontSize: bodyFontSizeNum, lineHeight: 1.6, color: '#000', textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 4, alignItems: isRtl ? 'flex-start' : 'flex-end' }}>
-                <div style={{ whiteSpace: 'nowrap' }}><strong>{t('inv_number') || 'رقم الفاتورة'}:</strong> <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700 }}>{invoice.invoice_number}</span></div>
+            <div style={{ fontSize: bodyFontSizeNum, lineHeight: 1.6, color: '#1f2937', textAlign: isRtl ? 'left' : 'right', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                <div style={{ whiteSpace: 'nowrap' }}><strong>{t('inv_number') || 'رقم الفاتورة'}:</strong> <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#111827' }}>{invoice.invoice_number}</span></div>
                 <div style={{ whiteSpace: 'nowrap' }}><strong>{t('date') || 'التاريخ'}:</strong> {combinedDateTime}</div>
                 <div style={{ whiteSpace: 'nowrap' }}><strong>{clientLabel}:</strong> {clientName}</div>
             </div>
         );
 
         const InvoiceDetailsThermal = (
-            <div style={{ fontSize: 12, lineHeight: 1.6, color: '#000', textAlign: isRtl ? 'right' : 'left', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-                <div style={{ whiteSpace: 'nowrap' }}><strong>{t('inv_number') || 'رقم الفاتورة'}:</strong> <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700 }}>{invoice.invoice_number}</span></div>
+            <div style={{ fontSize: 12, lineHeight: 1.6, color: '#1f2937', textAlign: isRtl ? 'right' : 'left', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                <div style={{ whiteSpace: 'nowrap' }}><strong>{t('inv_number') || 'رقم الفاتورة'}:</strong> <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#111827' }}>{invoice.invoice_number}</span></div>
                 <div style={{ whiteSpace: 'nowrap' }}><strong>{t('date') || 'التاريخ'}:</strong> {combinedDateTime}</div>
                 <div style={{ whiteSpace: 'nowrap' }}><strong>{clientLabel}:</strong> {clientName}</div>
             </div>
@@ -480,37 +476,32 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
                 justifyContent: 'space-between',
                 alignItems: 'flex-start',
                 width: '100%',
-                borderBottom: '2px solid #000',
+                borderBottom: '2px solid #9ca3af',
                 paddingBottom: 15,
-                marginBottom: 20,
-                flexDirection: flexDir
+                marginBottom: 20
             }}>
-                {/* Left Column: Logo & Company Info */}
+                {/* Left Column: Logo & Company Info group side-by-side */}
                 <div style={{
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: 6,
-                    alignItems: isRtl ? 'flex-end' : 'flex-start',
-                    textAlign: 'left',
-                    flex: 1
+                    alignItems: 'flex-start',
+                    gap: 14,
+                    flex: 1.5
                 }}>
-                    {LogoComponent && <div style={{ marginBottom: 4 }}>{LogoComponent}</div>}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: isRtl ? 'flex-end' : 'flex-start', textAlign: 'left' }}>
-                        {CompanyInfoStandard}
-                    </div>
+                    {LogoComponent && <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{LogoComponent}</div>}
+                    {CompanyInfoStandard}
                 </div>
 
                 {/* Right Column: Invoice Details */}
                 <div style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: 6,
-                    alignItems: isRtl ? 'flex-start' : 'flex-end',
-                    textAlign: 'right',
+                    gap: 4,
+                    alignItems: 'flex-end',
+                    textAlign: isRtl ? 'left' : 'right',
                     flex: 1
                 }}>
-                    <h2 style={{ fontSize: titleFontSizeNum, fontWeight: 700, margin: '0 0 8px 0', color: '#000', whiteSpace: 'nowrap' }}>{invoiceTitle}</h2>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: isRtl ? 'flex-start' : 'flex-end', textAlign: 'right' }}>
+                    <h2 style={{ fontSize: titleFontSizeNum, fontWeight: 800, margin: '0 0 6px 0', color: '#111827', whiteSpace: 'nowrap', letterSpacing: '-0.5px' }}>{invoiceTitle}</h2>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: isRtl ? 'flex-start' : 'flex-end', textAlign: isRtl ? 'left' : 'right' }}>
                         {InvoiceDetailsStandard}
                     </div>
                 </div>
@@ -521,25 +512,27 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
     const TableLayout = () => {
         const thStyle = {
             padding: '8px 10px',
-            background: '#111',
-            color: '#fff',
+            background: '#f3f4f6',
+            color: '#1f2937',
             fontSize: 11,
             fontWeight: 700,
             textAlign: 'center',
-            border: '1px solid #111'
+            border: '1px solid #d1d5db',
+            borderBottom: '2px solid #9ca3af'
         };
 
         const tdStyle = {
             padding: '8px 10px',
             fontSize: 12,
             borderBottom: '1px solid #e5e7eb',
-            textAlign: 'center'
+            textAlign: 'center',
+            color: '#1f2937'
         };
 
         const alignLeft = isRtl ? 'right' : 'left';
 
         return (
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
+            <table className="invoice-preview-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
                 <thead>
                     <tr>
                         <th style={{ ...thStyle, width: 40 }}>#</th>
@@ -578,9 +571,9 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
     };
 
     const TotalsLayout = () => {
-        const rowStyle = { fontSize: 12 };
-        const cellLabelStyle = { padding: '6px 10px', textAlign: 'right', fontWeight: 600 };
-        const cellValueStyle = { padding: '6px 10px', textAlign: 'left', width: 120 };
+        const rowStyle = { fontSize: 12, color: '#1f2937' };
+        const cellLabelStyle = { padding: '6px 10px', textAlign: 'right', fontWeight: 600, color: '#1f2937' };
+        const cellValueStyle = { padding: '6px 10px', textAlign: 'left', width: 120, color: '#1f2937' };
 
         return (
             <div style={{ display: 'flex', justifyContent: isRtl ? 'flex-start' : 'flex-end', marginBottom: 20 }}>
@@ -602,9 +595,9 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
                                 <td style={cellValueStyle}>{formatCurrency(invoice.tax)}</td>
                             </tr>
                         )}
-                        <tr style={{ ...rowStyle, background: '#000', color: '#fff', fontWeight: 700 }}>
-                            <td style={{ ...cellLabelStyle, color: '#fff', padding: '8px 10px' }}>{t('final_total') || 'الإجمالي النهائي'}</td>
-                            <td style={{ ...cellValueStyle, color: '#fff', padding: '8px 10px', fontWeight: 700 }}>{formatCurrency(invoice.total)}</td>
+                        <tr style={{ ...rowStyle, borderTop: '2px solid #9ca3af', borderBottom: '2px solid #9ca3af', fontWeight: 700, color: '#111827' }}>
+                            <td style={{ ...cellLabelStyle, color: '#111827', padding: '8px 10px' }}>{t('final_total') || 'الإجمالي النهائي'}</td>
+                            <td style={{ ...cellValueStyle, color: '#111827', padding: '8px 10px', fontWeight: 700 }}>{formatCurrency(invoice.total)}</td>
                         </tr>
                         {invoice.paid > 0 && invoice.paid < invoice.total && (
                             <>
@@ -641,14 +634,14 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
         const footerFontSize = bodyFontSizeNum - 2;
 
         return (
-            <div style={{ marginTop: 25 }}>
+            <div style={{ marginTop: 25, color: '#1f2937' }}>
                 {showNotes && hasNotes && (
-                    <div style={{ padding: '8px 12px', border: '1px solid #ccc', borderRight: isRtl ? 'none' : '3px solid #000', borderLeft: isRtl ? '3px solid #000' : 'none', marginBottom: 12, fontSize: notesFontSize }}>
+                    <div style={{ padding: '8px 12px', border: '1px solid #ccc', borderRight: isRtl ? 'none' : '3px solid #9ca3af', borderLeft: isRtl ? '3px solid #9ca3af' : 'none', marginBottom: 12, fontSize: notesFontSize }}>
                         <strong>{t('notes_label') || 'Notes:'}</strong> {invoice.notes}
                     </div>
                 )}
                 {invoiceTerms && (
-                    <div style={{ padding: '8px 12px', background: '#f9f9f9', border: '1px solid #e5e7eb', marginBottom: 12, fontSize: smallFontSize, color: '#333', lineHeight: 1.4 }}>
+                    <div style={{ padding: '8px 12px', background: '#f9f9f9', border: '1px solid #e5e7eb', marginBottom: 12, fontSize: smallFontSize, color: '#374151', lineHeight: 1.4 }}>
                         <strong>{t('terms_label') || 'Terms & Conditions:'}</strong>
                         <div style={{ marginTop: 4 }}>
                             {invoiceTerms.split('\n').map((l, i) => <div key={i}>{l}</div>)}
@@ -658,17 +651,18 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
                 {showSignature && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', margin: '30px 0 20px', paddingTop: 10 }}>
                         <div style={{ textAlign: 'center', width: isThermo ? '45%' : 200 }}>
-                            <div style={{ borderTop: '1px solid #000', marginTop: 40, paddingTop: 5, fontSize: smallFontSize, color: '#333' }}>{t('receiver_signature') || 'Receiver Signature'}</div>
+                            <div style={{ borderTop: '1px solid #9ca3af', marginTop: 40, paddingTop: 5, fontSize: smallFontSize, color: '#374151' }}>{t('receiver_signature') || 'Receiver Signature'}</div>
                         </div>
                         <div style={{ textAlign: 'center', width: isThermo ? '45%' : 200 }}>
-                            <div style={{ borderTop: '1px solid #000', marginTop: 40, paddingTop: 5, fontSize: smallFontSize, color: '#333' }}>{t('manager_signature') || 'Manager Signature'}</div>
+                            <div style={{ borderTop: '1px solid #9ca3af', marginTop: 40, paddingTop: 5, fontSize: smallFontSize, color: '#374151' }}>{t('manager_signature') || 'Manager Signature'}</div>
                         </div>
                     </div>
                 )}
-                <div style={{ borderTop: '1px solid #000', paddingTop: 12, textAlign: 'center', color: '#555', fontSize: smallFontSize, marginTop: 15 }}>
-                    {thankYouMsg && <p style={{ fontWeight: 700, color: '#000', marginBottom: 4, fontSize: notesFontSize }}>{thankYouMsg}</p>}
-                    {invoiceFooter && <p>{invoiceFooter}</p>}
-                    <p style={{ marginTop: 6, fontSize: footerFontSize, color: '#888' }}>{companyName} — {new Date().getFullYear()}</p>
+                <div style={{ borderTop: '1px solid #9ca3af', paddingTop: 12, textAlign: 'center', color: '#4b5563', fontSize: smallFontSize, marginTop: 15 }}>
+                    {thankYouMsg && <p style={{ fontWeight: 700, color: '#111827', marginBottom: 4, fontSize: notesFontSize }}>{thankYouMsg}</p>}
+                    {invoiceFooter && <p style={{ marginBottom: 4 }}>{invoiceFooter}</p>}
+                    {companyAddress && <p style={{ marginBottom: 4, fontWeight: 600, color: '#374151' }}><strong>{t('address') || 'العنوان'}:</strong> {companyAddress}</p>}
+                    <p style={{ marginTop: 6, fontSize: footerFontSize, color: '#6b7280' }}>{companyName} — {new Date().getFullYear()}</p>
                 </div>
             </div>
         );
@@ -686,7 +680,7 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
                 </div>
 
                 <div className="modal-body" style={{ flex: 1, overflow: 'auto', padding: 0, background: '#f0f0f0' }}>
-                    <div style={{ maxWidth: previewWidth, margin: '20px auto', background: 'white', padding: isThermo ? '20px 15px' : (paperSize === 'A3' ? '40px' : paperSize === 'A5' ? '20px' : '28px'), boxShadow: '0 4px 20px rgba(0,0,0,.12)', borderRadius: 6 }}>
+                    <div style={{ maxWidth: previewWidth, margin: '20px auto', background: 'white', color: '#1f2937', padding: isThermo ? '20px 15px' : (paperSize === 'A3' ? '40px' : paperSize === 'A5' ? '20px' : '28px'), boxShadow: '0 4px 20px rgba(0,0,0,.12)', borderRadius: 6 }}>
                         <HeaderLayout />
                         <TableLayout />
                         <TotalsLayout />

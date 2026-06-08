@@ -3,6 +3,7 @@ import { Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Printer, X, Chec
 import { toast } from 'react-hot-toast';
 import { useAuth, isColorUnit } from '../App';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
+import SearchableSelect from '../components/SearchableSelect';
 
 const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#3B82F6', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#06B6D4'];
 
@@ -122,6 +123,8 @@ function POS() {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchFocused, setSearchFocused] = useState(false);
     const [categoryFilter, setCategoryFilter] = useState('all');
+    const [suppliers, setSuppliers] = useState([]);
+    const [supplierFilter, setSupplierFilter] = useState('all');
     const [showPayModal, setShowPayModal] = useState(false);
     const [payMethod, setPayMethod] = useState('cash');
     const [amountPaid, setAmountPaid] = useState('');
@@ -184,11 +187,12 @@ function POS() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [prods, custs, sett, offers] = await Promise.all([
+            const [prods, custs, sett, offers, supps] = await Promise.all([
                 window.api.products.getAll(),
                 window.api.customers.getAll(),
                 window.api.settings.getAll(),
-                window.api.offers.getActive()
+                window.api.offers.getActive(),
+                window.api.suppliers.getAll()
             ]);
             const active = (prods || []).filter(p => p.is_active);
             setAllProducts(active);
@@ -196,6 +200,7 @@ function POS() {
             setCustomers(custs || []);
             setSettings(sett || {});
             setActiveOffers(offers || []);
+            setSuppliers(supps || []);
         } catch (e) { console.error(e); }
         setLoading(false);
     };
@@ -327,7 +332,25 @@ function POS() {
         const matchSearch = p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             p.code?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchCat = categoryFilter === 'all' || p.category === categoryFilter;
-        return matchSearch && matchCat;
+        
+        let matchSupp = false;
+        if (supplierFilter === 'all') {
+            matchSupp = true;
+        } else {
+            try {
+                const ids = JSON.parse(p.supplier_ids || '[]');
+                if (Array.isArray(ids)) {
+                    matchSupp = ids.map(String).includes(String(supplierFilter));
+                }
+            } catch (e) {
+                matchSupp = String(p.supplier_id) === String(supplierFilter);
+            }
+            if (!matchSupp && p.supplier_id) {
+                matchSupp = String(p.supplier_id) === String(supplierFilter);
+            }
+        }
+
+        return matchSearch && matchCat && matchSupp;
     });
 
     const formatCurrency = (v) => {
@@ -437,6 +460,7 @@ function POS() {
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '10px 10px 10px 10px', gap: '8px' }}>
 
                 {/* Search + Filter Area */}
+                {/* Search + Filter Area */}
                 <div style={{
                     background: 'var(--surface)',
                     padding: '16px',
@@ -444,13 +468,14 @@ function POS() {
                     border: '1px solid var(--border)',
                     boxShadow: 'var(--shadow-sm)',
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: '14px',
+                    flexDirection: 'row',
+                    alignItems: 'flex-end',
+                    gap: '12px',
                     flexShrink: 0,
                     transition: 'all 0.3s ease'
                 }}>
-                    {/* Search Bar */}
-                    <div style={{ position: 'relative', width: '100%' }}>
+                    {/* Search Bar Row */}
+                    <div style={{ position: 'relative', flex: 1 }}>
                         <Search size={18} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: searchFocused ? 'var(--primary)' : 'var(--text-muted)', transition: 'color 0.2s', zIndex: 2 }} />
                         <input
                             id="search-input"
@@ -466,8 +491,8 @@ function POS() {
                                 paddingRight: '42px',
                                 paddingLeft: searchQuery ? '38px' : '14px',
                                 width: '100%',
-                                height: '46px',
-                                fontSize: '0.95rem',
+                                height: '44px',
+                                fontSize: '0.92rem',
                                 borderRadius: '12px',
                                 border: '1px solid ' + (searchFocused ? 'var(--primary)' : 'var(--border)'),
                                 background: searchFocused ? 'var(--surface)' : 'var(--bg-secondary)',
@@ -504,52 +529,21 @@ function POS() {
                             </button>
                         )}
                     </div>
-                    {/* Categories Horizontal Scroll */}
-                    <style>{`
-                        .hide-scrollbar::-webkit-scrollbar { display: none; }
-                        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-                        .category-btn {
-                            padding: 8px 18px;
-                            border-radius: 12px;
-                            border: 1px solid var(--border);
-                            cursor: pointer;
-                            font-size: 0.85rem;
-                            font-weight: 600;
-                            white-space: nowrap;
-                            background: var(--bg-secondary);
-                            color: var(--text-secondary);
-                            transition: all 0.2s ease-in-out;
-                            flex-shrink: 0;
-                        }
-                        .category-btn:hover {
-                            background: var(--surface);
-                            color: var(--text-primary);
-                            border-color: var(--primary);
-                            transform: translateY(-1px);
-                            box-shadow: var(--shadow-sm);
-                        }
-                        .category-btn.active {
-                            background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
-                            border-color: transparent;
-                            color: white !important;
-                            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-                            transform: scale(1.02);
-                        }
-                    `}</style>
-                    <div className="hide-scrollbar" style={{ display: 'flex', gap: '10px', overflowX: 'auto', padding: '6px 4px 10px 4px', margin: '-4px -4px 0 -4px', width: 'calc(100% + 8px)' }}>
-                        {categories.map(cat => (
-                            <button
-                                key={cat}
-                                onClick={() => setCategoryFilter(cat)}
-                                className={`category-btn ${categoryFilter === cat ? 'active' : ''}`}
-                            >
-                                {cat === 'all' ? (t('all') || 'All') : cat}
-                            </button>
-                        ))}
-                    </div>
-                </div>
 
-                {/* Products Grid */}
+                    {/* Category Filter */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '220px', flexShrink: 0 }}>
+                        <label style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
+                            {t('prod_category') || 'Category'}
+                        </label>
+                        <SearchableSelect
+                            options={categories.filter(c => c !== 'all').map(cat => ({ value: cat, label: cat }))}
+                            value={categoryFilter === 'all' ? '' : categoryFilter}
+                            onChange={val => setCategoryFilter(val || 'all')}
+                            placeholder={t('all') || 'All Categories'}
+                            emptyLabel={t('all') || 'All Categories'}
+                        />
+                    </div>
+                </div>                {/* Products Grid */}
                 <div style={{
                     flex: 1, overflowY: 'auto',
                     display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
@@ -762,7 +756,7 @@ function POS() {
                                             ));
                                         }}
                                         style={{
-                                            width: '60px', padding: '1px 5px', fontSize: '0.72rem',
+                                            width: '85px', padding: '3px 6px', fontSize: '0.8rem',
                                             border: '1px solid var(--border)', borderRadius: '5px',
                                             background: 'var(--bg-primary)', color: 'var(--text-primary)',
                                             outline: 'none', textDecoration: item.finalPrice < item.price ? 'line-through' : 'none', opacity: item.finalPrice < item.price ? 0.6 : 1

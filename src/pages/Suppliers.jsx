@@ -180,7 +180,7 @@ function Suppliers() {
                         <div class="company-name">${companyName}</div>
                         <div class="company-details">
                             ${companyAddress ? `<div>${companyAddress}</div>` : ''}
-                            ${companyPhone ? `<div>هاتف: ${companyPhone}</div>` : ''}
+                            ${companyPhone ? `<div>تلفون: <span dir="ltr">${companyPhone}</span></div>` : ''}
                         </div>
                     </div>
                     <div class="statement-title">
@@ -195,7 +195,7 @@ function Suppliers() {
                         <div><strong>المورد:</strong> ${selectedSupplier.name}</div>
                     </div>
                     <div class="info-col">
-                        <div><strong>الهاتف:</strong> ${selectedSupplier.phone || '-'}</div>
+                        <div><strong>تلفون:</strong> <span dir="ltr">${selectedSupplier.phone || '-'}</span></div>
                         <div><strong>العنوان:</strong> ${selectedSupplier.address || '-'}</div>
                     </div>
                 </div>
@@ -385,7 +385,7 @@ function Suppliers() {
                                             onClick={() => showSupplierInvoices(supplier)}>
                                             <td>{supplier.code}</td>
                                             <td className="font-bold">{supplier.name}</td>
-                                            <td>{supplier.phone || '-'}</td>
+                                            <td><span dir="ltr">{supplier.phone || '-'}</span></td>
                                             <td>{supplier.email || '-'}</td>
                                             <td className={`font-bold ${supplier.balance > 0 ? 'text-danger' : 'text-success'}`}>
                                                 {formatCurrency(supplier.balance)}
@@ -477,7 +477,7 @@ function Suppliers() {
                 {/* Details Bar */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '16px', padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '0.9rem' }}>
                     <div><strong>{t('code')}:</strong> {selectedSupplier?.code}</div>
-                    {selectedSupplier?.phone && <div><strong>{t('phone')}:</strong> {selectedSupplier?.phone}</div>}
+                    {selectedSupplier?.phone && <div><strong>{t('phone')}:</strong> <span dir="ltr">{selectedSupplier?.phone}</span></div>}
                     {selectedSupplier?.email && <div><strong>{t('email')}:</strong> {selectedSupplier?.email}</div>}
                     {selectedSupplier?.address && <div><strong>{t('address')}:</strong> {selectedSupplier?.address}</div>}
                 </div>

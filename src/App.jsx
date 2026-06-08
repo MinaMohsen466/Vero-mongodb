@@ -44,6 +44,46 @@ const LoadingScreen = () => (
     </div>
 );
 
+// Helper functions for dynamic theme customization
+function adjustColorBrightness(hex, percent) {
+    hex = hex.replace(/^\s*#|\s*$/g, '');
+    if (hex.length === 3) {
+        hex = hex.replace(/(.)/g, '$1$1');
+    }
+    let r = parseInt(hex.substr(0, 2), 16);
+    let g = parseInt(hex.substr(2, 2), 16);
+    let b = parseInt(hex.substr(4, 2), 16);
+
+    r = Math.max(0, Math.min(255, r + percent));
+    g = Math.max(0, Math.min(255, g + percent));
+    b = Math.max(0, Math.min(255, b + percent));
+
+    const rHex = r.toString(16).padStart(2, '0');
+    const gHex = g.toString(16).padStart(2, '0');
+    const bHex = b.toString(16).padStart(2, '0');
+
+    return `#${rHex}${gHex}${bHex}`;
+}
+
+function hexToRgba(hex, alpha) {
+    hex = hex.replace(/^\s*#|\s*$/g, '');
+    if (hex.length === 3) {
+        hex = hex.replace(/(.)/g, '$1$1');
+    }
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function applyBrandColor(color) {
+    if (!color) return;
+    document.documentElement.style.setProperty('--primary', color);
+    document.documentElement.style.setProperty('--primary-hover', adjustColorBrightness(color, -20));
+    document.documentElement.style.setProperty('--primary-light', hexToRgba(color, 0.1));
+    document.documentElement.style.setProperty('--sidebar-active', hexToRgba(color, 0.25));
+}
+
 export { AuthContext, useAuth };
 
 function App() {
@@ -84,8 +124,12 @@ function App() {
                 setLanguage(lang);
                 document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
                 document.documentElement.setAttribute('lang', lang);
+                
+                // Apply brand color on startup
+                const brandColor = settingsData?.general?.brand_color || '#2563eb';
+                applyBrandColor(brandColor);
             } catch (e) {
-                console.log('Could not load language setting, using default');
+                console.log('Could not load language or brand color setting, using default');
             }
 
             setLoading(false);
@@ -97,6 +141,10 @@ function App() {
             window.api.settings.getAll().then(data => {
                 const lang = data?.general?.language || 'ar';
                 setLanguage(lang);
+                
+                // Apply brand color on update
+                const brandColor = data?.general?.brand_color || '#2563eb';
+                applyBrandColor(brandColor);
             }).catch(e => console.error(e));
         };
         window.addEventListener('settingsUpdated', handleSettingsUpdate);

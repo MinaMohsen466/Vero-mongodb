@@ -15,8 +15,10 @@ function Products() {
     const [editingProduct, setEditingProduct] = useState(null);
     const [showCustomUnit, setShowCustomUnit] = useState(false);
     const [categoryFilter, setCategoryFilter] = useState('');
+    const [suppliers, setSuppliers] = useState([]);
+    const [supplierSearchQuery, setSupplierSearchQuery] = useState('');
     const [formData, setFormData] = useState({
-        name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', stock_quantity: '', min_stock: '', image: ''
+        name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', stock_quantity: '', min_stock: '', image: '', supplier_id: '', supplier_ids: []
     });
     const [showMovementsModal, setShowMovementsModal] = useState(false);
     const [selectedProductForTracking, setSelectedProductForTracking] = useState(null);
@@ -160,8 +162,12 @@ function Products() {
 
     const loadProducts = async () => {
         try {
-            const data = await window.api.products.getAll();
-            setProducts(data);
+            const [data, supps] = await Promise.all([
+                window.api.products.getAll(),
+                window.api.suppliers.getAll()
+            ]);
+            setProducts(data || []);
+            setSuppliers(supps || []);
         } catch (e) { console.error(e); }
         setLoading(false);
     };
@@ -169,7 +175,18 @@ function Products() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const data = { ...formData, purchase_price: parseFloat(formData.purchase_price) || 0, sale_price: parseFloat(formData.sale_price) || 0, stock_quantity: parseFloat(formData.stock_quantity) || 0, min_stock: parseFloat(formData.min_stock) || 0 };
+            const selectedSupplierIds = Array.isArray(formData.supplier_ids) ? formData.supplier_ids : [];
+            const primarySupplierId = selectedSupplierIds.length > 0 ? Number(selectedSupplierIds[0]) : null;
+
+            const data = { 
+                ...formData, 
+                purchase_price: parseFloat(formData.purchase_price) || 0, 
+                sale_price: parseFloat(formData.sale_price) || 0, 
+                stock_quantity: parseFloat(formData.stock_quantity) || 0, 
+                min_stock: parseFloat(formData.min_stock) || 0,
+                supplier_id: primarySupplierId,
+                supplier_ids: selectedSupplierIds
+            };
 
             if (editingProduct) {
                 await window.api.products.update({ ...data, id: editingProduct.id, is_active: true });
@@ -201,21 +218,36 @@ function Products() {
 
     const openModal = (product = null) => {
         setEditingProduct(product);
+        setSupplierSearchQuery('');
         if (product) {
             const isCustomUnit = !units.includes(product.unit);
             setShowCustomUnit(isCustomUnit);
+            
+            let parsedIds = [];
+            if (product.supplier_ids) {
+                try {
+                    parsedIds = JSON.parse(product.supplier_ids);
+                } catch (e) {
+                    parsedIds = product.supplier_id ? [product.supplier_id] : [];
+                }
+            } else if (product.supplier_id) {
+                parsedIds = [product.supplier_id];
+            }
+
             setFormData({
                 name: product.name, description: product.description || '', unit: isCustomUnit ? product.unit : product.unit,
-                category: product.category || '', purchase_price: product.purchase_price || '', sale_price: product.sale_price || '', stock_quantity: product.stock_quantity || '', min_stock: product.min_stock || '', image: product.image || ''
+                category: product.category || '', purchase_price: product.purchase_price || '', sale_price: product.sale_price || '', stock_quantity: product.stock_quantity || '', min_stock: product.min_stock || '', image: product.image || '',
+                supplier_id: product.supplier_id || '',
+                supplier_ids: parsedIds
             });
         } else {
             setShowCustomUnit(false);
-            setFormData({ name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', stock_quantity: '', min_stock: '', image: '' });
+            setFormData({ name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', stock_quantity: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [] });
         }
         setShowModal(true);
     };
 
-    const closeModal = () => { setShowModal(false); setEditingProduct(null); setShowCustomUnit(false); };
+    const closeModal = () => { setShowModal(false); setEditingProduct(null); setShowCustomUnit(false); setSupplierSearchQuery(''); };
 
     const openMovementsModal = async (product) => {
         setSelectedProductForTracking(product);
@@ -529,6 +561,7 @@ function Products() {
             </div>
 
             <Modal isOpen={showModal} onClose={closeModal}
+                size="lg"
                 title={editingProduct ? t('prod_edit') : t('prod_add')}
                 footer={
                     <>
@@ -537,74 +570,119 @@ function Products() {
                     </>
                 }
             >
-                <form id="product-form" onSubmit={handleSubmit}>
-                    <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-                        <div style={{ flex: 1 }}>
-                            <div className="form-group">
-                                <label className="form-label">{t('prod_name')} *</label>
-                                <input type="text" className="form-input" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
+                <form id="product-form" onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+                    
+                    {/* العمود الأول: المعلومات الأساسية */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap-reverse' }}>
+                            <div style={{ flex: 1, minWidth: '200px' }}>
+                                <div className="form-group" style={{ marginBottom: '12px' }}>
+                                    <label className="form-label" style={{ fontWeight: '600' }}>{t('prod_name')} *</label>
+                                    <input type="text" className="form-input" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required style={{ height: '40px' }} />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label">{t('prod_category')}</label>
+                                    <input type="text" list="categories-list" className="form-input" value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} style={{ height: '40px' }} />
+                                    <datalist id="categories-list">
+                                        {categories.map(c => <option key={c} value={c} />)}
+                                    </datalist>
+                                </div>
                             </div>
-                        </div>
-                        <div style={{ width: '100px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '80px', height: '80px', borderRadius: '8px', border: '1px dashed var(--border)', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }} onClick={handleImageUpload}>
-                                {formData.image ? (
-                                    <img src={formData.image} alt="Product" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--text-muted)' }}>
-                                        <ImageIcon size={24} />
-                                        <span style={{ fontSize: '0.65rem', marginTop: '4px' }}>{t('image') || 'Image'}</span>
-                                    </div>
+
+                            {/* رفع الصورة */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100px', flexShrink: 0, gap: '6px' }}>
+                                <label className="form-label" style={{ marginBottom: 0 }}>{t('image') || 'Image'}</label>
+                                <div 
+                                    onClick={handleImageUpload}
+                                    style={{ 
+                                        width: '85px', 
+                                        height: '85px', 
+                                        borderRadius: '12px', 
+                                        border: formData.image ? '1px solid var(--border)' : '2px dashed var(--border)', 
+                                        background: 'var(--bg-secondary)', 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center', 
+                                        overflow: 'hidden', 
+                                        cursor: 'pointer',
+                                        position: 'relative',
+                                        boxShadow: 'var(--shadow-sm)',
+                                        transition: 'all 0.2s'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary)'}
+                                    onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                                >
+                                    {formData.image ? (
+                                        <img src={formData.image} alt="Product" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--text-muted)' }}>
+                                            <ImageIcon size={22} />
+                                        </div>
+                                    )}
+                                </div>
+                                {formData.image && (
+                                    <button type="button" onClick={() => setFormData({ ...formData, image: '' })} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.7rem', cursor: 'pointer', padding: 0 }}>{t('delete') || 'Delete'}</button>
                                 )}
                             </div>
-                            {formData.image && (
-                                <button type="button" onClick={() => setFormData({ ...formData, image: '' })} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer' }}>{t('delete') || 'Delete'}</button>
-                            )}
                         </div>
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">{t('description')}</label>
-                        <textarea className="form-textarea" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} style={{ minHeight: '60px' }} />
-                    </div>
-                    <div className="form-row">
+
                         <div className="form-group">
                             <label className="form-label">{t('prod_unit')}</label>
                             {showCustomUnit ? (
                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input type="text" className="form-input" value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} placeholder={t('prod_enterUnit') || "Enter unit"} style={{ flex: 1 }} />
+                                    <input type="text" className="form-input" value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} placeholder={t('prod_enterUnit') || "Enter unit"} style={{ flex: 1, height: '40px' }} />
                                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowCustomUnit(false); setFormData({ ...formData, unit: t('prod_piece') || 'Piece' }); }}>{t('cancel') || 'Cancel'}</button>
                                 </div>
                             ) : (
-                                <select className="form-select" value={formData.unit} onChange={(e) => handleUnitChange(e.target.value)}>
+                                <select className="form-select" value={formData.unit} onChange={(e) => handleUnitChange(e.target.value)} style={{ height: '40px' }}>
                                     {units.map(u => <option key={u} value={u}>{u}</option>)}
                                     <option value="__custom__">{t('prod_customUnit') || "+ Custom unit..."}</option>
                                 </select>
                             )}
                         </div>
-                        <div className="form-group">
-                            <label className="form-label">{t('prod_category')}</label>
-                            <input type="text" list="categories-list" className="form-input" value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} />
-                            <datalist id="categories-list">
-                                {categories.map(c => <option key={c} value={c} />)}
-                            </datalist>
+
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label">{t('description')}</label>
+                            <textarea className="form-textarea" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} style={{ minHeight: '80px', resize: 'vertical' }} />
                         </div>
                     </div>
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label className="form-label">{t('prod_purchasePrice')}</label>
-                            <input type="number" className="form-input" value={formData.purchase_price} onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })} step="0.250" min="0" />
+
+                    {/* العمود الثاني: الموردون والتسعير والمخزون */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+
+                        {/* بطاقة الأسعار والمخزون */}
+                        <div style={{ 
+                            background: 'var(--bg-secondary)', 
+                            border: '1px solid var(--border)', 
+                            borderRadius: '12px', 
+                            padding: '14px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px'
+                        }}>
+                            <div style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', paddingBottom: '4px', marginBottom: '2px' }}>
+                                📊 {t('invoice_details') || 'Pricing & Inventory'}
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px' }}>
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_purchasePrice')}</label>
+                                    <input type="number" className="form-input" value={formData.purchase_price} onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })} step="0.05" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_salePrice')}</label>
+                                    <input type="number" className="form-input" value={formData.sale_price} onChange={(e) => setFormData({ ...formData, sale_price: e.target.value })} step="0.05" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_stock')}</label>
+                                    <input type="number" className="form-input" value={formData.stock_quantity} onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })} min="0" step="0.001" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_minStock')}</label>
+                                    <input type="number" className="form-input" value={formData.min_stock} onChange={(e) => setFormData({ ...formData, min_stock: e.target.value })} min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                </div>
+                            </div>
                         </div>
-                        <div className="form-group">
-                            <label className="form-label">{t('prod_salePrice')}</label>
-                            <input type="number" className="form-input" value={formData.sale_price} onChange={(e) => setFormData({ ...formData, sale_price: e.target.value })} step="0.250" min="0" />
-                        </div>
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">{t('prod_minStock')}</label>
-                        <input type="number" className="form-input" value={formData.min_stock} onChange={(e) => setFormData({ ...formData, min_stock: e.target.value })} min="0" />
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">{t('prod_stock') || 'Stock Quantity'}</label>
-                        <input type="number" className="form-input" value={formData.stock_quantity} onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })} min="0" step="0.001" />
                     </div>
                 </form>
             </Modal>
