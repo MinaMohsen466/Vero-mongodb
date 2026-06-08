@@ -158,7 +158,6 @@ export default function Settings() {
         { id: 'company', l: t('company_details') || 'Company Details', icon: Building2 },
         { id: 'general', l: t('general_settings') || 'General Settings', icon: Ico },
         { id: 'print_invoice', l: t('invoice_settings') || 'Invoice Settings', icon: FileText },
-        { id: 'print_identity', l: t('visual_identity') || 'Visual Identity', icon: Palette },
         ...(isAdmin ? [
             { id: 'users', l: t('users') || 'Users', icon: Users },
             { id: 'permissions', l: t('permissions') || 'Permissions', icon: Shield },
@@ -544,74 +543,20 @@ export default function Settings() {
                         <TRow label={t('show_tax_column') || 'Show Tax Column'} value={inv.show_tax_column} onChange={v => setInv(f => ({ ...f, show_tax_column: v }))} />
                     </Card>
 
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving}
-                            onClick={() => saveSection('invoice', inv, t('saved_print_settings') || 'Print settings saved')}>
-                            <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_print_settings') || 'Save Print Settings')}
-                        </button>
-                    </div>
-                </>}
-
-                {/* ══ 4. PRINT IDENTITY ═══════════════════════════════════════════════ */}
-                {sec === 'print_identity' && <>
-                    <Card title={t('primary_print_color') || 'Primary Print Color'} icon={Palette}>
-                        <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
-                            {t('color_hint') || 'Affects table header, total bar, and divider lines in the printed invoice.'}
-                        </p>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-                            <input type="color" value={inv.print_color || '#2563eb'} onChange={e => setInv(f => ({ ...f, print_color: e.target.value }))}
-                                style={{ width: 48, height: 40, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', padding: 2 }} />
-                            <span style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '.9rem' }}>{inv.print_color}</span>
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            {COLORS.map(c => (
-                                <div key={c} onClick={() => setInv(f => ({ ...f, print_color: c }))}
-                                    style={{
-                                        width: 32, height: 32, borderRadius: 8, background: c, cursor: 'pointer',
-                                        border: inv.print_color === c ? '3px solid var(--text-primary)' : '2px solid transparent',
-                                        transition: 'border .15s', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                    }}>
-                                    {inv.print_color === c && <Check size={14} color="#fff" />}
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-
-                    <Card title={t('logo_position_size') || 'Logo Position & Size'} icon={Image}>
-                        <Fld label={t('logo_position') || 'Logo Position'}>
-                            <div style={{ display: 'flex', gap: 10 }}>
-                                {[['right', t('right') || 'Right'], ['center', t('center') || 'Center'], ['left', t('left') || 'Left']].map(([v, l]) => (
-                                    <button key={v} onClick={() => setInv(f => ({ ...f, logo_position: v }))} style={{
-                                        flex: 1, padding: '10px 0', borderRadius: 8, border: inv.logo_position === v ? '2px solid var(--primary)' : '1px solid var(--border)',
-                                        background: inv.logo_position === v ? 'rgba(37,99,235,.08)' : 'transparent',
-                                        color: inv.logo_position === v ? 'var(--primary)' : 'var(--text-secondary)',
-                                        cursor: 'pointer', fontWeight: inv.logo_position === v ? 700 : 400, fontFamily: 'inherit', fontSize: '.875rem', transition: 'all .15s'
-                                    }}>{l}</button>
-                                ))}
-                            </div>
-                        </Fld>
-                        <Fld label={t('logo_size') || 'Logo Size'}>
-                            <div style={{ display: 'flex', gap: 10 }}>
-                                {[['small', t('small') || 'Small'], ['medium', t('medium') || 'Medium'], ['large', t('large') || 'Large']].map(([v, l]) => (
-                                    <button key={v} onClick={() => setInv(f => ({ ...f, logo_size: v }))} style={{
-                                        flex: 1, padding: '10px 0', borderRadius: 8, border: inv.logo_size === v ? '2px solid var(--primary)' : '1px solid var(--border)',
-                                        background: inv.logo_size === v ? 'rgba(37,99,235,.08)' : 'transparent',
-                                        color: inv.logo_size === v ? 'var(--primary)' : 'var(--text-secondary)',
-                                        cursor: 'pointer', fontWeight: inv.logo_size === v ? 700 : 400, fontFamily: 'inherit', fontSize: '.875rem', transition: 'all .15s'
-                                    }}>{l}</button>
-                                ))}
-                            </div>
-                        </Fld>
-                    </Card>
-
                     <Card title={t('paper_size_orientation') || 'Paper Size & Orientation'} icon={FileText}>
                         <div style={gridTwo}>
                             <Fld label={t('paper_size') || 'Paper Size'}>
                                 <select style={inp} value={inv.paper_size} onChange={e => setInv(f => ({ ...f, paper_size: e.target.value }))}>
+                                    <option value="A3">A3</option>
                                     <option value="A4">A4</option>
                                     <option value="A5">A5</option>
+                                    <option value="Letter">Letter</option>
+                                    <option value="Legal">Legal</option>
+                                    <option value="thermal_110">{t('thermal_110') || 'Thermal 110mm'}</option>
                                     <option value="thermal_80">{t('thermal_80') || 'Thermal 80mm'}</option>
+                                    <option value="thermal_76">{t('thermal_76') || 'Thermal 76mm'}</option>
                                     <option value="thermal_58">{t('thermal_58') || 'Thermal 58mm'}</option>
+                                    <option value="thermal_57">{t('thermal_57') || 'Thermal 57mm'}</option>
                                 </select>
                             </Fld>
                             <Fld label={t('paper_orientation') || 'Orientation'}>
@@ -623,46 +568,10 @@ export default function Settings() {
                         </div>
                     </Card>
 
-                    <Card title={t('invoice_template') || 'Invoice Template'} icon={FileText}>
-                        <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14 }}>{t('template_hint') || 'Choose the design that fits your company identity.'}</p>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                            {[
-                                { id: 'modern', label: t('modern') || 'Modern', desc: t('modern_desc') || 'Modern colored bar' },
-                                { id: 'classic', label: t('classic') || 'Classic', desc: t('classic_desc') || 'Formal black & white' },
-                                { id: 'professional', label: t('professional') || 'Professional', desc: t('professional_desc') || 'Gradient bar & badge' },
-                                { id: 'minimal', label: t('minimal') || 'Minimal', desc: t('minimal_desc') || 'Lines only' },
-                            ].map(tmpl => {
-                                const active = inv.invoice_template === tmpl.id;
-                                const c = inv.print_color || '#2563eb';
-                                return (
-                                    <div key={tmpl.id} onClick={() => setInv(f => ({ ...f, invoice_template: tmpl.id }))}
-                                        style={{
-                                            padding: 8, borderRadius: 10, cursor: 'pointer', transition: 'all .15s', overflow: 'hidden',
-                                            border: active ? `2px solid ${c}` : '1px solid var(--border)',
-                                            background: active ? c + '0f' : 'var(--bg-secondary)'
-                                        }}>
-                                        <div style={{ height: 72, background: '#fff', borderRadius: 6, marginBottom: 8, border: '1px solid #eee', padding: 6, overflow: 'hidden' }}>
-                                            {tmpl.id === 'modern' && <div style={{ background: c, height: 16, margin: '-6px -6px 6px', borderRadius: '6px 6px 0 0' }} />}
-                                            {tmpl.id === 'professional' && <div style={{ height: 4, background: `linear-gradient(90deg,${c},${c}88)`, margin: '-6px -6px 6px', borderRadius: '6px 6px 0 0' }} />}
-                                            {tmpl.id === 'classic' && <div style={{ border: '2px solid #000', height: 14, marginBottom: 6 }} />}
-                                            {tmpl.id === 'minimal' && <div style={{ borderBottom: `2px solid ${c}`, marginBottom: 6 }} />}
-                                            <div style={{ height: 5, background: '#e5e7eb', borderRadius: 2, marginBottom: 3, width: '70%' }} />
-                                            <div style={{ height: 4, background: '#f3f4f6', borderRadius: 2, marginBottom: 3, width: '90%' }} />
-                                            <div style={{ height: 4, background: '#f3f4f6', borderRadius: 2, marginBottom: 6, width: '80%' }} />
-                                            <div style={{ height: 11, background: tmpl.id === 'classic' ? '#000' : c, borderRadius: 2, opacity: .9 }} />
-                                        </div>
-                                        <div style={{ fontWeight: active ? 700 : 500, fontSize: '.83rem', color: active ? c : 'var(--text-primary)', marginBottom: 2 }}>{tmpl.label}</div>
-                                        <div style={{ fontSize: '.72rem', color: 'var(--text-muted)' }}>{tmpl.desc}</div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </Card>
-
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving}
-                            onClick={() => saveSection('invoice', inv, t('saved_visual_identity') || 'Visual identity saved')}>
-                            <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_visual_identity') || 'Save Visual Identity')}
+                            onClick={() => saveSection('invoice', inv, t('saved_print_settings') || 'Print settings saved')}>
+                            <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_print_settings') || 'Save Print Settings')}
                         </button>
                     </div>
                 </>}

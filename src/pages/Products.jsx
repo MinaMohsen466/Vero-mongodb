@@ -27,6 +27,13 @@ function Products() {
     const searchInputRef = React.useRef(null);
     const fileInputRef = React.useRef(null);
 
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(20);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, categoryFilter]);
+
     const handleExportProducts = () => {
         if (!products || products.length === 0) {
             toast.error(t('noData'));
@@ -309,6 +316,14 @@ function Products() {
         (!categoryFilter || p.category === categoryFilter)
     ).sort((a, b) => (a.code || '').localeCompare((b.code || ''), undefined, {numeric: true, sensitivity: 'base'}));
 
+    const totalItems = filteredProducts.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+    const activePage = Math.min(currentPage, totalPages);
+    const displayedProducts = filteredProducts.slice(
+        (activePage - 1) * itemsPerPage,
+        activePage * itemsPerPage
+    );
+
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
 
     return (
@@ -359,54 +374,156 @@ function Products() {
                     {filteredProducts.length === 0 ? (
                         <div className="empty-state"><Package size={48} /><h3>{t('noData')}</h3></div>
                     ) : (
-                        <div className="table-container">
-                            <table>
-                                <thead>
-                                    <tr><th>{t('code')}</th><th>{t('prod_name')}</th><th>{t('prod_category')}</th><th>{t('prod_unit')}</th><th>{t('prod_salePrice')}</th><th>{t('prod_stock')}</th><th>{t('actions')}</th></tr>
-                                </thead>
-                                <tbody>
-                                    {filteredProducts.map(p => (
-                                        <tr key={p.id}>
-                                            <td>{p.code}</td>
-                                            <td className="font-bold">
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    {p.image ? (
-                                                        <img src={p.image} alt={p.name} style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover', border: '1px solid var(--border)' }} />
-                                                    ) : (
-                                                        <div style={{ width: '32px', height: '32px', borderRadius: '6px', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                                                            <Package size={16} />
-                                                        </div>
-                                                    )}
-                                                    {p.name}
-                                                </div>
-                                            </td>
-                                            <td><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{p.category || '—'}</span></td>
-                                            <td>{p.unit}</td>
-                                            <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{formatCurrency(p.sale_price)}</td>
-                                            <td><span className={`badge ${p.stock_quantity <= (p.min_stock || 0) ? 'badge-danger' : 'badge-success'}`}>{p.stock_quantity || 0}</span></td>
-                                            <td>
-                                                <div className="table-actions">
-                                                    <button
-                                                        className="btn btn-ghost btn-sm"
-                                                        onClick={() => openMovementsModal(p)}
-                                                        title={t('prod_track') || 'Track Product'}
-                                                        style={{ color: 'var(--primary)' }}
-                                                    >
-                                                        <BarChart2 size={16} />
-                                                    </button>
-                                                    {user?.permissions?.products?.can_edit && (
-                                                        <button className="btn btn-ghost btn-sm" onClick={() => openModal(p)}><Edit2 size={16} /></button>
-                                                    )}
-                                                    {user?.permissions?.products?.can_delete && (
-                                                        <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(p.id)}><Trash2 size={16} /></button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                        <>
+                            <div className="table-container">
+                                <table>
+                                    <thead>
+                                        <tr><th>{t('code')}</th><th>{t('prod_name')}</th><th>{t('prod_category')}</th><th>{t('prod_unit')}</th><th>{t('prod_salePrice')}</th><th>{t('prod_stock')}</th><th>{t('actions')}</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {displayedProducts.map(p => (
+                                            <tr key={p.id}>
+                                                <td>{p.code}</td>
+                                                <td className="font-bold">
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        {p.image ? (
+                                                            <img src={p.image} alt={p.name} style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover', border: '1px solid var(--border)' }} />
+                                                        ) : (
+                                                            <div style={{ width: '32px', height: '32px', borderRadius: '6px', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                                                                <Package size={16} />
+                                                            </div>
+                                                        )}
+                                                        {p.name}
+                                                    </div>
+                                                </td>
+                                                <td><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{p.category || '—'}</span></td>
+                                                <td>{p.unit}</td>
+                                                <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{formatCurrency(p.sale_price)}</td>
+                                                <td><span className={`badge ${p.stock_quantity <= (p.min_stock || 0) ? 'badge-danger' : 'badge-success'}`}>{p.stock_quantity || 0}</span></td>
+                                                <td>
+                                                    <div className="table-actions">
+                                                        <button
+                                                            className="btn btn-ghost btn-sm"
+                                                            onClick={() => openMovementsModal(p)}
+                                                            title={t('prod_track') || 'Track Product'}
+                                                            style={{ color: 'var(--primary)' }}
+                                                        >
+                                                            <BarChart2 size={16} />
+                                                        </button>
+                                                        {user?.permissions?.products?.can_edit && (
+                                                            <button className="btn btn-ghost btn-sm" onClick={() => openModal(p)}><Edit2 size={16} /></button>
+                                                        )}
+                                                        {user?.permissions?.products?.can_delete && (
+                                                            <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(p.id)}><Trash2 size={16} /></button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Pagination Controls */}
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '16px 24px',
+                                borderTop: '1px solid var(--border)',
+                                flexWrap: 'wrap',
+                                gap: '12px',
+                                background: 'var(--bg-secondary)',
+                                borderBottomLeftRadius: 'var(--radius-lg)',
+                                borderBottomRightRadius: 'var(--radius-lg)'
+                            }}>
+                                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                                    {t('showing') || 'Showing'} {Math.min((activePage - 1) * itemsPerPage + 1, filteredProducts.length)} - {Math.min(activePage * itemsPerPage, filteredProducts.length)} {t('of') || 'of'} {filteredProducts.length}
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                    <button 
+                                        type="button"
+                                        className="btn btn-secondary btn-sm" 
+                                        onClick={() => setCurrentPage(1)} 
+                                        disabled={activePage === 1}
+                                        style={{ minWidth: '36px', height: '36px', padding: 0 }}
+                                    >
+                                        «
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        className="btn btn-secondary btn-sm" 
+                                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} 
+                                        disabled={activePage === 1}
+                                        style={{ minWidth: '36px', height: '36px', padding: 0 }}
+                                    >
+                                        ‹
+                                    </button>
+                                    
+                                    {(() => {
+                                        const pages = [];
+                                        const maxVisiblePages = 5;
+                                        let startPage = Math.max(1, activePage - 2);
+                                        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                                        
+                                        if (endPage - startPage + 1 < maxVisiblePages) {
+                                            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                                        }
+                                        
+                                        for (let i = startPage; i <= endPage; i++) {
+                                            pages.push(
+                                                <button
+                                                    type="button"
+                                                    key={i}
+                                                    className={`btn btn-sm ${activePage === i ? 'btn-primary' : 'btn-secondary'}`}
+                                                    onClick={() => setCurrentPage(i)}
+                                                    style={{ minWidth: '36px', height: '36px', padding: 0, fontWeight: activePage === i ? 'bold' : 'normal' }}
+                                                >
+                                                    {i}
+                                                </button>
+                                            );
+                                        }
+                                        return pages;
+                                    })()}
+                                    
+                                    <button 
+                                        type="button"
+                                        className="btn btn-secondary btn-sm" 
+                                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} 
+                                        disabled={activePage === totalPages}
+                                        style={{ minWidth: '36px', height: '36px', padding: 0 }}
+                                    >
+                                        ›
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        className="btn btn-secondary btn-sm" 
+                                        onClick={() => setCurrentPage(totalPages)} 
+                                        disabled={activePage === totalPages}
+                                        style={{ minWidth: '36px', height: '36px', padding: 0 }}
+                                    >
+                                        »
+                                    </button>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('rows_per_page') || 'الصفوف لكل صفحة:'}</span>
+                                    <select 
+                                        className="form-select" 
+                                        value={itemsPerPage} 
+                                        onChange={e => {
+                                            setItemsPerPage(parseInt(e.target.value));
+                                            setCurrentPage(1);
+                                        }}
+                                        style={{ width: '80px', padding: '4px 8px', fontSize: '0.85rem', margin: 0 }}
+                                    >
+                                        <option value="10">10</option>
+                                        <option value="20">20</option>
+                                        <option value="50">50</option>
+                                        <option value="100">100</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </>
                     )}
                 </div>
             </div>

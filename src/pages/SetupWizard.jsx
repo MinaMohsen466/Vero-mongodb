@@ -433,15 +433,7 @@ export default function SetupWizard({ onComplete, t, language, changeLanguage })
                                         </div>
                                     </label>
                                 </div>
-                                <div className="form-group">
-                                    <label className="form-label">{t('invoice_template') || 'Invoice Template'}</label>
-                                    <select className="form-input" name="invoice_template" value={formData.invoice_template} onChange={handleChange}>
-                                        <option value="modern">{t('modern_desc') || 'Modern'}</option>
-                                        <option value="classic">{t('classic_desc') || 'Classic B&W'}</option>
-                                        <option value="professional">{t('professional_desc') || 'Professional'}</option>
-                                        <option value="minimal">{t('minimal_desc') || 'Minimal'}</option>
-                                    </select>
-                                </div>
+
 
                                 <div className="alert alert-success" style={{ marginTop: 20 }}>
                                     <strong>{t('setup_ready_title') || 'All Set!'}</strong><br />

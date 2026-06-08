@@ -120,6 +120,7 @@ function POS() {
 
     // UI
     const [searchQuery, setSearchQuery] = useState('');
+    const [searchFocused, setSearchFocused] = useState(false);
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [showPayModal, setShowPayModal] = useState(false);
     const [payMethod, setPayMethod] = useState('cash');
@@ -375,7 +376,7 @@ function POS() {
                 paid: isCredit ? 0 : total,
                 status: isCredit ? 'pending' : 'paid',
                 payment_method: isCredit ? 'credit' : payMethod,
-                notes: note || t('pos') || 'Point of Sale',
+                notes: note || '',
                 created_by: user?.id || null,
                 items: enrichedCart.map(i => ({
                     product_id: i.id, description: i.name,
@@ -436,10 +437,21 @@ function POS() {
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '10px 10px 10px 10px', gap: '8px' }}>
 
                 {/* Search + Filter Area */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 }}>
+                <div style={{
+                    background: 'var(--surface)',
+                    padding: '16px',
+                    borderRadius: '16px',
+                    border: '1px solid var(--border)',
+                    boxShadow: 'var(--shadow-sm)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px',
+                    flexShrink: 0,
+                    transition: 'all 0.3s ease'
+                }}>
                     {/* Search Bar */}
                     <div style={{ position: 'relative', width: '100%' }}>
-                        <Search size={16} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                        <Search size={18} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: searchFocused ? 'var(--primary)' : 'var(--text-muted)', transition: 'color 0.2s', zIndex: 2 }} />
                         <input
                             id="search-input"
                             ref={searchRef}
@@ -448,39 +460,80 @@ function POS() {
                             placeholder={t('search_product_barcode') || 'Search product...'}
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            style={{ paddingRight: '36px', width: '100%', height: '42px', fontSize: '0.95rem', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-primary)' }}
+                            onFocus={() => setSearchFocused(true)}
+                            onBlur={() => setSearchFocused(false)}
+                            style={{
+                                paddingRight: '42px',
+                                paddingLeft: searchQuery ? '38px' : '14px',
+                                width: '100%',
+                                height: '46px',
+                                fontSize: '0.95rem',
+                                borderRadius: '12px',
+                                border: '1px solid ' + (searchFocused ? 'var(--primary)' : 'var(--border)'),
+                                background: searchFocused ? 'var(--surface)' : 'var(--bg-secondary)',
+                                boxShadow: searchFocused ? '0 0 0 3px rgba(37, 99, 235, 0.15), 0 4px 12px rgba(37, 99, 235, 0.05)' : 'none',
+                                transition: 'all 0.25s ease',
+                                color: 'var(--text-primary)'
+                            }}
                         />
+                        {searchQuery && (
+                            <button
+                                type="button"
+                                onClick={() => { setSearchQuery(''); searchRef.current?.focus(); }}
+                                style={{
+                                    position: 'absolute',
+                                    left: '12px',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'var(--text-muted)',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '6px',
+                                    borderRadius: '50%',
+                                    transition: 'all 0.2s',
+                                    zIndex: 2
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
                     </div>
                     {/* Categories Horizontal Scroll */}
                     <style>{`
                         .hide-scrollbar::-webkit-scrollbar { display: none; }
                         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
                         .category-btn {
-                            padding: 8px 20px;
-                            border-radius: 30px;
+                            padding: 8px 18px;
+                            border-radius: 12px;
                             border: 1px solid var(--border);
                             cursor: pointer;
-                            font-size: 0.88rem;
+                            font-size: 0.85rem;
                             font-weight: 600;
                             white-space: nowrap;
-                            background: var(--bg-primary);
+                            background: var(--bg-secondary);
                             color: var(--text-secondary);
-                            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+                            transition: all 0.2s ease-in-out;
                             flex-shrink: 0;
-                            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
                         }
                         .category-btn:hover {
-                            background: var(--bg-secondary);
+                            background: var(--surface);
                             color: var(--text-primary);
-                            border-color: rgba(99, 102, 241, 0.3);
+                            border-color: var(--primary);
                             transform: translateY(-1px);
-                            box-shadow: 0 4px 8px rgba(0,0,0,0.04);
+                            box-shadow: var(--shadow-sm);
                         }
                         .category-btn.active {
                             background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
                             border-color: transparent;
                             color: white !important;
-                            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+                            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+                            transform: scale(1.02);
                         }
                     `}</style>
                     <div className="hide-scrollbar" style={{ display: 'flex', gap: '10px', overflowX: 'auto', padding: '6px 4px 10px 4px', margin: '-4px -4px 0 -4px', width: 'calc(100% + 8px)' }}>
