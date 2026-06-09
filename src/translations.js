@@ -291,6 +291,7 @@ const translations = {
         // Reports - Account Statement
         rep_customerStatement: 'كشف حساب عميل',
         rep_supplierStatement: 'كشف حساب مورد',
+        previous_balance: 'رصيد سابق (منقول)',
         rep_selectCustomer: 'اختر العميل',
         rep_selectSupplier: 'اختر المورد',
 
@@ -1548,6 +1549,7 @@ const translations = {
         // Reports - Account Statement
         rep_customerStatement: 'Customer Statement',
         rep_supplierStatement: 'Supplier Statement',
+        previous_balance: 'Previous Balance (Forward)',
         rep_selectCustomer: 'Select Customer',
         rep_selectSupplier: 'Select Supplier',
 

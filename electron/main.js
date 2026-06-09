@@ -445,11 +445,27 @@ ipcMain.handle('activityLog:getAll', async (event, filters) => {
 // --- File Dialog ---
 ipcMain.handle('dialog:openFile', async (event, options) => {
     const result = await dialog.showOpenDialog(mainWindow, options);
+    if (mainWindow) {
+        setTimeout(() => {
+            if (!mainWindow.isDestroyed()) {
+                mainWindow.blur();
+                mainWindow.focus();
+            }
+        }, 100);
+    }
     return result;
 });
 
 ipcMain.handle('dialog:saveFile', async (event, options) => {
     const result = await dialog.showSaveDialog(mainWindow, options);
+    if (mainWindow) {
+        setTimeout(() => {
+            if (!mainWindow.isDestroyed()) {
+                mainWindow.blur();
+                mainWindow.focus();
+            }
+        }, 100);
+    }
     return result;
 });
 
@@ -465,6 +481,14 @@ ipcMain.handle('print:invoice', async (event, invoiceHtml) => {
     printWindow.webContents.on('did-finish-load', () => {
         printWindow.webContents.print({ silent: false, printBackground: true }, (success, errorType) => {
             printWindow.close();
+            if (mainWindow) {
+                setTimeout(() => {
+                    if (!mainWindow.isDestroyed()) {
+                        mainWindow.blur();
+                        mainWindow.focus();
+                    }
+                }, 100);
+            }
         });
     });
 
@@ -524,6 +548,14 @@ ipcMain.handle('file:saveText', async (event, { content, defaultName, filters })
             defaultPath: defaultName || 'export.csv',
             filters: filters || [{ name: 'CSV Files', extensions: ['csv'] }, { name: 'All Files', extensions: ['*'] }]
         });
+        if (mainWindow) {
+            setTimeout(() => {
+                if (!mainWindow.isDestroyed()) {
+                    mainWindow.blur();
+                    mainWindow.focus();
+                }
+            }, 100);
+        }
         if (result.canceled || !result.filePath) return { success: false };
         fs.writeFileSync(result.filePath, '\uFEFF' + content, 'utf8'); // BOM for Excel Arabic support
         return { success: true, filePath: result.filePath };
@@ -569,6 +601,14 @@ ipcMain.handle('database:selectBackupPath', async () => {
             properties: ['openDirectory'],
             title: 'اختر مجلد لحفظ النسخة الاحتياطية'
         });
+        if (mainWindow) {
+            setTimeout(() => {
+                if (!mainWindow.isDestroyed()) {
+                    mainWindow.blur();
+                    mainWindow.focus();
+                }
+            }, 100);
+        }
         if (result.canceled || !result.filePaths.length) {
             return { success: false, canceled: true };
         }
@@ -578,6 +618,18 @@ ipcMain.handle('database:selectBackupPath', async () => {
     } catch (e) {
         console.error('[database:selectBackupPath] Error:', e);
         return { success: false, error: e.message };
+    }
+});
+
+// --- Window Refocus Fix ---
+ipcMain.on('window:refocus', () => {
+    if (mainWindow) {
+        setTimeout(() => {
+            if (!mainWindow.isDestroyed()) {
+                mainWindow.blur();
+                mainWindow.focus();
+            }
+        }, 100);
     }
 });
 

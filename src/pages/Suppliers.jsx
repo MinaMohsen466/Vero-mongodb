@@ -15,6 +15,9 @@ function Suppliers() {
     const [showInvoicesModal, setShowInvoicesModal] = useState(false);
     const [selectedSupplier, setSelectedSupplier] = useState(null);
     const [supplierInvoices, setSupplierInvoices] = useState([]);
+    const [allTransactions, setAllTransactions] = useState([]);
+    const [statementStartDate, setStatementStartDate] = useState(`${new Date().getFullYear()}-01-01`);
+    const [statementEndDate, setStatementEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [editingSupplier, setEditingSupplier] = useState(null);
     const [formData, setFormData] = useState({
         name: '', phone: '', email: '', address: '', tax_number: '', notes: '', is_active: 1,
@@ -42,6 +45,43 @@ function Suppliers() {
     });
 
     useEffect(() => { loadSuppliers(); }, []);
+
+    useEffect(() => {
+        let previousBalance = 0;
+        const filtered = [];
+
+        allTransactions.forEach(row => {
+            if (statementStartDate && row.date < statementStartDate) {
+                previousBalance += (row.credit || 0) - (row.debit || 0);
+            } else if (statementEndDate && row.date > statementEndDate) {
+                // Ignore transactions after end date
+            } else {
+                filtered.push(row);
+            }
+        });
+
+        let balance = previousBalance;
+        const statement = [];
+
+        // Prepend previous balance row if start date filter is active
+        if (statementStartDate) {
+            statement.push({
+                date: statementStartDate,
+                description: t('previous_balance') || 'رصيد سابق (منقول)',
+                debit: 0,
+                credit: 0,
+                balance: previousBalance,
+                isPreviousBalance: true
+            });
+        }
+
+        filtered.forEach(row => {
+            balance += (row.credit || 0) - (row.debit || 0);
+            statement.push({ ...row, balance });
+        });
+
+        setSupplierInvoices(statement);
+    }, [allTransactions, statementStartDate, statementEndDate]);
 
     const loadSuppliers = async () => {
         try {
@@ -128,12 +168,14 @@ function Suppliers() {
 
             const totalDebit = supplierInvoices.reduce((acc, row) => acc + (row.debit || 0), 0);
             const totalCredit = supplierInvoices.reduce((acc, row) => acc + (row.credit || 0), 0);
-            const finalBalance = Math.abs(selectedSupplier.balance || 0);
-            const balanceText = selectedSupplier.balance > 0 ? (t('acc_credit') || 'دائن') : (t('acc_debit') || 'مدين');
+            const lastRow = supplierInvoices[supplierInvoices.length - 1];
+            const finalBalance = lastRow ? Math.abs(lastRow.balance) : 0;
+            const finalBalanceRaw = lastRow ? lastRow.balance : 0;
+            const balanceText = finalBalanceRaw > 0 ? (t('acc_credit') || 'دائن') : (t('acc_debit') || 'مدين');
 
             const rowsHtml = supplierInvoices.map(row => `
-                <tr>
-                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px;">${new Date(row.date).toLocaleDateString('en-GB')}</td>
+                <tr style="${row.isPreviousBalance ? 'background-color: #f8fafc; font-style: italic;' : ''}">
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px;">${row.isPreviousBalance ? '' : new Date(row.date).toLocaleDateString('en-GB')}</td>
                     <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; font-weight: bold;">${row.description}</td>
                     <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; text-align: left; direction: ltr; color: ${row.debit > 0 ? '#ef4444' : '#64748b'}">${row.debit > 0 ? (new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(row.debit) + ' ' + currency) : '-'}</td>
                     <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; text-align: left; direction: ltr; color: ${row.credit > 0 ? '#10b981' : '#64748b'}">${row.credit > 0 ? (new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(row.credit) + ' ' + currency) : '-'}</td>
@@ -186,6 +228,7 @@ function Suppliers() {
                     <div class="statement-title">
                         <div class="title-text">${t('rep_supplierStatement') || 'كشف حساب مورد'}</div>
                         <div class="date-text">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-KW')}</div>
+                        ${statementStartDate || statementEndDate ? `<div class="date-text" style="margin-top: 4px;">الفترة: ${statementStartDate ? new Date(statementStartDate).toLocaleDateString('ar-KW') : 'البداية'} إلى ${statementEndDate ? new Date(statementEndDate).toLocaleDateString('ar-KW') : 'اليوم'}</div>` : ''}
                     </div>
                 </div>
 
@@ -224,8 +267,8 @@ function Suppliers() {
                             <div><strong>إجمالي الدائن:</strong> <span style="direction: ltr; display: inline-block;">${new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(totalCredit)} ${currency}</span></div>
                         </div>
                     </div>
-                    <div class="balance-box ${selectedSupplier.balance > 0 ? '' : 'credit'}">
-                        <span>الرصيد الحالي المستحق:</span>
+                    <div class="balance-box ${finalBalanceRaw > 0 ? '' : 'credit'}">
+                        <span>رصيد الفترة المستحق:</span>
                         <span style="direction: ltr; display: inline-block;">${new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(finalBalance)} ${currency} (${balanceText})</span>
                     </div>
                 </div>
@@ -300,15 +343,9 @@ function Suppliers() {
                 });
             });
 
-            let balance = 0;
-            const statement = rows
-                .sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.seq - b.seq)
-                .map(row => {
-                    balance += (row.credit || 0) - (row.debit || 0);
-                    return { ...row, balance };
-                });
-            setSupplierInvoices(statement);
-        } catch (e) { console.error(e); setSupplierInvoices([]); }
+            const sortedRows = rows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.seq - b.seq);
+            setAllTransactions(sortedRows);
+        } catch (e) { console.error(e); setAllTransactions([]); }
         setShowInvoicesModal(true);
     };
 
@@ -482,6 +519,21 @@ function Suppliers() {
                     {selectedSupplier?.address && <div><strong>{t('address')}:</strong> {selectedSupplier?.address}</div>}
                 </div>
 
+                {/* Date Filter Bar */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', marginBottom: '16px', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{t('rep_fromDate') || 'من تاريخ'}:</label>
+                        <input type="date" className="form-input" value={statementStartDate} onChange={e => setStatementStartDate(e.target.value)} style={{ padding: '6px 10px', width: '150px' }} />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{t('rep_toDate') || 'إلى تاريخ'}:</label>
+                        <input type="date" className="form-input" value={statementEndDate} onChange={e => setStatementEndDate(e.target.value)} style={{ padding: '6px 10px', width: '150px' }} />
+                    </div>
+                    <button className="btn btn-secondary" onClick={() => { setStatementStartDate(''); setStatementEndDate(''); }} style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
+                        {t('clearFilter') || 'مسح التصفية'}
+                    </button>
+                </div>
+
                 {supplierInvoices.length === 0 ? (
                     <div className="empty-state"><FileText size={48} /><h3>{t('noData')}</h3></div>
                 ) : (
@@ -499,8 +551,8 @@ function Suppliers() {
                                 </thead>
                                 <tbody>
                                     {supplierInvoices.map((row, i) => (
-                                        <tr key={i}>
-                                            <td>{new Date(row.date).toLocaleDateString('en-GB')}</td>
+                                        <tr key={i} style={row.isPreviousBalance ? { backgroundColor: 'var(--bg-secondary)', fontStyle: 'italic' } : {}}>
+                                            <td>{row.isPreviousBalance ? '-' : new Date(row.date).toLocaleDateString('en-GB')}</td>
                                             <td className="font-bold">{row.description}</td>
                                             <td className="text-danger" style={{ textAlign: 'left', direction: 'ltr' }}>{row.debit > 0 ? formatCurrency(row.debit) : '-'}</td>
                                             <td className="text-success" style={{ textAlign: 'left', direction: 'ltr' }}>{row.credit > 0 ? formatCurrency(row.credit) : '-'}</td>
@@ -522,10 +574,10 @@ function Suppliers() {
                                     <strong style={{ direction: 'ltr', display: 'inline-block' }}>{formatCurrency(supplierInvoices.reduce((s, r) => s + (r.credit || 0), 0))}</strong>
                                 </div>
                             </div>
-                            <div style={{ padding: '12px', backgroundColor: selectedSupplier?.balance > 0 ? '#fef2f2' : '#f0fdf4', border: `1px solid ${selectedSupplier?.balance > 0 ? '#fee2e2' : '#dcfce7'}`, borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                            <div style={{ padding: '12px', backgroundColor: (supplierInvoices[supplierInvoices.length - 1]?.balance || 0) > 0 ? '#fef2f2' : '#f0fdf4', border: `1px solid ${(supplierInvoices[supplierInvoices.length - 1]?.balance || 0) > 0 ? '#fee2e2' : '#dcfce7'}`, borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                                 <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{t('supp_currentBalance') || 'الرصيد الحالي المستحق'}:</span>
-                                <span className={selectedSupplier?.balance > 0 ? 'text-danger' : 'text-success'} style={{ fontSize: '1.25rem', fontWeight: 'bold', direction: 'ltr' }}>
-                                    {formatCurrency(Math.abs(selectedSupplier?.balance || 0))} {selectedSupplier?.balance > 0 ? `(${t('acc_credit') || 'دائن'})` : `(${t('acc_debit') || 'مدين'})`}
+                                <span className={(supplierInvoices[supplierInvoices.length - 1]?.balance || 0) > 0 ? 'text-danger' : 'text-success'} style={{ fontSize: '1.25rem', fontWeight: 'bold', direction: 'ltr' }}>
+                                    {formatCurrency(Math.abs(supplierInvoices[supplierInvoices.length - 1]?.balance || 0))} {(supplierInvoices[supplierInvoices.length - 1]?.balance || 0) > 0 ? `(${t('acc_credit') || 'دائن'})` : `(${t('acc_debit') || 'مدين'})`}
                                 </span>
                             </div>
                         </div>

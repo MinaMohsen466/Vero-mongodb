@@ -211,6 +211,9 @@ contextBridge.exposeInMainWorld('api', {
     // Activity Log
     activityLog: {
         getAll: (filters) => ipcRenderer.invoke('activityLog:getAll', filters)
-    }
+    },
+
+    // Window focus helper
+    refocus: () => ipcRenderer.send('window:refocus')
 });
 
