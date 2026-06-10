@@ -951,7 +951,15 @@ class ProductsRepo {
 
 class InvoicesRepo {
     constructor(db) { this.db = db; }
-    getAll(type) { return type ? this.db.all("SELECT i.*, c.name as customer_name, s.name as supplier_name FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id LEFT JOIN suppliers s ON i.supplier_id=s.id WHERE i.type=? ORDER BY i.date DESC", [type]) : this.db.all("SELECT i.*, c.name as customer_name, s.name as supplier_name FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id LEFT JOIN suppliers s ON i.supplier_id=s.id ORDER BY i.date DESC"); }
+    getAll(type) {
+        const invoices = type ? 
+            this.db.all("SELECT i.*, c.name as customer_name, s.name as supplier_name FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id LEFT JOIN suppliers s ON i.supplier_id=s.id WHERE i.type=? ORDER BY i.date DESC", [type]) : 
+            this.db.all("SELECT i.*, c.name as customer_name, s.name as supplier_name FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id LEFT JOIN suppliers s ON i.supplier_id=s.id ORDER BY i.date DESC");
+        return invoices.map(inv => {
+            const items = this.db.all("SELECT ii.*, p.name as product_name FROM invoice_items ii LEFT JOIN products p ON ii.product_id=p.id WHERE ii.invoice_id=?", [inv.id]);
+            return { ...inv, items: items || [] };
+        });
+    }
     getById(id) {
         const invoiceId = parseInt(id, 10);
         console.log('[getById] Looking for invoice:', invoiceId);

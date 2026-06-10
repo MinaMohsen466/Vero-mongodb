@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     BarChart3, FileText, TrendingUp, TrendingDown, Printer, Calendar,
-    DollarSign, ShoppingBag, BarChart2, Download
+    DollarSign, ShoppingBag, BarChart2, Download, Plus
 } from 'lucide-react';
 import {
     BarChart, Bar, LineChart, Line, PieChart as RechartsPie, Pie, Cell,
@@ -93,7 +93,7 @@ function Reports() {
                 const totalSales = filtered.reduce((s, i) => s + (i.total || 0), 0);
                 const totalPaid = filtered.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0);
                 const totalPending = filtered.filter(i => i.status !== 'paid').reduce((s, i) => s + (i.total || 0), 0);
-                data = { chartData, totalSales, totalPaid, totalPending, count: filtered.length, invoices: filtered.slice(0, 50) };
+                data = { type: 'sales_summary', chartData, totalSales, totalPaid, totalPending, count: filtered.length, invoices: filtered.slice(0, 50) };
 
             } else if (activeReport === 'purchases_summary') {
                 const allInvoices = await window.api.invoices.getAll('purchase');
@@ -115,7 +115,7 @@ function Reports() {
                     label: (() => { const [y, m] = r.month.split('-'); return `${MONTHS_AR[parseInt(m) - 1]} ${y}`; })()
                 }));
                 const total = filtered.reduce((s, i) => s + (i.total || 0), 0);
-                data = { chartData, total, count: filtered.length, invoices: filtered.slice(0, 50) };
+                data = { type: 'purchases_summary', chartData, total, count: filtered.length, invoices: filtered.slice(0, 50) };
 
             } else if (activeReport === 'profit_loss') {
                 const [sales, purchases, expensesRows, salaries, allProducts, allAccounts] = await Promise.all([
@@ -154,7 +154,7 @@ function Reports() {
                 const totalPurchasesAmt = filteredPurchases.reduce((s, i) => s + (i.total || 0), 0);
                 const activeProducts = (allProducts || []).filter(p => p.is_active);
                 // Ending Inventory (بضاعة آخر المدة) = current stock value
-                const endingInventory = activeProducts.reduce((s, p) => s + ((p.stock_quantity || 0) * (p.purchase_price || 0)), 0);
+                const endingInventory = activeProducts.reduce((s, p) => s + ((parseFloat(p.stock_quantity) || 0) * (parseFloat(p.purchase_price) || 0)), 0);
                 // Beginning Inventory (بضاعة أول المدة) = Ending Inventory + Purchases sold - Purchases bought
                 // Formula: Beginning Inventory = Ending Inventory - Purchases + COGS
                 // Since COGS = Beginning Inventory + Purchases - Ending Inventory
@@ -201,7 +201,7 @@ function Reports() {
                     const [y, m] = r.month.split('-');
                     return { ...r, label: `${MONTHS_AR[parseInt(m) - 1]}`, profit: r['sales'] - r['purchases'] };
                 });
-                data = { totalSales: totalSalesAmt, totalPurchases: totalPurchasesAmt, totalExpenses: totalExpensesAmt, cogs, grossProfit, profit: netProfit, chartData, products: activeProducts, endingInventory, beginningInventory, lowStock, cashBankBalance, cashBalance, bankBalance, leftSide, rightSide };
+                data = { type: 'profit_loss', totalSales: totalSalesAmt, totalPurchases: totalPurchasesAmt, totalExpenses: totalExpensesAmt, cogs, grossProfit, profit: netProfit, chartData, products: activeProducts, endingInventory, beginningInventory, lowStock, cashBankBalance, cashBalance, bankBalance, leftSide, rightSide };
 
             } else if (activeReport === 'customer_statement') {
                 if (!filters.customer_id) { setLoading(false); return; }
@@ -221,6 +221,7 @@ function Reports() {
                     return { date: inv.date, description: `${inv.invoice_number} (${isPaid ? (t('inv_paid') || 'Paid') : (t('cust_creditLabel') || 'Credit')})`, debit, credit, balance };
                 });
                 data = {
+                    type: 'customer_statement',
                     name: customer?.name, phone: customer?.phone,
                     statement, totalDebit: statement.reduce((s, r) => s + r.debit, 0),
                     totalCredit: statement.reduce((s, r) => s + r.credit, 0), balance
@@ -244,13 +245,315 @@ function Reports() {
                     return { date: inv.date, description: `${inv.invoice_number} (${isPaid ? (t('inv_paid') || 'Paid') : (t('supp_creditLabel') || 'Credit')})`, debit, credit, balance };
                 });
                 data = {
+                    type: 'supplier_statement',
                     name: supplier?.name, phone: supplier?.phone,
                     statement, totalDebit: statement.reduce((s, r) => s + r.debit, 0),
                     totalCredit: statement.reduce((s, r) => s + r.credit, 0), balance
                 };
 
             } else if (activeReport === 'trial_balance') {
-                data = await window.api.reports.trialBalance(filters.end_date);
+                const tb = await window.api.reports.trialBalance(filters.end_date);
+                data = { type: 'trial_balance', ...tb };
+            } else if (activeReport === 'detailed_inventory') {
+                const [sales, purchases, allProducts] = await Promise.all([
+                    window.api.invoices.getAll('sales'),
+                    window.api.invoices.getAll('purchase'),
+                    window.api.products.getAll()
+                ]);
+                const filterFn = inv => {
+                    if (filters.start_date && inv.date < filters.start_date) return false;
+                    if (filters.end_date && inv.date > filters.end_date) return false;
+                    return true;
+                };
+                const filteredSales = (sales || []).filter(filterFn);
+                const filteredPurchases = (purchases || []).filter(filterFn);
+
+                const salesQtyMap = {};
+                filteredSales.forEach(inv => {
+                    if (inv.items && Array.isArray(inv.items)) {
+                        inv.items.forEach(item => {
+                            if (item.product_id) {
+                                salesQtyMap[item.product_id] = (salesQtyMap[item.product_id] || 0) + (parseFloat(item.quantity) || 0);
+                            }
+                        });
+                    }
+                });
+
+                const purchaseQtyMap = {};
+                filteredPurchases.forEach(inv => {
+                    if (inv.items && Array.isArray(inv.items)) {
+                        inv.items.forEach(item => {
+                            if (item.product_id) {
+                                purchaseQtyMap[item.product_id] = (purchaseQtyMap[item.product_id] || 0) + (parseFloat(item.quantity) || 0);
+                            }
+                        });
+                    }
+                });
+
+                const productsData = (allProducts || []).map(p => {
+                    const qtySold = salesQtyMap[p.id] || 0;
+                    const qtyPurchased = purchaseQtyMap[p.id] || 0;
+                    const cogs = qtySold * (parseFloat(p.purchase_price) || 0);
+                    const stockValue = (parseFloat(p.stock_quantity) || 0) * (parseFloat(p.purchase_price) || 0);
+                    return {
+                        ...p,
+                        qtySold,
+                        qtyPurchased,
+                        cogs,
+                        stockValue,
+                        status: (parseFloat(p.stock_quantity) || 0) <= 0 ? 'out' : (parseFloat(p.stock_quantity) || 0) <= 5 ? 'low' : 'safe'
+                    };
+                });
+
+                const totalValue = productsData.reduce((sum, p) => sum + p.stockValue, 0);
+                const totalCogs = productsData.reduce((sum, p) => sum + p.cogs, 0);
+                const totalQtySold = productsData.reduce((sum, p) => sum + p.qtySold, 0);
+                const totalQtyPurchased = productsData.reduce((sum, p) => sum + p.qtyPurchased, 0);
+
+                data = {
+                    type: 'detailed_inventory',
+                    products: productsData,
+                    totalValue,
+                    totalCogs,
+                    totalQtySold,
+                    totalQtyPurchased
+                };
+
+            } else if (activeReport === 'aging_report') {
+                const [sales, purchases, allCustomers, allSuppliers] = await Promise.all([
+                    window.api.invoices.getAll('sales'),
+                    window.api.invoices.getAll('purchase'),
+                    window.api.customers.getAll(),
+                    window.api.suppliers.getAll()
+                ]);
+
+                const todayDate = new Date();
+                const getAgeDays = (dateStr) => {
+                    if (!dateStr) return 0;
+                    const diffTime = todayDate - new Date(dateStr);
+                    return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+                };
+
+                const customerAging = {};
+                (allCustomers || []).forEach(c => {
+                    customerAging[c.id] = { id: c.id, name: c.name, phone: c.phone, total: 0, bracket1: 0, bracket2: 0, bracket3: 0, bracket4: 0 };
+                });
+
+                (sales || []).forEach(inv => {
+                    if (inv.status !== 'paid') {
+                        const unpaid = (inv.total || 0) - (parseFloat(inv.paid) || 0);
+                        if (unpaid <= 0) return;
+                        const cId = inv.customer_id;
+                        if (!customerAging[cId]) {
+                            customerAging[cId] = { id: cId, name: inv.customer_name || `Customer #${cId}`, phone: '', total: 0, bracket1: 0, bracket2: 0, bracket3: 0, bracket4: 0 };
+                        }
+                        const age = getAgeDays(inv.date);
+                        customerAging[cId].total += unpaid;
+                        if (age <= 30) customerAging[cId].bracket1 += unpaid;
+                        else if (age <= 60) customerAging[cId].bracket2 += unpaid;
+                        else if (age <= 90) customerAging[cId].bracket3 += unpaid;
+                        else customerAging[cId].bracket4 += unpaid;
+                    }
+                });
+
+                const supplierAging = {};
+                (allSuppliers || []).forEach(s => {
+                    supplierAging[s.id] = { id: s.id, name: s.name, phone: s.phone, total: 0, bracket1: 0, bracket2: 0, bracket3: 0, bracket4: 0 };
+                });
+
+                (purchases || []).forEach(inv => {
+                    if (inv.status !== 'paid') {
+                        const unpaid = (inv.total || 0) - (parseFloat(inv.paid) || 0);
+                        if (unpaid <= 0) return;
+                        const sId = inv.supplier_id;
+                        if (!supplierAging[sId]) {
+                            supplierAging[sId] = { id: sId, name: inv.supplier_name || `Supplier #${sId}`, phone: '', total: 0, bracket1: 0, bracket2: 0, bracket3: 0, bracket4: 0 };
+                        }
+                        const age = getAgeDays(inv.date);
+                        supplierAging[sId].total += unpaid;
+                        if (age <= 30) supplierAging[sId].bracket1 += unpaid;
+                        else if (age <= 60) supplierAging[sId].bracket2 += unpaid;
+                        else if (age <= 90) supplierAging[sId].bracket3 += unpaid;
+                        else supplierAging[sId].bracket4 += unpaid;
+                    }
+                });
+
+                data = {
+                    type: 'aging_report',
+                    receivables: Object.values(customerAging).filter(c => c.total > 0),
+                    payables: Object.values(supplierAging).filter(s => s.total > 0),
+                    totals: {
+                        receivables: Object.values(customerAging).reduce((sum, c) => sum + c.total, 0),
+                        payables: Object.values(supplierAging).reduce((sum, s) => sum + s.total, 0),
+                        recBracket1: Object.values(customerAging).reduce((sum, c) => sum + c.bracket1, 0),
+                        recBracket2: Object.values(customerAging).reduce((sum, c) => sum + c.bracket2, 0),
+                        recBracket3: Object.values(customerAging).reduce((sum, c) => sum + c.bracket3, 0),
+                        recBracket4: Object.values(customerAging).reduce((sum, c) => sum + c.bracket4, 0),
+                        payBracket1: Object.values(supplierAging).reduce((sum, s) => sum + s.bracket1, 0),
+                        payBracket2: Object.values(supplierAging).reduce((sum, s) => sum + s.bracket2, 0),
+                        payBracket3: Object.values(supplierAging).reduce((sum, s) => sum + s.bracket3, 0),
+                        payBracket4: Object.values(supplierAging).reduce((sum, s) => sum + s.bracket4, 0)
+                    }
+                };
+
+            } else if (activeReport === 'product_profitability') {
+                const [sales, allProducts] = await Promise.all([
+                    window.api.invoices.getAll('sales'),
+                    window.api.products.getAll()
+                ]);
+                const filterFn = inv => {
+                    if (filters.start_date && inv.date < filters.start_date) return false;
+                    if (filters.end_date && inv.date > filters.end_date) return false;
+                    return true;
+                };
+                const filteredSales = (sales || []).filter(filterFn);
+
+                const productSales = {};
+                filteredSales.forEach(inv => {
+                    if (inv.items && Array.isArray(inv.items)) {
+                        inv.items.forEach(item => {
+                            if (item.product_id) {
+                                if (!productSales[item.product_id]) {
+                                    productSales[item.product_id] = { qty: 0, revenue: 0 };
+                                }
+                                productSales[item.product_id].qty += parseFloat(item.quantity) || 0;
+                                productSales[item.product_id].revenue += parseFloat(item.total) || 0;
+                            }
+                        });
+                    }
+                });
+
+                const productsData = (allProducts || []).map(p => {
+                    const salesInfo = productSales[p.id] || { qty: 0, revenue: 0 };
+                    const costOfSales = salesInfo.qty * (parseFloat(p.purchase_price) || 0);
+                    const grossProfit = salesInfo.revenue - costOfSales;
+                    const margin = salesInfo.revenue > 0 ? (grossProfit / salesInfo.revenue) * 100 : 0;
+                    return {
+                        ...p,
+                        qtySold: salesInfo.qty,
+                        revenue: salesInfo.revenue,
+                        costOfSales,
+                        grossProfit,
+                        margin
+                    };
+                }).filter(p => p.qtySold > 0).sort((a, b) => b.revenue - a.revenue);
+
+                const categoryProfit = {};
+                productsData.forEach(p => {
+                    const cat = p.category || t('other') || 'أخرى';
+                    if (!categoryProfit[cat]) {
+                        categoryProfit[cat] = { category: cat, revenue: 0, costOfSales: 0, grossProfit: 0 };
+                    }
+                    categoryProfit[cat].revenue += p.revenue;
+                    categoryProfit[cat].costOfSales += p.costOfSales;
+                    categoryProfit[cat].grossProfit += p.grossProfit;
+                });
+
+                const categoriesData = Object.values(categoryProfit).map(c => ({
+                    ...c,
+                    margin: c.revenue > 0 ? (c.grossProfit / c.revenue) * 100 : 0
+                })).sort((a, b) => b.revenue - a.revenue);
+
+                const totalRevenue = productsData.reduce((sum, p) => sum + p.revenue, 0);
+                const totalCost = productsData.reduce((sum, p) => sum + p.costOfSales, 0);
+                const totalProfit = totalRevenue - totalCost;
+                const totalMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+
+                data = {
+                    type: 'product_profitability',
+                    products: productsData,
+                    categories: categoriesData,
+                    totalRevenue,
+                    totalCost,
+                    totalProfit,
+                    totalMargin
+                };
+
+            } else if (activeReport === 'cash_flow') {
+                const CATEGORIES = [
+                    { id: 'salary',       labelAr: 'رواتب',           labelEn: 'Salaries' },
+                    { id: 'rent',         labelAr: 'إيجار',          labelEn: 'Rent' },
+                    { id: 'hospitality',  labelAr: 'ضيافة',           labelEn: 'Hospitality' },
+                    { id: 'utilities',    labelAr: 'كهرباء وماء',     labelEn: 'Utilities' },
+                    { id: 'maintenance',  labelAr: 'صيانة',           labelEn: 'Maintenance' },
+                    { id: 'other',        labelAr: 'أخرى',            labelEn: 'Other' },
+                ];
+
+                const [vouchers, expenses, salaries, startTrial] = await Promise.all([
+                    window.api.vouchers.getAll(),
+                    window.api.expenses.getAll(),
+                    window.api.salaries.getAll(),
+                    window.api.reports.trialBalance(filters.start_date)
+                ]);
+
+                const dateInRange = date => {
+                    if (!date) return false;
+                    const d = String(date).substring(0, 10);
+                    if (filters.start_date && d < filters.start_date) return false;
+                    if (filters.end_date && d > filters.end_date) return false;
+                    return true;
+                };
+
+                const filteredVouchers = (vouchers || []).filter(v => dateInRange(v.date));
+                const filteredExpenses = (expenses || []).filter(ex => dateInRange(ex.date));
+                const salaryFallback = (salaries || []).filter(s => {
+                    const alreadyInExpenses = filteredExpenses.some(ex =>
+                        (ex.source_type === 'salary' && Number(ex.source_id) === Number(s.id)) ||
+                        ex.payment_number === s.payment_number
+                    );
+                    return !alreadyInExpenses && dateInRange(s.payment_date || s.created_at);
+                });
+
+                const cbAccounts = (startTrial?.accounts || []).filter(a => a.code === '111' || a.code?.startsWith('111.') || a.code === '112' || a.code?.startsWith('112.'));
+                const startingCash = cbAccounts.filter(a => a.code === '111' || a.code?.startsWith('111.')).reduce((sum, a) => sum + ((a.debit_balance || 0) - (a.credit_balance || 0)), 0);
+                const startingBank = cbAccounts.filter(a => a.code === '112' || a.code?.startsWith('112.')).reduce((sum, a) => sum + ((a.debit_balance || 0) - (a.credit_balance || 0)), 0);
+                const startingBalance = startingCash + startingBank;
+
+                const receipts = filteredVouchers.filter(v => v.voucher_type === 'receipt');
+                const totalReceipts = receipts.reduce((sum, v) => sum + (parseFloat(v.amount) || 0), 0);
+
+                const payments = filteredVouchers.filter(v => v.voucher_type === 'payment');
+                const totalPayments = payments.reduce((sum, v) => sum + (parseFloat(v.amount) || 0), 0);
+
+                const totalExpenses = filteredExpenses.reduce((sum, ex) => sum + (parseFloat(ex.amount) || 0), 0);
+                const totalSalaries = salaryFallback.reduce((sum, s) => sum + (parseFloat(s.net_salary) || 0), 0);
+                const totalOutflow = totalPayments + totalExpenses + totalSalaries;
+
+                const netChange = totalReceipts - totalOutflow;
+                const endingBalance = startingBalance + netChange;
+
+                const cashInflow = receipts.filter(v => v.payment_method === 'cash').reduce((sum, v) => sum + (parseFloat(v.amount) || 0), 0);
+                const bankInflow = receipts.filter(v => v.payment_method === 'bank').reduce((sum, v) => sum + (parseFloat(v.amount) || 0), 0);
+                const cashOutflow = payments.filter(v => v.payment_method === 'cash').reduce((sum, v) => sum + (parseFloat(v.amount) || 0), 0)
+                    + filteredExpenses.filter(ex => ex.payment_method === 'cash').reduce((sum, ex) => sum + (parseFloat(ex.amount) || 0), 0)
+                    + salaryFallback.filter(s => s.payment_method === 'cash').reduce((sum, s) => sum + (parseFloat(s.net_salary) || 0), 0);
+                const bankOutflow = payments.filter(v => v.payment_method === 'bank').reduce((sum, v) => sum + (parseFloat(v.amount) || 0), 0)
+                    + filteredExpenses.filter(ex => ex.payment_method === 'bank').reduce((sum, ex) => sum + (parseFloat(ex.amount) || 0), 0)
+                    + salaryFallback.filter(s => s.payment_method === 'bank').reduce((sum, s) => sum + (parseFloat(s.net_salary) || 0), 0);
+
+                data = {
+                    type: 'cash_flow',
+                    startingBalance,
+                    startingCash,
+                    startingBank,
+                    receipts,
+                    payments,
+                    totalReceipts,
+                    totalPayments,
+                    totalExpenses,
+                    totalSalaries,
+                    totalOutflow,
+                    netChange,
+                    endingBalance,
+                    cashInflow,
+                    bankInflow,
+                    cashOutflow,
+                    bankOutflow,
+                    expensesByCategory: CATEGORIES.map(cat => ({
+                        name: cat.labelAr,
+                        value: filteredExpenses.filter(ex => ex.category === cat.id).reduce((sum, ex) => sum + (parseFloat(ex.amount) || 0), 0)
+                    })).filter(c => c.value > 0)
+                };
             }
 
             setReportData(data);
@@ -333,6 +636,62 @@ function Reports() {
                 rows.push([a.code, a.name, a.debit_balance || 0, a.credit_balance || 0]);
             });
             rows.push(['', t('rep_total') || 'Total', reportData.totals?.debit || 0, reportData.totals?.credit || 0]);
+        } else if (activeReport === 'detailed_inventory') {
+            fileName = 'inventory_cogs_report.csv';
+            rows.push([
+                t('code') || 'الكود',
+                t('name') || 'اسم المنتج',
+                t('category') || 'التصنيف',
+                t('rep_currentStock') || 'المخزون الحالي',
+                t('prod_purchasePrice') || 'سعر الشراء',
+                t('rep_stockValueCost') || 'قيمة المخزون',
+                t('rep_qtyPurchased') || 'المشتريات (كمية)',
+                t('rep_qtySold') || 'المبيعات (كمية)',
+                t('rep_cogs') || 'تكلفة المبيعات'
+            ]);
+            (reportData.products || []).forEach(p => {
+                rows.push([p.code, p.name, p.category || '', p.stock_quantity, p.purchase_price, p.stockValue, p.qtyPurchased, p.qtySold, p.cogs]);
+            });
+            rows.push([]);
+            rows.push([
+                t('rep_total') || 'Total', '', '', '', '', reportData.totalValue, reportData.totalQtyPurchased, reportData.totalQtySold, reportData.totalCogs
+            ]);
+        } else if (activeReport === 'aging_report') {
+            fileName = 'aging_report.csv';
+            rows.push(['--- ' + (t('rep_customerReceivablesAging') || 'Receivables Aging') + ' ---']);
+            rows.push([t('name') || 'Name', t('phone') || 'Phone', '1-30 Days', '31-60 Days', '61-90 Days', '90+ Days', t('total') || 'Total']);
+            (reportData.receivables || []).forEach(c => {
+                rows.push([c.name, c.phone || '', c.bracket1, c.bracket2, c.bracket3, c.bracket4, c.total]);
+            });
+            rows.push([]);
+            rows.push(['--- ' + (t('rep_supplierPayablesAging') || 'Payables Aging') + ' ---']);
+            rows.push([t('name') || 'Name', t('phone') || 'Phone', '1-30 Days', '31-60 Days', '61-90 Days', '90+ Days', t('total') || 'Total']);
+            (reportData.payables || []).forEach(s => {
+                rows.push([s.name, s.phone || '', s.bracket1, s.bracket2, s.bracket3, s.bracket4, s.total]);
+            });
+        } else if (activeReport === 'product_profitability') {
+            fileName = 'product_profitability.csv';
+            rows.push(['--- ' + (t('rep_categoryProfitability') || 'Category Profitability') + ' ---']);
+            rows.push([t('category') || 'Category', t('rep_totalSales') || 'Sales', t('rep_cogs') || 'Cost of Sales', t('rep_profit') || 'Gross Profit', t('rep_profitMargin') || 'Profit Margin (%)']);
+            (reportData.categories || []).forEach(c => {
+                rows.push([c.category, c.revenue, c.costOfSales, c.grossProfit, `${c.margin.toFixed(2)}%`]);
+            });
+            rows.push([]);
+            rows.push(['--- ' + (t('rep_productProfitabilityDetails') || 'Product Profitability') + ' ---']);
+            rows.push([t('code') || 'Code', t('name') || 'Name', t('category') || 'Category', t('rep_qtySold') || 'Qty Sold', t('rep_salesValue') || 'Revenue', t('rep_cogsValue') || 'Cost', t('rep_profit') || 'Profit', t('rep_profitMargin') || 'Margin (%)']);
+            (reportData.products || []).forEach(p => {
+                rows.push([p.code, p.name, p.category || '', p.qtySold, p.revenue, p.costOfSales, p.grossProfit, `${p.margin.toFixed(2)}%`]);
+            });
+        } else if (activeReport === 'cash_flow') {
+            fileName = 'cash_flow_statement.csv';
+            rows.push([t('vouch_description') || 'Description', t('total') || 'Total']);
+            rows.push([t('rep_startingBalance') || 'Starting Cash/Bank Balance', reportData.startingBalance]);
+            rows.push([t('rep_cashInflowCustomers') || 'Inflows from customers', reportData.totalReceipts]);
+            rows.push([t('rep_cashOutflowSuppliers') || 'Outflows to suppliers', reportData.totalPayments]);
+            rows.push([t('rep_cashOutflowExpenses') || 'Expenses', reportData.totalExpenses]);
+            rows.push([t('rep_cashOutflowSalaries') || 'Salaries', reportData.totalSalaries]);
+            rows.push([t('rep_netChangeFlow') || 'Net Change', reportData.netChange]);
+            rows.push([t('rep_endingBalance') || 'Ending Cash/Bank Balance', reportData.endingBalance]);
         }
 
         if (rows.length === 0) return;
@@ -344,6 +703,10 @@ function Reports() {
         { id: 'sales_summary', label: t('rep_salesReport') || 'Sales Report', icon: TrendingUp },
         { id: 'purchases_summary', label: t('rep_purchasesReport') || 'Purchases Report', icon: TrendingDown },
         { id: 'profit_loss', label: t('rep_profitLoss') || 'Profit & Loss', icon: BarChart2 },
+        { id: 'detailed_inventory', label: t('rep_inventory_cogs') || 'تقرير المخزون وحركته وتكلفة المبيعات', icon: ShoppingBag },
+        { id: 'aging_report', label: t('rep_aging_report') || 'تقرير أعمار الديون', icon: Calendar },
+        { id: 'product_profitability', label: t('rep_product_profitability') || 'تقرير ربحية المنتجات والتصنيفات', icon: BarChart3 },
+        { id: 'cash_flow', label: t('rep_cash_flow') || 'تقرير حركة التدفقات النقدية والسيولة', icon: DollarSign },
         { id: 'trial_balance', label: t('rep_trialBalance') || 'Trial Balance', icon: FileText },
     ];
 
@@ -468,7 +831,7 @@ function Reports() {
                     ) : (
                         <div id="report-content">
                             {/* ── Sales Summary ── */}
-                            {activeReport === 'sales_summary' && (
+                            {activeReport === 'sales_summary' && reportData.type === 'sales_summary' && (
                                 <div>
                                     <h2 style={{ marginBottom: '16px', color: 'var(--text-primary)' }}>📊 {t('rep_salesReport') || 'Sales Report'}</h2>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))', gap: '12px', marginBottom: '24px' }}>
@@ -510,7 +873,7 @@ function Reports() {
                             )}
 
                             {/* ── Purchases Summary ── */}
-                            {activeReport === 'purchases_summary' && (
+                            {activeReport === 'purchases_summary' && reportData.type === 'purchases_summary' && (
                                 <div>
                                     <h2 style={{ marginBottom: '16px' }}>📦 {t('rep_purchasesReport') || 'Purchases Report'}</h2>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px,1fr))', gap: '12px', marginBottom: '24px' }}>
@@ -548,7 +911,7 @@ function Reports() {
                             )}
 
                             {/* ── Profit & Loss ── */}
-                            {activeReport === 'profit_loss' && (
+                            {activeReport === 'profit_loss' && reportData.type === 'profit_loss' && (
                                 <div>
                                     <h2 style={{ marginBottom: '16px' }}>💰 {t('rep_profitLoss') || 'Profit & Loss Report'}</h2>
                                     {/* Net Profit/Loss highlight */}
@@ -824,8 +1187,396 @@ function Reports() {
                                 </div>
                             )}
 
+                            {/* ── Detailed Inventory & COGS report ── */}
+                            {activeReport === 'detailed_inventory' && reportData && reportData.type === 'detailed_inventory' && (
+                                <div>
+                                    <h2 style={{ marginBottom: '16px', color: 'var(--text-primary)' }}>📦 {t('rep_inventory_cogs') || 'تقرير المخزون وحركته وتكلفة المبيعات'}</h2>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))', gap: '12px', marginBottom: '24px' }}>
+                                        {[
+                                            { label: t('rep_totalStockValue') || 'إجمالي قيمة المخزون (بالتكلفة)', val: fmt(reportData.totalValue), color: '#6366F1', icon: ShoppingBag },
+                                            { label: t('rep_totalCogs') || 'إجمالي تكلفة المبيعات (COGS)', val: fmt(reportData.totalCogs), color: '#EF4444', icon: TrendingDown },
+                                            { label: t('rep_totalQtyPurchased') || 'الكمية المشتراة خلال الفترة', val: reportData.totalQtyPurchased, color: '#10B981', icon: Plus },
+                                            { label: t('rep_totalQtySold') || 'الكمية المباعة خلال الفترة', val: reportData.totalQtySold, color: '#F59E0B', icon: DollarSign },
+                                        ].map(s => (
+                                            <div key={s.label} style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: `${s.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                    <s.icon size={20} color={s.color} />
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontWeight: 800, fontSize: '1.1rem', color: s.color }}>{s.val}</div>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.label}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+                                        <div style={{ padding: '12px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', fontWeight: 'bold' }}>
+                                            📋 {t('rep_inventoryDetails') || 'تفاصيل حركة وجرد المخزون'}
+                                        </div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr style={{ background: 'var(--bg-secondary)' }}>
+                                                    <th style={thStyle}>{t('code') || 'الكود'}</th>
+                                                    <th style={thStyle}>{t('name') || 'اسم المنتج'}</th>
+                                                    <th style={thStyle}>{t('category') || 'التصنيف'}</th>
+                                                    <th style={thStyle}>{t('rep_currentStock') || 'المخزون الحالي'}</th>
+                                                    <th style={thStyle}>{t('prod_purchasePrice') || 'سعر الشراء'}</th>
+                                                    <th style={thStyle}>{t('rep_stockValueCost') || 'قيمة المخزون'}</th>
+                                                    <th style={thStyle}>{t('rep_qtyPurchased') || 'المشتريات (كمية)'}</th>
+                                                    <th style={thStyle}>{t('rep_qtySold') || 'المبيعات (كمية)'}</th>
+                                                    <th style={thStyle}>{t('rep_cogs') || 'تكلفة المبيعات'}</th>
+                                                    <th style={thStyle}>{t('status') || 'الحالة'}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {reportData.products?.map((p) => (
+                                                    <tr key={p.id} style={{ borderBottom: '1px solid var(--border)', background: p.stock_quantity <= 0 ? '#FFF7F7' : p.stock_quantity <= 5 ? '#FFFBEB' : 'transparent' }}>
+                                                        <td style={tdStyle}>{p.code}</td>
+                                                        <td style={tdStyle}><strong>{p.name}</strong></td>
+                                                        <td style={tdStyle}>{p.category || '-'}</td>
+                                                        <td style={{ ...tdStyle, fontWeight: 700 }}>{p.stock_quantity || 0}</td>
+                                                        <td style={tdStyle}>{fmt(p.purchase_price)}</td>
+                                                        <td style={{ ...tdStyle, fontWeight: 700, color: '#6366F1' }}>{fmt(p.stockValue)}</td>
+                                                        <td style={tdStyle}>{p.qtyPurchased}</td>
+                                                        <td style={tdStyle}>{p.qtySold}</td>
+                                                        <td style={{ ...tdStyle, fontWeight: 700, color: '#EF4444' }}>{fmt(p.cogs)}</td>
+                                                        <td style={tdStyle}>
+                                                            <span style={{
+                                                                padding: '2px 8px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600,
+                                                                background: p.status === 'safe' ? '#D1FAE5' : p.status === 'low' ? '#FEF3C7' : '#FEE2E2',
+                                                                color: p.status === 'safe' ? '#059669' : p.status === 'low' ? '#D97706' : '#DC2626'
+                                                            }}>
+                                                                {p.status === 'safe' ? (t('active') || 'آمن') : p.status === 'low' ? (t('dash_minStock') || 'منخفض') : (t('inactive') || 'نفذ')}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot>
+                                                <tr style={{ background: 'var(--bg-secondary)', fontWeight: 700 }}>
+                                                    <td colSpan="3" style={tdStyle}>{t('rep_total') || 'الإجمالي'}</td>
+                                                    <td style={tdStyle}>-</td>
+                                                    <td style={tdStyle}>-</td>
+                                                    <td style={{ ...tdStyle, color: '#6366F1' }}>{fmt(reportData.totalValue)}</td>
+                                                    <td style={tdStyle}>{reportData.totalQtyPurchased}</td>
+                                                    <td style={tdStyle}>{reportData.totalQtySold}</td>
+                                                    <td style={{ ...tdStyle, color: '#EF4444' }}>{fmt(reportData.totalCogs)}</td>
+                                                    <td style={tdStyle}>-</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── Aging Report ── */}
+                            {activeReport === 'aging_report' && reportData && reportData.type === 'aging_report' && (
+                                <div>
+                                    <h2 style={{ marginBottom: '16px', color: 'var(--text-primary)' }}>📅 {t('rep_aging_report') || 'تقرير أعمار الديون'}</h2>
+                                    
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+                                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px' }}>
+                                            <h3 style={{ marginBottom: '12px', color: '#3B82F6' }}>📈 {t('rep_totalReceivables') || 'إجمالي الذمم المدينة (العملاء)'}</h3>
+                                            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#2563EB', marginBottom: '10px' }}>{fmt(reportData.totals?.receivables)}</div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', fontSize: '0.75rem' }}>
+                                                <div style={{ background: 'rgba(37,99,235,0.08)', padding: 8, borderRadius: 6, textAlign: 'center' }}><strong>1-30 {t('day') || 'يوم'}</strong><div style={{ color: '#2563EB', fontWeight: 700 }}>{fmt(reportData.totals?.recBracket1)}</div></div>
+                                                <div style={{ background: 'rgba(37,99,235,0.08)', padding: 8, borderRadius: 6, textAlign: 'center' }}><strong>31-60 {t('day') || 'يوم'}</strong><div style={{ color: '#2563EB', fontWeight: 700 }}>{fmt(reportData.totals?.recBracket2)}</div></div>
+                                                <div style={{ background: 'rgba(37,99,235,0.08)', padding: 8, borderRadius: 6, textAlign: 'center' }}><strong>61-90 {t('day') || 'يوم'}</strong><div style={{ color: '#2563EB', fontWeight: 700 }}>{fmt(reportData.totals?.recBracket3)}</div></div>
+                                                <div style={{ background: 'rgba(37,99,235,0.08)', padding: 8, borderRadius: 6, textAlign: 'center' }}><strong>90+ {t('day') || 'يوم'}</strong><div style={{ color: '#2563EB', fontWeight: 700 }}>{fmt(reportData.totals?.recBracket4)}</div></div>
+                                            </div>
+                                        </div>
+
+                                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px' }}>
+                                            <h3 style={{ marginBottom: '12px', color: '#EF4444' }}>📉 {t('rep_totalPayables') || 'إجمالي الذمم الدائنة (الموردين)'}</h3>
+                                            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#DC2626', marginBottom: '10px' }}>{fmt(reportData.totals?.payables)}</div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', fontSize: '0.75rem' }}>
+                                                <div style={{ background: '#FEF2F2', padding: 8, borderRadius: 6, textAlign: 'center' }}><strong>1-30 {t('day') || 'يوم'}</strong><div style={{ color: '#DC2626', fontWeight: 700 }}>{fmt(reportData.totals?.payBracket1)}</div></div>
+                                                <div style={{ background: '#FEF2F2', padding: 8, borderRadius: 6, textAlign: 'center' }}><strong>31-60 {t('day') || 'يوم'}</strong><div style={{ color: '#DC2626', fontWeight: 700 }}>{fmt(reportData.totals?.payBracket2)}</div></div>
+                                                <div style={{ background: '#FEF2F2', padding: 8, borderRadius: 6, textAlign: 'center' }}><strong>61-90 {t('day') || 'يوم'}</strong><div style={{ color: '#DC2626', fontWeight: 700 }}>{fmt(reportData.totals?.payBracket3)}</div></div>
+                                                <div style={{ background: '#FEF2F2', padding: 8, borderRadius: 6, textAlign: 'center' }}><strong>90+ {t('day') || 'يوم'}</strong><div style={{ color: '#DC2626', fontWeight: 700 }}>{fmt(reportData.totals?.payBracket4)}</div></div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Receivables Table */}
+                                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', marginBottom: '24px' }}>
+                                        <div style={{ padding: '12px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', fontWeight: 'bold', color: '#2563EB' }}>
+                                            👤 {t('rep_customerReceivablesAging') || 'تحليل أعمار ذمم العملاء المدينة'}
+                                        </div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr style={{ background: 'var(--bg-secondary)' }}>
+                                                    <th style={thStyle}>{t('name') || 'الاسم'}</th>
+                                                    <th style={thStyle}>{t('phone') || 'التلفون'}</th>
+                                                    <th style={thStyle}>1-30 {t('day') || 'يوم'}</th>
+                                                    <th style={thStyle}>31-60 {t('day') || 'يوم'}</th>
+                                                    <th style={thStyle}>61-90 {t('day') || 'يوم'}</th>
+                                                    <th style={thStyle}>90+ {t('day') || 'يوم'}</th>
+                                                    <th style={thStyle}>{t('total') || 'الإجمالي'}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {reportData.receivables?.map(c => (
+                                                    <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                        <td style={tdStyle}><strong>{c.name}</strong></td>
+                                                        <td style={tdStyle}>{c.phone || '-'}</td>
+                                                        <td style={tdStyle}>{c.bracket1 > 0 ? fmt(c.bracket1) : '-'}</td>
+                                                        <td style={tdStyle}>{c.bracket2 > 0 ? fmt(c.bracket2) : '-'}</td>
+                                                        <td style={tdStyle}>{c.bracket3 > 0 ? fmt(c.bracket3) : '-'}</td>
+                                                        <td style={tdStyle}>{c.bracket4 > 0 ? fmt(c.bracket4) : '-'}</td>
+                                                        <td style={{ ...tdStyle, fontWeight: 700, color: '#2563EB' }}>{fmt(c.total)}</td>
+                                                    </tr>
+                                                ))}
+                                                {reportData.receivables?.length === 0 && (
+                                                    <tr><td colSpan="7" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>{t('noData') || 'لا توجد ذمم مدينة مستحقة'}</td></tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* Payables Table */}
+                                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+                                        <div style={{ padding: '12px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', fontWeight: 'bold', color: '#DC2626' }}>
+                                            🏢 {t('rep_supplierPayablesAging') || 'تحليل أعمار التزامات الموردين الدائنة'}
+                                        </div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr style={{ background: 'var(--bg-secondary)' }}>
+                                                    <th style={thStyle}>{t('name') || 'الاسم'}</th>
+                                                    <th style={thStyle}>{t('phone') || 'التلفون'}</th>
+                                                    <th style={thStyle}>1-30 {t('day') || 'يوم'}</th>
+                                                    <th style={thStyle}>31-60 {t('day') || 'يوم'}</th>
+                                                    <th style={thStyle}>61-90 {t('day') || 'يوم'}</th>
+                                                    <th style={thStyle}>90+ {t('day') || 'يوم'}</th>
+                                                    <th style={thStyle}>{t('total') || 'الإجمالي'}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {reportData.payables?.map(s => (
+                                                    <tr key={s.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                        <td style={tdStyle}><strong>{s.name}</strong></td>
+                                                        <td style={tdStyle}>{s.phone || '-'}</td>
+                                                        <td style={tdStyle}>{s.bracket1 > 0 ? fmt(s.bracket1) : '-'}</td>
+                                                        <td style={tdStyle}>{s.bracket2 > 0 ? fmt(s.bracket2) : '-'}</td>
+                                                        <td style={tdStyle}>{s.bracket3 > 0 ? fmt(s.bracket3) : '-'}</td>
+                                                        <td style={tdStyle}>{s.bracket4 > 0 ? fmt(s.bracket4) : '-'}</td>
+                                                        <td style={{ ...tdStyle, fontWeight: 700, color: '#DC2626' }}>{fmt(s.total)}</td>
+                                                    </tr>
+                                                ))}
+                                                {reportData.payables?.length === 0 && (
+                                                    <tr><td colSpan="7" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>{t('noData') || 'لا توجد ذمم دائنة مستحقة'}</td></tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── Product & Category Profitability ── */}
+                            {activeReport === 'product_profitability' && reportData && reportData.type === 'product_profitability' && (
+                                <div>
+                                    <h2 style={{ marginBottom: '16px', color: 'var(--text-primary)' }}>📊 {t('rep_product_profitability') || 'تقرير ربحية المنتجات والتصنيفات'}</h2>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))', gap: '12px', marginBottom: '24px' }}>
+                                        {[
+                                            { label: t('rep_totalRevenue') || 'إجمالي الإيرادات', val: fmt(reportData.totalRevenue), color: '#6366F1', icon: TrendingUp },
+                                            { label: t('rep_totalCostOfSales') || 'تكلفة المبيعات', val: fmt(reportData.totalCost), color: '#EF4444', icon: TrendingDown },
+                                            { label: t('rep_grossProfit') || 'مجمل الربح', val: fmt(reportData.totalProfit), color: '#10B981', icon: DollarSign },
+                                            { label: t('rep_profitMargin') || 'هامش الربح الإجمالي', val: `${(reportData.totalMargin || 0).toFixed(2)}%`, color: '#F59E0B', icon: BarChart3 },
+                                        ].map(s => (
+                                            <div key={s.label} style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: `${s.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                    <s.icon size={20} color={s.color} />
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontWeight: 800, fontSize: '1.1rem', color: s.color }}>{s.val}</div>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.label}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Category Profitability Table */}
+                                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', marginBottom: '24px' }}>
+                                        <div style={{ padding: '12px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', fontWeight: 'bold' }}>
+                                            🏷️ {t('rep_categoryProfitability') || 'ربحية تصنيفات المنتجات'}
+                                        </div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr style={{ background: 'var(--bg-secondary)' }}>
+                                                    <th style={thStyle}>{t('category') || 'التصنيف'}</th>
+                                                    <th style={thStyle}>{t('rep_totalSales') || 'المبيعات'}</th>
+                                                    <th style={thStyle}>{t('rep_cogs') || 'التكلفة'}</th>
+                                                    <th style={thStyle}>{t('rep_profit') || 'صافي الربح'}</th>
+                                                    <th style={thStyle}>{t('rep_profitMargin') || 'هامش الربح'}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {reportData.categories?.map(c => (
+                                                    <tr key={c.category} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                        <td style={tdStyle}><strong>{c.category}</strong></td>
+                                                        <td style={tdStyle}>{fmt(c.revenue)}</td>
+                                                        <td style={{ ...tdStyle, color: '#EF4444' }}>{fmt(c.costOfSales)}</td>
+                                                        <td style={{ ...tdStyle, color: '#10B981', fontWeight: 700 }}>{fmt(c.grossProfit)}</td>
+                                                        <td style={{ ...tdStyle, color: '#F59E0B', fontWeight: 700 }}>{(c.margin || 0).toFixed(2)}%</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* Product Profitability Table */}
+                                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+                                        <div style={{ padding: '12px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', fontWeight: 'bold' }}>
+                                            📦 {t('rep_productProfitabilityDetails') || 'ربحية المنتجات الفردية'}
+                                        </div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr style={{ background: 'var(--bg-secondary)' }}>
+                                                    <th style={thStyle}>{t('code') || 'الكود'}</th>
+                                                    <th style={thStyle}>{t('name') || 'المنتج'}</th>
+                                                    <th style={thStyle}>{t('category') || 'التصنيف'}</th>
+                                                    <th style={thStyle}>{t('rep_qtySold') || 'الكمية المباعة'}</th>
+                                                    <th style={thStyle}>{t('rep_salesValue') || 'إيرادات المبيعات'}</th>
+                                                    <th style={thStyle}>{t('rep_cogsValue') || 'تكلفة المبيعات'}</th>
+                                                    <th style={thStyle}>{t('rep_profit') || 'الأرباح'}</th>
+                                                    <th style={thStyle}>{t('rep_profitMargin') || 'الهامش'}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {reportData.products?.map(p => (
+                                                    <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                        <td style={{ ...tdStyle, color: 'var(--text-muted)' }}>{p.code}</td>
+                                                        <td style={tdStyle}><strong>{p.name}</strong></td>
+                                                        <td style={tdStyle}>{p.category || '-'}</td>
+                                                        <td style={tdStyle}>{p.qtySold}</td>
+                                                        <td style={tdStyle}>{fmt(p.revenue)}</td>
+                                                        <td style={{ ...tdStyle, color: '#EF4444' }}>{fmt(p.costOfSales)}</td>
+                                                        <td style={{ ...tdStyle, color: '#10B981', fontWeight: 700 }}>{fmt(p.grossProfit)}</td>
+                                                        <td style={{ ...tdStyle, color: '#F59E0B', fontWeight: 700 }}>{(p.margin || 0).toFixed(2)}%</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── Cash Flow report ── */}
+                            {activeReport === 'cash_flow' && reportData && reportData.type === 'cash_flow' && (
+                                <div>
+                                    <h2 style={{ marginBottom: '16px', color: 'var(--text-primary)' }}>💸 {t('rep_cash_flow') || 'تقرير حركة التدفقات النقدية والسيولة'}</h2>
+                                    
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+                                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '14px 16px' }}>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('rep_startingBalance') || 'السيولة أول المدة'}</div>
+                                            <div style={{ fontWeight: 800, fontSize: '1.25rem', color: '#6366F1', marginTop: '4px' }}>{fmt(reportData.startingBalance)}</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                                {t('cb_cash') || 'الصندوق'}: {fmt(reportData.startingCash)} | {t('cb_bank') || 'البنك'}: {fmt(reportData.startingBank)}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '14px 16px' }}>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('rep_totalCashInflow') || 'إجمالي المقبوضات (الواردة)'}</div>
+                                            <div style={{ fontWeight: 800, fontSize: '1.25rem', color: '#10B981', marginTop: '4px' }}>{fmt(reportData.totalReceipts)}</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                                {t('cb_cash') || 'الصندوق'}: {fmt(reportData.cashInflow)} | {t('cb_bank') || 'البنك'}: {fmt(reportData.bankInflow)}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '14px 16px' }}>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('rep_totalCashOutflow') || 'إجمالي المدفوعات (الصادرة)'}</div>
+                                            <div style={{ fontWeight: 800, fontSize: '1.25rem', color: '#EF4444', marginTop: '4px' }}>{fmt(reportData.totalOutflow)}</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                                {t('cb_cash') || 'الصندوق'}: {fmt(reportData.cashOutflow)} | {t('cb_bank') || 'البنك'}: {fmt(reportData.bankOutflow)}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '14px 16px' }}>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('rep_endingBalance') || 'السيولة آخر المدة'}</div>
+                                            <div style={{ fontWeight: 800, fontSize: '1.25rem', color: '#F59E0B', marginTop: '4px' }}>{fmt(reportData.endingBalance)}</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                                {t('rep_netChangeFlow') || 'صافي التدفق'}: <span style={{ color: reportData.netChange >= 0 ? '#10B981' : '#EF4444', fontWeight: 'bold' }}>{reportData.netChange >= 0 ? '+' : ''}{fmt(reportData.netChange)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Breakdowns & Pie Chart of Expenses */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: (reportData.expensesByCategory?.length || 0) > 0 ? '1fr 1fr' : '1fr', gap: '20px', marginBottom: '24px' }}>
+                                        {/* Statement table */}
+                                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+                                            <div style={{ padding: '12px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', fontWeight: 'bold' }}>
+                                                📊 {t('rep_cashFlowSummaryStatement') || 'بيان ملخص التدفق النقدي والسيولة'}
+                                            </div>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                <tbody>
+                                                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                                                        <td style={tdStyle}><strong>{t('rep_startingBalance') || 'رصيد النقدية والسيولة أول المدة'}</strong></td>
+                                                        <td style={{ ...tdStyle, fontWeight: 700, textAlign: 'left' }}>{fmt(reportData.startingBalance)}</td>
+                                                    </tr>
+                                                    <tr style={{ borderBottom: '1px solid var(--border)', background: '#F0FDF4' }}>
+                                                        <td style={tdStyle}>➕ {t('rep_cashInflowCustomers') || 'مقبوضات نقدية من المبيعات والعملاء'}</td>
+                                                        <td style={{ ...tdStyle, color: '#10B981', textAlign: 'left' }}>+{fmt(reportData.totalReceipts)}</td>
+                                                    </tr>
+                                                    <tr style={{ borderBottom: '1px solid var(--border)', background: '#FDF2F2' }}>
+                                                        <td style={tdStyle}>➖ {t('rep_cashOutflowSuppliers') || 'مدفوعات نقدية للمشتريات والموردين'}</td>
+                                                        <td style={{ ...tdStyle, color: '#EF4444', textAlign: 'left' }}>-{fmt(reportData.totalPayments)}</td>
+                                                    </tr>
+                                                    <tr style={{ borderBottom: '1px solid var(--border)', background: '#FDF2F2' }}>
+                                                        <td style={tdStyle}>➖ {t('rep_cashOutflowExpenses') || 'مصروفات تشغيلية وإدارية مدفوعة'}</td>
+                                                        <td style={{ ...tdStyle, color: '#EF4444', textAlign: 'left' }}>-{fmt(reportData.totalExpenses)}</td>
+                                                    </tr>
+                                                    <tr style={{ borderBottom: '1px solid var(--border)', background: '#FDF2F2' }}>
+                                                        <td style={tdStyle}>➖ {t('rep_cashOutflowSalaries') || 'رواتب وأجور موظفين مدفوعة'}</td>
+                                                        <td style={{ ...tdStyle, color: '#EF4444', textAlign: 'left' }}>-{fmt(reportData.totalSalaries)}</td>
+                                                    </tr>
+                                                    <tr style={{ borderBottom: '1px solid var(--border)', fontWeight: 700, background: 'var(--bg-secondary)' }}>
+                                                        <td style={tdStyle}>📊 {t('rep_endingBalance') || 'إجمالي النقدية والسيولة آخر المدة'}</td>
+                                                        <td style={{ ...tdStyle, textAlign: 'left' }}>{fmt(reportData.endingBalance)}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        {/* Expenses Pie Chart */}
+                                        {reportData.expensesByCategory.length > 0 && (
+                                            <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                <h3 style={{ marginBottom: '12px', alignSelf: 'flex-start', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>🏷️ {t('rep_expenseDistribution') || 'توزيع بنود المصروفات'}</h3>
+                                                <ResponsiveContainer width="100%" height={200}>
+                                                    <RechartsPie>
+                                                        <Pie
+                                                            data={reportData.expensesByCategory}
+                                                            cx="50%"
+                                                            cy="50%"
+                                                            innerRadius={50}
+                                                            outerRadius={80}
+                                                            paddingAngle={3}
+                                                            dataKey="value"
+                                                        >
+                                                            {reportData.expensesByCategory.map((entry, index) => (
+                                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                            ))}
+                                                        </Pie>
+                                                        <Tooltip formatter={(v) => fmt(v)} />
+                                                    </RechartsPie>
+                                                </ResponsiveContainer>
+                                                {/* Legend */}
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center', marginTop: '10px', fontSize: '0.75rem' }}>
+                                                    {reportData.expensesByCategory.map((entry, index) => (
+                                                        <span key={index} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                            <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: COLORS[index % COLORS.length] }} />
+                                                            {entry.name}: {fmt(entry.value)}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* ── Customer / Supplier Statement ── */}
-                            {(activeReport === 'customer_statement' || activeReport === 'supplier_statement') && reportData.statement && (
+                            {(activeReport === 'customer_statement' || activeReport === 'supplier_statement') && reportData && (reportData.type === 'customer_statement' || reportData.type === 'supplier_statement') && reportData.statement && (
                                 <div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                                         <div>
@@ -887,7 +1638,7 @@ function Reports() {
                             )}
 
                             {/* ── Trial Balance ── */}
-                            {activeReport === 'trial_balance' && reportData && (
+                            {activeReport === 'trial_balance' && reportData && reportData.type === 'trial_balance' && (
                                 <div>
                                     <h2 style={{ marginBottom: '16px' }}>📋 {t('rep_trialBalance') || 'Trial Balance'}</h2>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
