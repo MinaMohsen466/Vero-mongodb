@@ -705,7 +705,7 @@ function Reports() {
         { id: 'profit_loss', label: t('rep_profitLoss') || 'Profit & Loss', icon: BarChart2 },
         { id: 'detailed_inventory', label: t('rep_inventory_cogs') || 'تقرير المخزون وحركته وتكلفة المبيعات', icon: ShoppingBag },
         { id: 'aging_report', label: t('rep_aging_report') || 'تقرير أعمار الديون', icon: Calendar },
-        { id: 'product_profitability', label: t('rep_product_profitability') || 'تقرير ربحية المنتجات والتصنيفات', icon: BarChart3 },
+        // { id: 'product_profitability', label: t('rep_product_profitability') || 'تقرير ربحية المنتجات والتصنيفات', icon: BarChart3 },
         { id: 'cash_flow', label: t('rep_cash_flow') || 'تقرير حركة التدفقات النقدية والسيولة', icon: DollarSign },
         { id: 'trial_balance', label: t('rep_trialBalance') || 'Trial Balance', icon: FileText },
     ];

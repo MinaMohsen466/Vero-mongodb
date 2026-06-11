@@ -587,74 +587,84 @@ function SalesInvoices() {
             {/* Create/Edit Modal */}
             <Modal isOpen={showModal} onClose={closeModal} title={editMode ? t('sinv_edit') : t('sinv_add')} size="lg" footer={<><button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel')} (Esc)</button><button type="submit" form="sales-invoice-form" className="btn btn-primary" disabled={saving}>{saving ? t('savingProgress') : t('save') + ' (Ctrl+S)'}</button></>}>
                 {error && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{error}</div>}
-                <form id="sales-invoice-form" onSubmit={handleSubmit}>
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label className="form-label">{t('sinv_customer')}</label>
-                            <SearchableSelect
-                                options={customers.map(c => ({ value: String(c.id), label: c.name }))}
-                                value={formData.customer_id ? String(formData.customer_id) : ''}
-                                onChange={(val) => setFormData({ ...formData, customer_id: val })}
-                                placeholder={t('sinv_selectCustomer')}
-                                emptyLabel={t('sinv_selectCustomer')}
-                            />
+                <form id="sales-invoice-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    
+                    {/* Card 1: معلومات الفاتورة الأساسية */}
+                    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ fontSize: '0.88rem', fontWeight: '700', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', paddingBottom: '6px', marginBottom: '4px' }}>
+                            📄 {t('invoice_details') || 'معلومات الفاتورة الأساسية'}
                         </div>
-                        <div className="form-group"><label className="form-label">{t('inv_date')}</label><input type="date" className="form-input" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} /></div>
-                        <div className="form-group"><label className="form-label">{t('inv_dueDate')}</label><input type="date" className="form-input" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} /></div>
-                    </div>
-
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label className="form-label">{t('inv_status')}</label>
-                            <select className="form-select" value={formData.status} onChange={(e) => {
-                                const newStatus = e.target.value;
-                                let newPaid = formData.paid;
-                                if (newStatus === 'paid') {
-                                    newPaid = calculateTotals().total;
-                                } else if (newStatus === 'pending') {
-                                    newPaid = 0;
-                                }
-                                setFormData({ ...formData, status: newStatus, paid: newPaid });
-                            }}>
-                                <option value="paid">{t('inv_paid')}</option>
-                                <option value="partial">{t('inv_partial')}</option>
-                                <option value="pending">{t('inv_credit')}</option>
-                            </select>
-                        </div>
-                        {(formData.status === 'paid' || formData.status === 'partial') && (
-                            <div className="form-group">
-                                <label className="form-label">{t('inv_paymentMethod')}</label>
-                                <select className="form-select" value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}>
-                                    <option value="cash">{t('inv_cash')}</option>
-                                    <option value="bank">{t('inv_bank')}</option>
-                                </select>
-                            </div>
-                        )}
-                        {formData.status === 'partial' && (
-                            <div className="form-group">
-                                <label className="form-label">{t('paid_amount')} *</label>
-                                <input 
-                                    type="number" 
-                                    className="form-input" 
-                                    value={formData.paid} 
-                                    onChange={(e) => setFormData({ ...formData, paid: parseFloat(e.target.value) || 0 })} 
-                                    step="0.250"
-                                    min="0"
-                                    required 
+                        <div className="form-row" style={{ margin: 0, gap: '16px' }}>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label className="form-label" style={{ fontWeight: '600' }}>{t('sinv_customer')}</label>
+                                <SearchableSelect
+                                    options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+                                    value={formData.customer_id ? String(formData.customer_id) : ''}
+                                    onChange={(val) => setFormData({ ...formData, customer_id: val })}
+                                    placeholder={t('sinv_selectCustomer')}
+                                    emptyLabel={t('sinv_selectCustomer')}
                                 />
                             </div>
-                        )}
+                            <div className="form-group" style={{ marginBottom: 0 }}><label className="form-label" style={{ fontWeight: '600' }}>{t('inv_date')}</label><input type="date" className="form-input" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} style={{ height: '40px' }} /></div>
+                            <div className="form-group" style={{ marginBottom: 0 }}><label className="form-label" style={{ fontWeight: '600' }}>{t('inv_dueDate')}</label><input type="date" className="form-input" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} style={{ height: '40px' }} /></div>
+                        </div>
+
+                        <div className="form-row" style={{ margin: 0, gap: '16px' }}>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label className="form-label" style={{ fontWeight: '600' }}>{t('inv_status')}</label>
+                                <select className="form-select" value={formData.status} onChange={(e) => {
+                                    const newStatus = e.target.value;
+                                    let newPaid = formData.paid;
+                                    if (newStatus === 'paid') {
+                                        newPaid = calculateTotals().total;
+                                    } else if (newStatus === 'pending') {
+                                        newPaid = 0;
+                                    }
+                                    setFormData({ ...formData, status: newStatus, paid: newPaid });
+                                }} style={{ height: '40px' }}>
+                                    <option value="paid">{t('inv_paid')}</option>
+                                    <option value="partial">{t('inv_partial')}</option>
+                                    <option value="pending">{t('inv_credit')}</option>
+                                </select>
+                            </div>
+                            {(formData.status === 'paid' || formData.status === 'partial') && (
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label" style={{ fontWeight: '600' }}>{t('inv_paymentMethod')}</label>
+                                    <select className="form-select" value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })} style={{ height: '40px' }}>
+                                        <option value="cash">{t('inv_cash')}</option>
+                                        <option value="bank">{t('inv_bank')}</option>
+                                    </select>
+                                </div>
+                            )}
+                            {formData.status === 'partial' && (
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label" style={{ fontWeight: '600' }}>{t('paid_amount')} *</label>
+                                    <input 
+                                        type="number" 
+                                        className="form-input" 
+                                        value={formData.paid} 
+                                        onChange={(e) => setFormData({ ...formData, paid: parseFloat(e.target.value) || 0 })} 
+                                        step="0.250"
+                                        min="0"
+                                        required 
+                                        style={{ height: '40px' }}
+                                    />
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    <div style={{ marginTop: '20px' }}>
-                        <div className="flex justify-between items-center mb-2"><h4>{t('inv_product')}</h4></div>
-                        <div className="table-container">
+                    {/* Card 2: أصناف الفاتورة */}
+                    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px' }}>
+                        <div style={{ fontSize: '0.88rem', fontWeight: '700', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', paddingBottom: '6px', marginBottom: '12px' }}>
+                            📦 {t('inv_product') || 'أصناف الفاتورة'}
+                        </div>
+                        <div className="table-container" style={{ margin: 0 }}>
                             <table>
                                 <thead><tr><th style={{ width: '200px' }}>{t('inv_product')}</th><th>{t('description')}</th><th style={{ width: '120px' }}>{t('inv_quantity')}</th><th style={{ width: '100px' }}>{t('inv_unitPrice')}</th>{settings?.general?.enable_product_color === 'yes' && <th style={{ width: '100px' }}>{t('color') || 'Color'}</th>}<th style={{ width: '100px' }}>{t('inv_itemTotal')}</th><th style={{ width: '50px' }}></th></tr></thead>
                                 <tbody>
                                     {formData.items.map((item, index) => {
                                         const product = item.product_id ? products.find(p => p.id === parseInt(item.product_id)) : null;
-                                        const stockInfo = product ? ` (${t('inv_available') || 'Available'}: ${product.stock_quantity || 0})` : '';
                                         const showColorField = settings?.general?.enable_product_color === 'yes' && isColorUnit(product?.unit);
                                         return (
                                             <tr key={index}>
@@ -667,18 +677,18 @@ function SalesInvoices() {
                                                         emptyLabel={t('inv_selectProduct')}
                                                     />
                                                 </td>
-                                                <td><input type="text" className="form-input" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} style={{ margin: 0 }} /></td>
-                                                <td><input type="number" className="form-input" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} min="1" step="1" style={{ margin: 0 }} /></td>
+                                                <td><input type="text" className="form-input" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} style={{ margin: 0, height: '38px' }} /></td>
+                                                <td><input type="number" className="form-input" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} min="1" step="1" style={{ margin: 0, height: '38px' }} /></td>
                                                 <td>
-                                                    <input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.25" style={{ margin: 0 }} />
+                                                    <input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.25" style={{ margin: 0, height: '38px' }} />
                                                     {calculateItemTotal(item).finalPrice < item.unit_price && (
                                                         <span style={{ fontSize: '0.75rem', color: '#10b981', display: 'block', marginTop: '4px', fontWeight: 600 }}>
                                                             {formatCurrency(calculateItemTotal(item).finalPrice)}
                                                         </span>
                                                     )}
                                                 </td>
-                                                {showColorField && <td><input type="text" className="form-input" placeholder={t('color') || 'Color'} value={item.color || ''} onChange={(e) => handleItemChange(index, 'color', e.target.value)} style={{ margin: 0 }} /></td>}
-                                                <td className="font-bold">
+                                                {showColorField && <td><input type="text" className="form-input" placeholder={t('color') || 'Color'} value={item.color || ''} onChange={(e) => handleItemChange(index, 'color', e.target.value)} style={{ margin: 0, height: '38px' }} /></td>}
+                                                <td className="font-bold" style={{ whiteSpace: 'nowrap' }}>
                                                     {formatCurrency(calculateItemTotal(item).finalTotal)}
                                                     {calculateItemTotal(item).appliedOffer && (
                                                         <span style={{ display: 'block', fontSize: '0.65rem', background: '#10B981', color: 'white', padding: '1px 4px', borderRadius: 4, marginTop: 2, width: 'fit-content' }}>
@@ -686,49 +696,61 @@ function SalesInvoices() {
                                                         </span>
                                                     )}
                                                 </td>
-                                                <td><button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => removeItem(index)}><X size={16} /></button></td>
+                                                <td><button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => removeItem(index)} style={{ padding: '6px' }}><X size={16} /></button></td>
                                             </tr>
                                         );
                                     })}
                                 </tbody>
                             </table>
                         </div>
-                        <button type="button" className="btn btn-secondary" onClick={addItem} style={{ marginTop: '10px' }}><Plus size={16} /> {t('inv_addItem')}</button>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '20px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '300px' }}>
-                                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{t('coupon') || 'Coupon'}:</span>
-                                <div style={{ display: 'flex', flex: 1, gap: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', flexWrap: 'wrap', gap: '12px' }}>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                <button type="button" className="btn btn-secondary" onClick={addItem}><Plus size={16} /> {t('inv_addItem')}</button>
+                                
+                                {/* Coupon Application UI */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '260px', border: '1px solid var(--border)', borderRadius: '8px', padding: '2px 8px', background: 'var(--bg-primary)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>🏷️ {t('coupon') || 'Coupon'}:</span>
                                     <input
                                         type="text"
                                         className="form-input"
-                                        placeholder={t('coupon_code_placeholder') || 'Code...'}
+                                        placeholder={t('coupon_code_placeholder') || 'كود...'}
                                         value={couponCode}
                                         onChange={e => setCouponCode(e.target.value)}
                                         disabled={!!appliedCoupon}
-                                        style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem', letterSpacing: 1, textTransform: 'uppercase', margin: 0 }}
+                                        style={{ flex: 1, padding: '4px 6px', fontSize: '0.8rem', letterSpacing: 1, textTransform: 'uppercase', margin: 0, height: '28px', border: 'none', background: 'transparent' }}
                                     />
                                     {!appliedCoupon ? (
-                                        <button type="button" onClick={handleApplyCoupon} style={{ padding: '4px 10px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6, fontSize: '0.85rem', cursor: 'pointer' }}>
-                                            {t('apply_coupon') || 'Apply'}
+                                        <button type="button" onClick={handleApplyCoupon} style={{ padding: '2px 8px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 4, fontSize: '0.75rem', cursor: 'pointer', height: '26px' }}>
+                                            {t('apply_coupon') || 'تطبيق'}
                                         </button>
                                     ) : (
-                                        <button type="button" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} style={{ padding: '4px 8px', background: 'var(--error, #ef4444)', color: '#fff', border: 'none', borderRadius: 6, fontSize: '0.85rem', cursor: 'pointer' }}>
-                                            <X size={14} />
+                                        <button type="button" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} style={{ padding: '2px 6px', background: 'var(--error, #ef4444)', color: '#fff', border: 'none', borderRadius: 4, fontSize: '0.75rem', cursor: 'pointer', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <X size={12} />
                                         </button>
                                     )}
                                 </div>
                             </div>
-                            <div style={{ textAlign: 'left' }}>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                                 {appliedCoupon && (
-                                    <div style={{ fontSize: '0.85rem', color: '#10b981', marginBottom: 5 }}>
-                                        ✓ {t('coupon_applied_success') || 'Coupon Active'} (-{calculateTotals().couponDiscountAmount.toFixed(3)})
+                                    <div style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 600 }}>
+                                        ✓ {t('coupon_applied_success') || 'خصم الكوبون'}: -{formatCurrency(calculateTotals().couponDiscountAmount)}
                                     </div>
                                 )}
-                                <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{t('inv_total')}: {formatCurrency(calculateTotals().total)}</div>
+                                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--primary)' }}>
+                                    {t('inv_total')}: {formatCurrency(calculateTotals().total)}
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div className="form-group mt-4"><label className="form-label">{t('notes')}</label><textarea className="form-textarea" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} style={{ minHeight: '60px' }} /></div>
+
+                    {/* Card 3: الملاحظات */}
+                    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px' }}>
+                        <div className="form-group" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label className="form-label" style={{ fontWeight: '600', marginBottom: 0 }}>✍️ {t('notes')}</label>
+                            <textarea className="form-textarea" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} style={{ minHeight: '80px', resize: 'vertical' }} />
+                        </div>
+                    </div>
                 </form>
             </Modal>
 

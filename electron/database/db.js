@@ -176,6 +176,8 @@ class AppDatabase {
             if (!hasPaymentAccount) this.exec("ALTER TABLE invoices ADD COLUMN payment_account_id INTEGER");
             const hasInvJournal = columns.some(col => col.name === 'journal_entry_id');
             if (!hasInvJournal) this.exec("ALTER TABLE invoices ADD COLUMN journal_entry_id INTEGER");
+            const hasImage = columns.some(col => col.name === 'image');
+            if (!hasImage) this.exec("ALTER TABLE invoices ADD COLUMN image TEXT");
         } catch (e) { console.log('Invoices migration check:', e.message); }
 
         try {
@@ -912,6 +914,16 @@ class AccountsRepo {
 class ProductsRepo {
     constructor(db) { this.db = db; }
     getAll() { return this.db.all('SELECT * FROM products ORDER BY name'); }
+    getAllSortedBySales() {
+        return this.db.all(`
+            SELECT p.*, COALESCE(SUM(ii.quantity), 0) as total_sold
+            FROM products p
+            LEFT JOIN invoice_items ii ON p.id = ii.product_id
+            LEFT JOIN invoices i ON ii.invoice_id = i.id AND i.type = 'sales'
+            GROUP BY p.id
+            ORDER BY total_sold DESC, p.name ASC
+        `);
+    }
     create(p) { try { const count = this.db.get('SELECT COUNT(*) as count FROM products').count; const code = p.code || `P${String(count + 1).padStart(4, '0')}`; const supplierIdsJson = Array.isArray(p.supplier_ids) ? JSON.stringify(p.supplier_ids) : '[]'; const r = this.db.run("INSERT INTO products (code, name, description, unit, category, purchase_price, sale_price, stock_quantity, min_stock, image, supplier_id, supplier_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [code, p.name, p.description, p.unit, p.category, p.purchase_price || 0, p.sale_price || 0, p.stock_quantity || 0, p.min_stock || 0, p.image || null, p.supplier_id !== undefined ? p.supplier_id : null, supplierIdsJson]); return { success: true, id: r.lastInsertRowid }; } catch (e) { return { success: false, error: e.message }; } }
     update(p) { try { const supplierIdsJson = Array.isArray(p.supplier_ids) ? JSON.stringify(p.supplier_ids) : '[]'; this.db.run("UPDATE products SET name=?, description=?, unit=?, category=?, purchase_price=?, sale_price=?, stock_quantity=?, min_stock=?, image=?, supplier_id=?, supplier_ids=?, is_active=? WHERE id=?", [p.name, p.description, p.unit, p.category, p.purchase_price, p.sale_price, p.stock_quantity, p.min_stock, p.image || null, p.supplier_id !== undefined ? p.supplier_id : null, supplierIdsJson, p.is_active ? 1 : 0, p.id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
     delete(id) { try { this.db.run('DELETE FROM products WHERE id = ?', [id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
@@ -1061,8 +1073,8 @@ class InvoicesRepo {
             const n = (v) => v === undefined ? null : v;
 
             const r = this.db.run(
-                "INSERT INTO invoices (invoice_number, type, customer_id, supplier_id, date, due_date, subtotal, discount, tax, total, paid, status, payment_method, payment_account_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [num, inv.type, n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.paid) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.payment_account_id), n(inv.notes), n(inv.created_by)]
+                "INSERT INTO invoices (invoice_number, type, customer_id, supplier_id, date, due_date, subtotal, discount, tax, total, paid, status, payment_method, payment_account_id, notes, created_by, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [num, inv.type, n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.paid) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.payment_account_id), n(inv.notes), n(inv.created_by), n(inv.image)]
             );
             const invId = Number(r.lastInsertRowid);
 
@@ -1139,8 +1151,8 @@ class InvoicesRepo {
             }
 
             // 4. Update invoice header
-            this.db.run("UPDATE invoices SET customer_id=?, supplier_id=?, date=?, due_date=?, subtotal=?, discount=?, tax=?, total=?, paid=?, status=?, payment_method=?, notes=? WHERE id=?",
-                [n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.paid) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.notes), invId]);
+            this.db.run("UPDATE invoices SET customer_id=?, supplier_id=?, date=?, due_date=?, subtotal=?, discount=?, tax=?, total=?, paid=?, status=?, payment_method=?, notes=?, image=? WHERE id=?",
+                [n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.paid) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.notes), n(inv.image), invId]);
 
             // 5. Delete old items and insert new ones
             this.db.run("DELETE FROM invoice_items WHERE invoice_id = ?", [invId]);

@@ -188,7 +188,7 @@ function POS() {
         setLoading(true);
         try {
             const [prods, custs, sett, offers, supps] = await Promise.all([
-                window.api.products.getAll(),
+                window.api.products.getAllSortedBySales(),
                 window.api.customers.getAll(),
                 window.api.settings.getAll(),
                 window.api.offers.getActive(),
@@ -209,7 +209,7 @@ function POS() {
     const refreshStock = async (showIndicator = true) => {
         if (showIndicator) setRefreshing(true);
         try {
-            const prods = await window.api.products.getAll();
+            const prods = await window.api.products.getAllSortedBySales();
             const active = (prods || []).filter(p => p.is_active);
             setAllProducts(active);
             setProducts(active);
@@ -969,8 +969,14 @@ function POS() {
 
             {/* ── Receipt Modal ───────────────────────────────────────────── */}
             {showReceipt && lastReceipt && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                    <div style={{ background: 'var(--bg-primary)', borderRadius: '16px', padding: '0', width: '420px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column' }}>
+                <div 
+                    onClick={() => setShowReceipt(false)}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+                >
+                    <div 
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ background: 'var(--bg-primary)', borderRadius: '16px', padding: '0', width: '420px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column' }}
+                    >
                         {/* Header Success Message */}
                         <div style={{ textAlign: 'center', paddingTop: '22px', paddingBottom: '12px', paddingLeft: '22px', paddingRight: '22px', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(59, 130, 246, 0.08))', borderBottom: '1px solid var(--border)' }}>
                             <div style={{ width: '56px', height: '56px', background: '#D1FAE5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>

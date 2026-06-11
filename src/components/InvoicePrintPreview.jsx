@@ -10,6 +10,7 @@ import { useAuth, isColorUnit } from '../App';
 function InvoicePrintPreview({ invoice, settings, onClose, type = 'sales' }) {
     const { t } = useAuth();
     const [logoBase64, setLogoBase64] = useState('');
+    const [activeTab, setActiveTab] = useState('invoice');
 
     const companyName = settings?.company?.company_name || t('companyName') || 'Company Name';
     const companyAddress = settings?.company?.company_address || '';
@@ -673,23 +674,59 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
             <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ maxWidth: 920, height: '92vh', display: 'flex', flexDirection: 'column' }}>
                 <div className="modal-header">
                     <h3 className="modal-title">{t('preview') || 'Preview'} — {invoice.invoice_number}</h3>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <button className="btn btn-primary btn-sm" onClick={handlePrint}>🖨️ {t('print') || 'Print'}</button>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        {invoice.image && (
+                            <div style={{ display: 'flex', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '8px', padding: '2px', gap: '4px' }}>
+                                <button 
+                                    className={`btn btn-sm ${activeTab === 'invoice' ? 'btn-primary' : 'btn-ghost'}`}
+                                    onClick={() => setActiveTab('invoice')}
+                                    style={{ fontSize: '0.8rem', padding: '4px 12px', margin: 0 }}
+                                >
+                                    📄 {t('invoice_preview') || 'معاينة الفاتورة'}
+                                </button>
+                                <button 
+                                    className={`btn btn-sm ${activeTab === 'attachment' ? 'btn-primary' : 'btn-ghost'}`}
+                                    onClick={() => setActiveTab('attachment')}
+                                    style={{ fontSize: '0.8rem', padding: '4px 12px', margin: 0 }}
+                                >
+                                    🖼️ {t('invoice_attachment') || 'المرفق'}
+                                </button>
+                            </div>
+                        )}
+                        {activeTab === 'invoice' && (
+                            <button className="btn btn-primary btn-sm" onClick={handlePrint}>🖨️ {t('print') || 'Print'}</button>
+                        )}
                         <button className="modal-close" onClick={onClose}>✕</button>
                     </div>
                 </div>
 
-                <div className="modal-body" style={{ flex: 1, overflow: 'auto', padding: 0, background: '#f0f0f0' }}>
-                    <div style={{ maxWidth: previewWidth, margin: '20px auto', background: 'white', color: '#1f2937', padding: isThermo ? '20px 15px' : (paperSize === 'A3' ? '40px' : paperSize === 'A5' ? '20px' : '28px'), boxShadow: '0 4px 20px rgba(0,0,0,.12)', borderRadius: 6 }}>
-                        <HeaderLayout />
-                        <TableLayout />
-                        <TotalsLayout />
-                        <BottomLayout />
+                <div className="modal-body" style={{ flex: 1, overflow: 'auto', padding: 0, background: 'var(--bg-secondary)' }}>
+                    {activeTab === 'invoice' ? (
+                        <div style={{ maxWidth: previewWidth, margin: '20px auto', background: 'white', color: '#1f2937', padding: isThermo ? '20px 15px' : (paperSize === 'A3' ? '40px' : paperSize === 'A5' ? '20px' : '28px'), boxShadow: '0 4px 20px rgba(0,0,0,.12)', borderRadius: 6 }}>
+                            <HeaderLayout />
+                            <TableLayout />
+                            <TotalsLayout />
+                            <BottomLayout />
 
-                        <div style={{ marginTop: 18, textAlign: 'center', paddingTop: 14, borderTop: '1px solid #eee' }}>
-                            <button className="btn btn-primary" onClick={handlePrint} style={{ padding: '10px 30px', fontSize: 14 }}>🖨️ {t('print_invoice') || 'Print Invoice'}</button>
+                            <div style={{ marginTop: 18, textAlign: 'center', paddingTop: 14, borderTop: '1px solid #eee' }}>
+                                <button className="btn btn-primary" onClick={handlePrint} style={{ padding: '10px 30px', fontSize: 14 }}>🖨️ {t('print_invoice') || 'Print Invoice'}</button>
+                            </div>
                         </div>
-                    </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100%', padding: '24px', gap: '16px' }}>
+                            <div style={{ maxWidth: '100%', maxHeight: '70vh', border: '1px solid var(--border)', borderRadius: '12px', padding: '8px', background: 'var(--bg-primary)', boxShadow: 'var(--shadow-md)', overflow: 'auto' }}>
+                                <img src={invoice.image} alt="Invoice Attachment" style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain', display: 'block', borderRadius: '8px' }} />
+                            </div>
+                            <a 
+                                href={invoice.image} 
+                                download={`attachment_${invoice.invoice_number}.jpg`} 
+                                className="btn btn-primary" 
+                                style={{ textDecoration: 'none' }}
+                            >
+                                📥 {t('download_attachment') || 'تحميل المرفق'}
+                            </a>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -31,7 +31,7 @@ function PurchaseInvoices() {
 
     const emptyForm = () => ({
         supplier_id: '', date: new Date().toISOString().split('T')[0], due_date: '', notes: '',
-        status: 'paid', payment_method: 'cash', payment_account_id: '', paid: 0,
+        status: 'paid', payment_method: 'cash', payment_account_id: '', paid: 0, image: '',
         items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }]
     });
 
@@ -161,6 +161,7 @@ function PurchaseInvoices() {
                 status: formData.status,
                 payment_method: (formData.status === 'paid' || formData.status === 'partial') ? formData.payment_method : 'credit',
                 payment_account_id: formData.payment_account_id ? parseInt(formData.payment_account_id) : null,
+                image: formData.image || null,
                 items: validItems.map(item => ({
                     product_id: item.product_id ? parseInt(item.product_id) : null,
                     description: item.description,
@@ -277,6 +278,7 @@ function PurchaseInvoices() {
                 payment_method: invoice.payment_method || 'cash',
                 payment_account_id: invoice.payment_account_id != null ? String(invoice.payment_account_id) : '',
                 paid: invoice.paid || 0,
+                image: invoice.image || '',
                 items: mappedItems
             });
 
@@ -315,6 +317,51 @@ function PurchaseInvoices() {
         setError('');
         setEditMode(false);
         setEditingId(null);
+    };
+
+    const handleImageUpload = async () => {
+        try {
+            const result = await window.api.dialog.openFile({
+                properties: ['openFile'],
+                filters: [{ name: 'Images', extensions: ['jpg', 'png', 'jpeg', 'webp'] }]
+            });
+            if (!result.canceled && result.filePaths.length > 0) {
+                const base64 = await window.api.file.readAsBase64(result.filePaths[0]);
+                if (base64) {
+                    const img = new Image();
+                    img.src = base64;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        const MAX_DIMENSION = 800;
+
+                        if (width > height) {
+                            if (width > MAX_DIMENSION) {
+                                height = Math.round(height * (MAX_DIMENSION / width));
+                                width = MAX_DIMENSION;
+                            }
+                        } else {
+                            if (height > MAX_DIMENSION) {
+                                width = Math.round(width * (MAX_DIMENSION / height));
+                                height = MAX_DIMENSION;
+                            }
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+                        setFormData(prev => ({ ...prev, image: compressedBase64 }));
+                    };
+                }
+            }
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            toast.error(t('errorOccurred') || 'An error occurred while uploading the image');
+        }
     };
 
     const formatCurrency = (amount) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (settings.general?.currency_symbol || (t('currency_kd') || 'KD'));
@@ -430,7 +477,20 @@ function PurchaseInvoices() {
                                 <tbody>
                                     {filteredInvoices.map(inv => (
                                         <tr key={inv.id}>
-                                            <td className="font-bold">{inv.invoice_number}</td>
+                                            <td className="font-bold">
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    {inv.invoice_number}
+                                                    {inv.image && (
+                                                        <span 
+                                                            title={t('invoice_attachment') || 'يحتوي على مرفق صور'}
+                                                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', fontSize: '0.85rem' }}
+                                                            onClick={(e) => { e.stopPropagation(); viewInvoice(inv.id); }}
+                                                        >
+                                                            📎
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
                                             <td>{inv.supplier_name || '-'}</td>
                                             <td>{new Date(inv.date).toLocaleDateString('en-GB')}</td>
                                             <td className="font-bold">{formatCurrency(inv.total)}</td>
@@ -472,68 +532,79 @@ function PurchaseInvoices() {
             {/* Create/Edit Modal */}
             <Modal isOpen={showModal} onClose={closeModal} title={editMode ? t('pinv_edit') || 'Edit Purchase Invoice' : t('pinv_add') || 'New Purchase Invoice'} size="lg" footer={<><button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel') || 'Cancel'} (Esc)</button><button type="submit" form="purchase-invoice-form" className="btn btn-primary" disabled={saving}>{saving ? (t('savingProgress') || 'Saving...') : (t('save') || 'Save') + ' (Ctrl+S)'}</button></>}>
                 {error && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{error}</div>}
-                <form id="purchase-invoice-form" onSubmit={handleSubmit}>
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label className="form-label">{t('pinv_supplier')}</label>
-                            <SearchableSelect
-                                options={suppliers.map(s => ({ value: String(s.id), label: s.name }))}
-                                value={formData.supplier_id ? String(formData.supplier_id) : ''}
-                                onChange={(val) => setFormData({ ...formData, supplier_id: val })}
-                                placeholder={t('pinv_selectSupplier')}
-                                emptyLabel={t('pinv_selectSupplier')}
-                            />
+                <form id="purchase-invoice-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                    
+                    {/* Card 1: معلومات الفاتورة الأساسية */}
+                    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ fontSize: '0.88rem', fontWeight: '700', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', paddingBottom: '6px', marginBottom: '4px' }}>
+                            📄 {t('invoice_details') || 'معلومات الفاتورة الأساسية'}
                         </div>
-                        <div className="form-group"><label className="form-label">{t('inv_date')}</label><input type="date" className="form-input" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} /></div>
-                        <div className="form-group"><label className="form-label">{t('inv_dueDate')}</label><input type="date" className="form-input" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} /></div>
-                    </div>
-
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label className="form-label">{t('inv_status')}</label>
-                            <select className="form-select" value={formData.status} onChange={(e) => {
-                                const newStatus = e.target.value;
-                                let newPaid = formData.paid;
-                                if (newStatus === 'paid') {
-                                    newPaid = calculateTotals().total;
-                                } else if (newStatus === 'pending') {
-                                    newPaid = 0;
-                                }
-                                setFormData({ ...formData, status: newStatus, paid: newPaid });
-                            }}>
-                                <option value="paid">{t('inv_paid')}</option>
-                                <option value="partial">{t('inv_partial')}</option>
-                                <option value="pending">{t('inv_credit')}</option>
-                            </select>
-                        </div>
-                        {(formData.status === 'paid' || formData.status === 'partial') && (
-                            <div className="form-group">
-                                <label className="form-label">{t('inv_paymentMethod')}</label>
-                                <select className="form-select" value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}>
-                                    <option value="cash">{t('inv_cash')}</option>
-                                    <option value="bank">{t('inv_bank')}</option>
-                                </select>
-                            </div>
-                        )}
-                        {formData.status === 'partial' && (
-                            <div className="form-group">
-                                <label className="form-label">{t('paid_amount')} *</label>
-                                <input 
-                                    type="number" 
-                                    className="form-input" 
-                                    value={formData.paid} 
-                                    onChange={(e) => setFormData({ ...formData, paid: parseFloat(e.target.value) || 0 })} 
-                                    step="0.250"
-                                    min="0"
-                                    required 
+                        <div className="form-row" style={{ margin: 0, gap: '16px' }}>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label className="form-label" style={{ fontWeight: '600' }}>{t('pinv_supplier')}</label>
+                                <SearchableSelect
+                                    options={suppliers.map(s => ({ value: String(s.id), label: s.name }))}
+                                    value={formData.supplier_id ? String(formData.supplier_id) : ''}
+                                    onChange={(val) => setFormData({ ...formData, supplier_id: val })}
+                                    placeholder={t('pinv_selectSupplier')}
+                                    emptyLabel={t('pinv_selectSupplier')}
                                 />
                             </div>
-                        )}
+                            <div className="form-group" style={{ marginBottom: 0 }}><label className="form-label" style={{ fontWeight: '600' }}>{t('inv_date')}</label><input type="date" className="form-input" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} style={{ height: '40px' }} /></div>
+                            <div className="form-group" style={{ marginBottom: 0 }}><label className="form-label" style={{ fontWeight: '600' }}>{t('inv_dueDate')}</label><input type="date" className="form-input" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} style={{ height: '40px' }} /></div>
+                        </div>
+
+                        <div className="form-row" style={{ margin: 0, gap: '16px' }}>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label className="form-label" style={{ fontWeight: '600' }}>{t('inv_status')}</label>
+                                <select className="form-select" value={formData.status} onChange={(e) => {
+                                    const newStatus = e.target.value;
+                                    let newPaid = formData.paid;
+                                    if (newStatus === 'paid') {
+                                        newPaid = calculateTotals().total;
+                                    } else if (newStatus === 'pending') {
+                                        newPaid = 0;
+                                    }
+                                    setFormData({ ...formData, status: newStatus, paid: newPaid });
+                                }} style={{ height: '40px' }}>
+                                    <option value="paid">{t('inv_paid')}</option>
+                                    <option value="partial">{t('inv_partial')}</option>
+                                    <option value="pending">{t('inv_credit')}</option>
+                                </select>
+                            </div>
+                            {(formData.status === 'paid' || formData.status === 'partial') && (
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label" style={{ fontWeight: '600' }}>{t('inv_paymentMethod')}</label>
+                                    <select className="form-select" value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })} style={{ height: '40px' }}>
+                                        <option value="cash">{t('inv_cash')}</option>
+                                        <option value="bank">{t('inv_bank')}</option>
+                                    </select>
+                                </div>
+                            )}
+                            {formData.status === 'partial' && (
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label" style={{ fontWeight: '600' }}>{t('paid_amount')} *</label>
+                                    <input 
+                                        type="number" 
+                                        className="form-input" 
+                                        value={formData.paid} 
+                                        onChange={(e) => setFormData({ ...formData, paid: parseFloat(e.target.value) || 0 })} 
+                                        step="0.250"
+                                        min="0"
+                                        required 
+                                        style={{ height: '40px' }}
+                                    />
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    <div style={{ marginTop: '20px' }}>
-                        <div className="flex justify-between items-center mb-2"><h4>{t('inv_product')}</h4></div>
-                        <div className="table-container">
+                    {/* Card 2: بنود الفاتورة */}
+                    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px' }}>
+                        <div style={{ fontSize: '0.88rem', fontWeight: '700', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', paddingBottom: '6px', marginBottom: '12px' }}>
+                            📦 {t('inv_product') || 'أصناف الفاتورة'}
+                        </div>
+                        <div className="table-container" style={{ margin: 0 }}>
                             <table>
                                 <thead><tr><th style={{ width: '200px' }}>{t('inv_product')}</th><th>{t('description')}</th><th style={{ width: '120px' }}>{t('inv_quantity')}</th><th style={{ width: '100px' }}>{t('inv_unitPrice')}</th>{settings?.general?.enable_product_color === 'yes' && <th style={{ width: '100px' }}>{t('color') || 'Color'}</th>}<th style={{ width: '100px' }}>{t('inv_itemTotal')}</th><th style={{ width: '50px' }}></th></tr></thead>
                                 <tbody>
@@ -551,22 +622,77 @@ function PurchaseInvoices() {
                                                     emptyLabel={t('inv_selectProduct')}
                                                 />
                                             </td>
-                                            <td><input type="text" className="form-input" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} style={{ margin: 0 }} /></td>
-                                            <td><input type="number" className="form-input" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} min="1" step="1" style={{ margin: 0 }} /></td>
-                                            <td><input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.25" style={{ margin: 0 }} /></td>
-                                            {showColorField && <td><input type="text" className="form-input" placeholder={t('color') || 'Color'} value={item.color || ''} onChange={(e) => handleItemChange(index, 'color', e.target.value)} style={{ margin: 0 }} /></td>}
-                                            <td className="font-bold">{formatCurrency(calculateItemTotal(item))}</td>
-                                            <td><button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => removeItem(index)}><X size={16} /></button></td>
+                                            <td><input type="text" className="form-input" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} style={{ margin: 0, height: '38px' }} /></td>
+                                            <td><input type="number" className="form-input" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} min="1" step="1" style={{ margin: 0, height: '38px' }} /></td>
+                                            <td><input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.25" style={{ margin: 0, height: '38px' }} /></td>
+                                            {showColorField && <td><input type="text" className="form-input" placeholder={t('color') || 'Color'} value={item.color || ''} onChange={(e) => handleItemChange(index, 'color', e.target.value)} style={{ margin: 0, height: '38px' }} /></td>}
+                                            <td className="font-bold" style={{ whiteSpace: 'nowrap' }}>{formatCurrency(calculateItemTotal(item))}</td>
+                                            <td><button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => removeItem(index)} style={{ padding: '6px' }}><X size={16} /></button></td>
                                         </tr>
                                         );
                                     })}
                                 </tbody>
                             </table>
                         </div>
-                        <button type="button" className="btn btn-secondary" onClick={addItem} style={{ marginTop: '10px' }}><Plus size={16} /> {t('inv_addItem')}</button>
-                        <div style={{ marginTop: '20px', textAlign: 'left', fontSize: '1.2rem', fontWeight: 'bold' }}>{t('inv_total')}: {formatCurrency(calculateTotals().total)}</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', flexWrap: 'wrap', gap: '12px' }}>
+                            <button type="button" className="btn btn-secondary" onClick={addItem}><Plus size={16} /> {t('inv_addItem')}</button>
+                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--primary)' }}>{t('inv_total')}: {formatCurrency(calculateTotals().total)}</div>
+                        </div>
                     </div>
-                    <div className="form-group mt-4"><label className="form-label">{t('notes')}</label><textarea className="form-textarea" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} style={{ minHeight: '60px' }} /></div>
+
+                    {/* Card 3: الملاحظات ومرفق الفاتورة */}
+                    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', alignItems: 'start' }}>
+                        <div className="form-group" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label className="form-label" style={{ fontWeight: '600', marginBottom: 0 }}>✍️ {t('notes')}</label>
+                            <textarea className="form-textarea" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} style={{ minHeight: '120px', resize: 'vertical' }} />
+                        </div>
+                        
+                        <div className="form-group" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label className="form-label" style={{ fontWeight: '600', marginBottom: 0 }}>📷 {t('invoice_attachment') || 'صورة الفاتورة / الإيصال'}</label>
+                            <div 
+                                onClick={handleImageUpload}
+                                style={{ 
+                                    border: formData.image ? '1px solid var(--border)' : '2px dashed var(--border)', 
+                                    background: 'var(--bg-primary)', 
+                                    borderRadius: '12px', 
+                                    padding: '16px',
+                                    display: 'flex', 
+                                    flexDirection: 'column',
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    cursor: 'pointer',
+                                    minHeight: '120px',
+                                    position: 'relative',
+                                    transition: 'all 0.2s',
+                                    overflow: 'hidden',
+                                    boxShadow: 'var(--shadow-sm)'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary)'}
+                                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                            >
+                                {formData.image ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', width: '100%' }}>
+                                        <img src={formData.image} alt="Invoice Attachment" style={{ maxWidth: '100%', maxHeight: '80px', objectFit: 'contain', borderRadius: '6px' }} />
+                                        <div style={{ display: 'flex', gap: '10px' }}>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>{t('click_to_change') || 'تغيير الصورة'}</span>
+                                            <span 
+                                                onClick={(e) => { e.stopPropagation(); setFormData(prev => ({ ...prev, image: '' })); }} 
+                                                style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}
+                                            >
+                                                {t('delete') || 'حذف'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
+                                        <Plus size={24} style={{ opacity: 0.7 }} />
+                                        <span style={{ fontSize: '0.82rem', fontWeight: 500 }}>{t('upload_invoice_image') || 'اضغط هنا لرفع صورة الفاتورة الورقية'}</span>
+                                        <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>JPG, PNG, WEBP (Max 800px)</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </form>
             </Modal>
 

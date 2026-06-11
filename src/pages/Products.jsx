@@ -720,32 +720,56 @@ function Products() {
                             </button>
                         </div>
 
-                        {/* Stock summary bar */}
-                        <div style={{ padding: '16px 24px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', display: 'flex', gap: '24px' }}>
+                        {/* Stock & Profitability summary bar */}
+                        <div style={{
+                            padding: '16px 24px',
+                            background: 'var(--bg-secondary)',
+                            borderBottom: '1px solid var(--border)',
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                            gap: '12px'
+                        }}>
                             {(() => {
                                 const totalIn = movements.filter(m => m.type === 'purchase').reduce((s, m) => s + (m.quantity || 0), 0);
                                 const totalOut = movements.filter(m => m.type === 'sales').reduce((s, m) => s + (m.quantity || 0), 0);
                                 const current = selectedProductForTracking.stock_quantity || 0;
+
+                                const totalPurchasedValue = movements.filter(m => m.type === 'purchase').reduce((sum, m) => sum + (m.total || 0), 0);
+                                const totalSalesValue = movements.filter(m => m.type === 'sales').reduce((sum, m) => sum + (m.total || 0), 0);
+                                const purchasePrice = parseFloat(selectedProductForTracking.purchase_price) || 0;
+                                const cogs = totalOut * purchasePrice;
+                                const grossProfit = totalSalesValue - cogs;
+                                const profitMargin = totalSalesValue > 0 ? (grossProfit / totalSalesValue) * 100 : 0;
+
                                 return (
                                     <>
-                                        <div style={{ textAlign: 'center' }}>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>{t('prod_totalIn') || 'Total Purchased'}</div>
-                                            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#10b981' }}>{totalIn.toLocaleString()}</div>
+                                        <div style={{ background: 'var(--bg-primary)', padding: '10px', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 }}>{t('prod_totalIn') || 'الكمية المشتراة'}</div>
+                                            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#10b981' }}>{totalIn.toLocaleString()}</div>
                                         </div>
-                                        <div style={{ width: '1px', background: 'var(--border)' }} />
-                                        <div style={{ textAlign: 'center' }}>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>{t('prod_totalOut') || 'Total Sold'}</div>
-                                            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#ef4444' }}>{totalOut.toLocaleString()}</div>
+                                        <div style={{ background: 'var(--bg-primary)', padding: '10px', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 }}>{t('rep_totalPurchases') || 'إجمالي المشتريات'}</div>
+                                            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#10b981' }}>{formatCurrency(totalPurchasedValue)}</div>
                                         </div>
-                                        <div style={{ width: '1px', background: 'var(--border)' }} />
-                                        <div style={{ textAlign: 'center' }}>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>{t('prod_currentStock') || 'Current Stock'}</div>
-                                            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: current <= (selectedProductForTracking.min_stock || 0) ? '#ef4444' : '#3b82f6' }}>{current.toLocaleString()}</div>
+                                        <div style={{ background: 'var(--bg-primary)', padding: '10px', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 }}>{t('prod_totalOut') || 'الكمية المباعة'}</div>
+                                            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#ef4444' }}>{totalOut.toLocaleString()}</div>
                                         </div>
-                                        <div style={{ width: '1px', background: 'var(--border)' }} />
-                                        <div style={{ textAlign: 'center' }}>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>{t('prod_movementsCount') || 'Movements'}</div>
-                                            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)' }}>{movements.length}</div>
+                                        <div style={{ background: 'var(--bg-primary)', padding: '10px', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 }}>{t('rep_totalSales') || 'إجمالي المبيعات'}</div>
+                                            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#3b82f6' }}>{formatCurrency(totalSalesValue)}</div>
+                                        </div>
+                                        <div style={{ background: 'var(--bg-primary)', padding: '10px', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 }}>{t('rep_grossProfit') || 'مجمل الربح'}</div>
+                                            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: grossProfit >= 0 ? '#10b981' : '#ef4444' }}>{formatCurrency(grossProfit)}</div>
+                                        </div>
+                                        <div style={{ background: 'var(--bg-primary)', padding: '10px', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 }}>{t('rep_profitMargin') || 'هامش الربح'}</div>
+                                            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: profitMargin >= 0 ? '#10b981' : '#ef4444' }}>{profitMargin.toFixed(1)}%</div>
+                                        </div>
+                                        <div style={{ background: 'var(--bg-primary)', padding: '10px', borderRadius: '10px', border: '1px solid var(--border)', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 }}>{t('prod_currentStock') || 'المخزون الحالي'}</div>
+                                            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: current <= (selectedProductForTracking.min_stock || 0) ? '#ef4444' : '#3b82f6' }}>{current.toLocaleString()}</div>
                                         </div>
                                     </>
                                 );

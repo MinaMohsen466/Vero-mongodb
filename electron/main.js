@@ -176,6 +176,7 @@ ipcMain.handle('accounts:getBankAccounts', async () => db.accounts.getBankAccoun
 
 // --- Products ---
 ipcMain.handle('products:getAll', async () => db.products.getAll());
+ipcMain.handle('products:getAllSortedBySales', async () => db.products.getAllSortedBySales());
 ipcMain.handle('products:create', async (event, product) => {
     const result = db.products.create(product);
     if (result.success) logActivity('create', 'products', result.id, product.name, product);
