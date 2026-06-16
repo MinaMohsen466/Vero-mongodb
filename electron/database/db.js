@@ -307,6 +307,59 @@ class AppDatabase {
                 }
             }
         } catch (e) { console.log('Salary expenses migration:', e.message); }
+
+        // Migration: Add warehouse_stock and shop_stock columns to products
+        try {
+            const prodCols2 = this.all("PRAGMA table_info(products)");
+            const hasWarehouseStock = prodCols2.some(col => col.name === 'warehouse_stock');
+            const hasShopStock = prodCols2.some(col => col.name === 'shop_stock');
+            if (!hasWarehouseStock) {
+                this.exec("ALTER TABLE products ADD COLUMN warehouse_stock REAL DEFAULT 0");
+                // Migrate existing stock_quantity to shop_stock (existing products are assumed in shop)
+                this.exec("UPDATE products SET warehouse_stock = 0");
+            }
+            if (!hasShopStock) {
+                this.exec("ALTER TABLE products ADD COLUMN shop_stock REAL DEFAULT 0");
+                // Move existing stock_quantity to shop_stock
+                this.exec("UPDATE products SET shop_stock = stock_quantity");
+            }
+            // Fix for databases where columns existed but were not populated:
+            this.exec("UPDATE products SET shop_stock = stock_quantity WHERE (shop_stock = 0 OR shop_stock IS NULL) AND (warehouse_stock = 0 OR warehouse_stock IS NULL) AND stock_quantity > 0");
+        } catch (e) { console.log('Warehouse/Shop stock migration:', e.message); }
+
+        // Migration: Create stock_transfers and stock_transfer_items tables
+        try {
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS stock_transfers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    transfer_number TEXT UNIQUE NOT NULL,
+                    date TEXT NOT NULL,
+                    status TEXT DEFAULT 'completed',
+                    direction TEXT DEFAULT 'shop_to_warehouse',
+                    notes TEXT,
+                    created_by INTEGER,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS stock_transfer_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    transfer_id INTEGER NOT NULL,
+                    product_id INTEGER NOT NULL,
+                    quantity REAL NOT NULL,
+                    FOREIGN KEY (transfer_id) REFERENCES stock_transfers(id) ON DELETE CASCADE,
+                    FOREIGN KEY (product_id) REFERENCES products(id)
+                );
+            `);
+            this.save();
+        } catch (e) { console.log('Stock transfers table creation:', e.message); }
+
+        // Migration: Add direction column to stock_transfers table for existing databases
+        try {
+            const transferCols = this.all("PRAGMA table_info(stock_transfers)");
+            const hasDirection = transferCols.some(col => col.name === 'direction');
+            if (!hasDirection) {
+                this.exec("ALTER TABLE stock_transfers ADD COLUMN direction TEXT DEFAULT 'shop_to_warehouse'");
+            }
+        } catch (e) { console.log('Add direction column migration:', e.message); }
     }
 
     seedDefaultData() {
@@ -407,7 +460,7 @@ class AppDatabase {
         // Default Permissions
         const permCount = this.get('SELECT COUNT(*) as count FROM permissions');
         if (permCount.count === 0) {
-            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'expenses', 'pos', 'database', 'financial_summary'];
+            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'expenses', 'pos', 'database', 'financial_summary', 'warehouse'];
             for (const mod of modules) {
                 // Admin: full access to everything
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', mod]);
@@ -447,6 +500,14 @@ class AppDatabase {
                     this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', 'pos']);
                     this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 0)", ['accountant', 'pos']);
                     this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 0)", ['user', 'pos']);
+                }
+
+                // Ensure warehouse permission exists for existing databases
+                const adminWarehouse = this.get("SELECT id FROM permissions WHERE role='admin' AND module='warehouse'");
+                if (!adminWarehouse) {
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', 'warehouse']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 0, 0)", ['accountant', 'warehouse']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'warehouse']);
                 }
             } catch (e) { console.log('HR permission migration:', e.message); }
 
@@ -579,6 +640,7 @@ class AppDatabase {
         this.expenses = new ExpensesRepo(this);
         this.system = new SystemRepo(this);
         this.activityLog = new ActivityLogRepo(this);
+        this.stockTransfers = new StockTransfersRepo(this);
     }
 
     backup() {
@@ -924,9 +986,54 @@ class ProductsRepo {
             ORDER BY total_sold DESC, p.name ASC
         `);
     }
-    create(p) { try { const count = this.db.get('SELECT COUNT(*) as count FROM products').count; const code = p.code || `P${String(count + 1).padStart(4, '0')}`; const supplierIdsJson = Array.isArray(p.supplier_ids) ? JSON.stringify(p.supplier_ids) : '[]'; const r = this.db.run("INSERT INTO products (code, name, description, unit, category, purchase_price, sale_price, stock_quantity, min_stock, image, supplier_id, supplier_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [code, p.name, p.description, p.unit, p.category, p.purchase_price || 0, p.sale_price || 0, p.stock_quantity || 0, p.min_stock || 0, p.image || null, p.supplier_id !== undefined ? p.supplier_id : null, supplierIdsJson]); return { success: true, id: r.lastInsertRowid }; } catch (e) { return { success: false, error: e.message }; } }
-    update(p) { try { const supplierIdsJson = Array.isArray(p.supplier_ids) ? JSON.stringify(p.supplier_ids) : '[]'; this.db.run("UPDATE products SET name=?, description=?, unit=?, category=?, purchase_price=?, sale_price=?, stock_quantity=?, min_stock=?, image=?, supplier_id=?, supplier_ids=?, is_active=? WHERE id=?", [p.name, p.description, p.unit, p.category, p.purchase_price, p.sale_price, p.stock_quantity, p.min_stock, p.image || null, p.supplier_id !== undefined ? p.supplier_id : null, supplierIdsJson, p.is_active ? 1 : 0, p.id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+    create(p) {
+        try {
+            const count = this.db.get('SELECT COUNT(*) as count FROM products').count;
+            const code = p.code || `P${String(count + 1).padStart(4, '0')}`;
+            const supplierIdsJson = Array.isArray(p.supplier_ids) ? JSON.stringify(p.supplier_ids) : '[]';
+            const warehouseStock = parseFloat(p.warehouse_stock) || 0;
+            const shopStock = parseFloat(p.shop_stock) || 0;
+            const totalStock = warehouseStock + shopStock;
+            const r = this.db.run(
+                "INSERT INTO products (code, name, description, unit, category, purchase_price, sale_price, stock_quantity, min_stock, image, supplier_id, supplier_ids, warehouse_stock, shop_stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [code, p.name, p.description, p.unit, p.category, p.purchase_price || 0, p.sale_price || 0, totalStock, p.min_stock || 0, p.image || null, p.supplier_id !== undefined ? p.supplier_id : null, supplierIdsJson, warehouseStock, shopStock]
+            );
+            return { success: true, id: r.lastInsertRowid };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    update(p) {
+        try {
+            const supplierIdsJson = Array.isArray(p.supplier_ids) ? JSON.stringify(p.supplier_ids) : '[]';
+            const warehouseStock = parseFloat(p.warehouse_stock) || 0;
+            const shopStock = parseFloat(p.shop_stock) || 0;
+            const totalStock = warehouseStock + shopStock;
+            this.db.run(
+                "UPDATE products SET name=?, description=?, unit=?, category=?, purchase_price=?, sale_price=?, stock_quantity=?, min_stock=?, image=?, supplier_id=?, supplier_ids=?, is_active=?, warehouse_stock=?, shop_stock=? WHERE id=?",
+                [p.name, p.description, p.unit, p.category, p.purchase_price, p.sale_price, totalStock, p.min_stock, p.image || null, p.supplier_id !== undefined ? p.supplier_id : null, supplierIdsJson, p.is_active ? 1 : 0, warehouseStock, shopStock, p.id]
+            );
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
     delete(id) { try { this.db.run('DELETE FROM products WHERE id = ?', [id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+
+    addWarehouseStock(productId, quantity) {
+        try {
+            const id = parseInt(productId, 10);
+            const qty = parseFloat(quantity) || 0;
+            if (!id || qty <= 0) return { success: false, error: 'Invalid product or quantity' };
+            this.db.run(
+                'UPDATE products SET warehouse_stock = warehouse_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?',
+                [qty, qty, id]
+            );
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
 
     getMovements(productId, startDate, endDate) {
         try {
@@ -1093,10 +1200,15 @@ class InvoicesRepo {
                     [invId, productId, description, quantity, unitPrice, discount, tax, total]
                 );
 
-                // Update product stock
+                // Update product stock based on location
                 if (productId) {
-                    const stockChange = inv.type === 'sales' ? -quantity : quantity;
-                    this.db.run('UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?', [stockChange, productId]);
+                    if (inv.type === 'sales') {
+                        // Sales deduct from shop_stock
+                        this.db.run('UPDATE products SET shop_stock = shop_stock - ?, stock_quantity = stock_quantity - ? WHERE id = ?', [quantity, quantity, productId]);
+                    } else {
+                        // Purchases add to shop_stock
+                        this.db.run('UPDATE products SET shop_stock = shop_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?', [quantity, quantity, productId]);
+                    }
                 }
             }
 
@@ -1127,11 +1239,16 @@ class InvoicesRepo {
             const oldInvoice = this.getById(invId);
             if (!oldInvoice) return { success: false, error: 'Invoice not found' };
 
-            // 1. Reverse old stock changes
+            // 1. Reverse old stock changes (location-aware)
             for (const oldItem of oldInvoice.items || []) {
                 if (oldItem.product_id) {
-                    const stockReverse = oldInvoice.type === 'sales' ? oldItem.quantity : -oldItem.quantity;
-                    this.db.run('UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?', [stockReverse, oldItem.product_id]);
+                    if (oldInvoice.type === 'sales') {
+                        // Reverse sales: add back to shop_stock
+                        this.db.run('UPDATE products SET shop_stock = shop_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?', [oldItem.quantity, oldItem.quantity, oldItem.product_id]);
+                    } else {
+                        // Reverse purchase: remove from shop_stock
+                        this.db.run('UPDATE products SET shop_stock = shop_stock - ?, stock_quantity = stock_quantity - ? WHERE id = ?', [oldItem.quantity, oldItem.quantity, oldItem.product_id]);
+                    }
                 }
             }
 
@@ -1171,10 +1288,13 @@ class InvoicesRepo {
                     [invId, productId, description, quantity, unitPrice, discount, tax, total]
                 );
 
-                // Apply new stock change
+                // Apply new stock change (location-aware)
                 if (productId) {
-                    const stockChange = oldInvoice.type === 'sales' ? -quantity : quantity;
-                    this.db.run('UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?', [stockChange, productId]);
+                    if (oldInvoice.type === 'sales') {
+                        this.db.run('UPDATE products SET shop_stock = shop_stock - ?, stock_quantity = stock_quantity - ? WHERE id = ?', [quantity, quantity, productId]);
+                    } else {
+                        this.db.run('UPDATE products SET shop_stock = shop_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?', [quantity, quantity, productId]);
+                    }
                 }
             }
 
@@ -1203,11 +1323,16 @@ class InvoicesRepo {
             const invoice = this.getById(id);
             if (!invoice) return { success: false, error: 'Invoice not found' };
 
-            // Reverse inventory changes
+            // Reverse inventory changes (location-aware)
             for (const item of invoice.items || []) {
                 if (item.product_id) {
-                    const stockChange = invoice.type === 'sales' ? item.quantity : -item.quantity;
-                    this.db.run('UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?', [stockChange, item.product_id]);
+                    if (invoice.type === 'sales') {
+                        // Reverse sales: add back to shop_stock
+                        this.db.run('UPDATE products SET shop_stock = shop_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?', [item.quantity, item.quantity, item.product_id]);
+                    } else {
+                        // Reverse purchase: remove from shop_stock
+                        this.db.run('UPDATE products SET shop_stock = shop_stock - ?, stock_quantity = stock_quantity - ? WHERE id = ?', [item.quantity, item.quantity, item.product_id]);
+                    }
                 }
             }
 
@@ -2419,6 +2544,118 @@ class ActivityLogRepo {
         } catch (e) {
             console.error('[ActivityLog] getAll error:', e.message);
             return [];
+        }
+    }
+}
+
+class StockTransfersRepo {
+    constructor(db) { this.db = db; }
+
+    getAll() {
+        const transfers = this.db.all('SELECT * FROM stock_transfers ORDER BY date DESC, id DESC');
+        return transfers.map(tr => {
+            const items = this.db.all(
+                `SELECT sti.*, p.name as product_name, p.code as product_code
+                 FROM stock_transfer_items sti
+                 LEFT JOIN products p ON sti.product_id = p.id
+                 WHERE sti.transfer_id = ?`, [tr.id]
+            );
+            return { ...tr, items: items || [] };
+        });
+    }
+
+    getById(id) {
+        const tr = this.db.get('SELECT * FROM stock_transfers WHERE id = ?', [id]);
+        if (tr) {
+            const items = this.db.all(
+                `SELECT sti.*, p.name as product_name, p.code as product_code
+                 FROM stock_transfer_items sti
+                 LEFT JOIN products p ON sti.product_id = p.id
+                 WHERE sti.transfer_id = ?`, [tr.id]
+            );
+            return { ...tr, items: items || [] };
+        }
+        return null;
+    }
+
+    create(transfer) {
+        try {
+            let nextNumNum = 1;
+            const lastTransfer = this.db.get("SELECT transfer_number FROM stock_transfers ORDER BY id DESC LIMIT 1");
+            if (lastTransfer && lastTransfer.transfer_number) {
+                const match = lastTransfer.transfer_number.match(/TR-(\d+)/);
+                if (match) {
+                    nextNumNum = parseInt(match[1], 10) + 1;
+                }
+            }
+            const num = transfer.transfer_number || `TR-${String(nextNumNum).padStart(6, '0')}`;
+            const direction = transfer.direction || 'shop_to_warehouse';
+
+            const r = this.db.run(
+                "INSERT INTO stock_transfers (transfer_number, date, status, notes, direction, created_by) VALUES (?, ?, ?, ?, ?, ?)",
+                [num, transfer.date, transfer.status || 'completed', transfer.notes || null, direction, transfer.created_by || null]
+            );
+            const transferId = r.lastInsertRowid;
+
+            for (const item of transfer.items || []) {
+                const productId = parseInt(item.product_id, 10);
+                const quantity = parseFloat(item.quantity) || 0;
+                if (!productId || quantity <= 0) continue;
+
+                const product = this.db.get('SELECT warehouse_stock, shop_stock FROM products WHERE id = ?', [productId]);
+                if (!product) continue;
+
+                if (direction === 'warehouse_to_shop') {
+                    this.db.run(
+                        'UPDATE products SET warehouse_stock = warehouse_stock - ?, shop_stock = shop_stock + ? WHERE id = ?',
+                        [quantity, quantity, productId]
+                    );
+                } else { // shop_to_warehouse
+                    this.db.run(
+                        'UPDATE products SET shop_stock = shop_stock - ?, warehouse_stock = warehouse_stock + ? WHERE id = ?',
+                        [quantity, quantity, productId]
+                    );
+                }
+
+                this.db.run(
+                    "INSERT INTO stock_transfer_items (transfer_id, product_id, quantity) VALUES (?, ?, ?)",
+                    [transferId, productId, quantity]
+                );
+            }
+
+            return { success: true, id: transferId, transfer_number: num };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    delete(id) {
+        try {
+            const transfer = this.getById(id);
+            if (!transfer) return { success: false, error: 'Transfer not found' };
+
+            const direction = transfer.direction || 'shop_to_warehouse';
+            for (const item of transfer.items || []) {
+                if (item.product_id) {
+                    if (direction === 'warehouse_to_shop') {
+                        this.db.run(
+                            'UPDATE products SET warehouse_stock = warehouse_stock + ?, shop_stock = shop_stock - ? WHERE id = ?',
+                            [item.quantity, item.quantity, item.product_id]
+                        );
+                    } else { // shop_to_warehouse
+                        this.db.run(
+                            'UPDATE products SET shop_stock = shop_stock + ?, warehouse_stock = warehouse_stock - ? WHERE id = ?',
+                            [item.quantity, item.quantity, item.product_id]
+                        );
+                    }
+                }
+            }
+
+            this.db.run('DELETE FROM stock_transfer_items WHERE transfer_id = ?', [id]);
+            this.db.run('DELETE FROM stock_transfers WHERE id = ?', [id]);
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
         }
     }
 }

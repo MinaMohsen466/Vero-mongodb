@@ -216,7 +216,7 @@ function POS() {
             // Update cart stock info
             setCart(prev => prev.map(item => {
                 const updated = active.find(p => p.id === item.id);
-                return updated ? { ...item, stock: updated.stock_quantity } : item;
+                return updated ? { ...item, stock: updated.shop_stock } : item;
             }));
         } catch (e) { console.error(e); }
         if (showIndicator) setRefreshing(false);
@@ -226,14 +226,14 @@ function POS() {
         const fresh = allProducts.find(p => p.id === product.id) || product;
         const allowNegative = settings.general?.allow_negative_stock === 'yes';
         
-        if (!allowNegative && fresh.stock_quantity <= 0) {
+        if (!allowNegative && fresh.shop_stock <= 0) {
             toast.error(t('product_out_of_stock') || 'Product is out of stock');
             return;
         }
         setCart(prev => {
             const existing = prev.find(i => i.id === fresh.id);
             if (existing) {
-                if (!allowNegative && existing.qty >= fresh.stock_quantity) {
+                if (!allowNegative && existing.qty >= fresh.shop_stock) {
                     toast.error(t('not_enough_stock') || 'Not enough stock');
                     return prev;
                 }
@@ -244,7 +244,7 @@ function POS() {
             }
             return [...prev, {
                 id: fresh.id, name: fresh.name, code: fresh.code, category: fresh.category, unit: fresh.unit || '',
-                price: fresh.sale_price || 0, stock: fresh.stock_quantity,
+                price: fresh.sale_price || 0, stock: fresh.shop_stock,
                 qty: 1, total: fresh.sale_price || 0, color: ''
             }];
         });
@@ -557,7 +557,7 @@ function POS() {
                             <p>{t('no_products') || 'No Products'}</p>
                         </div>
                     ) : filtered.map((product, i) => {
-                        const outOfStock = product.stock_quantity <= 0;
+                        const outOfStock = product.shop_stock <= 0;
                         const color = COLORS[i % COLORS.length];
                         const inCart = cart.find(c => c.id === product.id);
                         return (
@@ -631,7 +631,7 @@ function POS() {
                                         {outOfStock ? (
                                             <span style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 600 }}>✗ {t('out_of_stock') || 'Out of Stock'}</span>
                                         ) : (
-                                            <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 600 }}>{t('in_stock') || 'In Stock'}: {product.stock_quantity}</span>
+                                            <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 600 }}>{t('in_stock') || 'In Stock'}: {product.shop_stock}</span>
                                         )}
                                     </div>
                                 </div>

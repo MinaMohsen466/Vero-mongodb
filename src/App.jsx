@@ -37,6 +37,7 @@ const POS = lazy(() => import('./pages/POS'));
 const Installments = lazy(() => import('./pages/Installments'));
 const OffersAndCoupons = lazy(() => import('./pages/OffersAndCoupons'));
 const Expenses = lazy(() => import('./pages/Expenses'));
+const WarehousePage = lazy(() => import('./pages/Warehouse'));
 
 const LoadingScreen = () => (
     <div className="loading" style={{ height: '100vh' }}>
@@ -209,7 +210,8 @@ function App() {
         'expenses': Expenses,
         'pos': POS,
         'installments': Installments,
-        'offers': OffersAndCoupons
+        'offers': OffersAndCoupons,
+        'warehouse': WarehousePage
     };
 
     const renderPage = useCallback(() => {

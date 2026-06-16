@@ -193,6 +193,14 @@ ipcMain.handle('products:delete', async (event, id) => {
     return result;
 });
 ipcMain.handle('products:getMovements', async (event, { id, startDate, endDate }) => db.products.getMovements(id, startDate, endDate));
+ipcMain.handle('products:addWarehouseStock', async (event, { id, quantity }) => {
+    const result = db.products.addWarehouseStock(id, quantity);
+    if (result.success) {
+        const prod = db.products.getAll().find(p => p.id === id);
+        logActivity('update', 'warehouse', id, prod?.name || String(id), { added_quantity: quantity });
+    }
+    return result;
+});
 
 // --- Invoices ---
 ipcMain.handle('invoices:getAll', async (event, type) => db.invoices.getAll(type));
@@ -325,6 +333,21 @@ ipcMain.handle('expenses:delete', async (event, id) => {
     return result;
 });
 ipcMain.handle('expenses:getTotal', async (event, { startDate, endDate, category }) => db.expenses.getTotal(startDate, endDate, category));
+
+// --- Stock Transfers ---
+ipcMain.handle('stockTransfers:getAll', async () => db.stockTransfers.getAll());
+ipcMain.handle('stockTransfers:getById', async (event, id) => db.stockTransfers.getById(id));
+ipcMain.handle('stockTransfers:create', async (event, transfer) => {
+    const result = db.stockTransfers.create(transfer);
+    if (result.success) logActivity('create', 'warehouse', result.id, result.transfer_number, transfer);
+    return result;
+});
+ipcMain.handle('stockTransfers:delete', async (event, id) => {
+    const existing = db.stockTransfers.getById(id);
+    const result = db.stockTransfers.delete(id);
+    if (result.success) logActivity('delete', 'warehouse', id, existing?.transfer_number || String(id), {});
+    return result;
+});
 
 // --- Journal Entries ---
 ipcMain.handle('journal:getAll', async () => db.journal.getAll());

@@ -52,7 +52,8 @@ contextBridge.exposeInMainWorld('api', {
         create: (product) => ipcRenderer.invoke('products:create', product),
         update: (product) => ipcRenderer.invoke('products:update', product),
         delete: (id) => ipcRenderer.invoke('products:delete', id),
-        getMovements: (id, startDate, endDate) => ipcRenderer.invoke('products:getMovements', { id, startDate, endDate })
+        getMovements: (id, startDate, endDate) => ipcRenderer.invoke('products:getMovements', { id, startDate, endDate }),
+        addWarehouseStock: (id, quantity) => ipcRenderer.invoke('products:addWarehouseStock', { id, quantity })
     },
 
     // Invoices
@@ -162,6 +163,14 @@ contextBridge.exposeInMainWorld('api', {
         create: (payment) => ipcRenderer.invoke('expenses:create', payment),
         delete: (id) => ipcRenderer.invoke('expenses:delete', id),
         getTotal: (startDate, endDate, category) => ipcRenderer.invoke('expenses:getTotal', { startDate, endDate, category })
+    },
+
+    // Stock Transfers (Warehouse)
+    stockTransfers: {
+        getAll: () => ipcRenderer.invoke('stockTransfers:getAll'),
+        getById: (id) => ipcRenderer.invoke('stockTransfers:getById', id),
+        create: (transfer) => ipcRenderer.invoke('stockTransfers:create', transfer),
+        delete: (id) => ipcRenderer.invoke('stockTransfers:delete', id)
     },
 
     // Dialog

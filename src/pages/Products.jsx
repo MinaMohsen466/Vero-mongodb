@@ -18,7 +18,8 @@ function Products() {
     const [suppliers, setSuppliers] = useState([]);
     const [supplierSearchQuery, setSupplierSearchQuery] = useState('');
     const [formData, setFormData] = useState({
-        name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', stock_quantity: '', min_stock: '', image: '', supplier_id: '', supplier_ids: []
+        name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [],
+        dozen_price: '', dozen_qty: ''
     });
     const [showMovementsModal, setShowMovementsModal] = useState(false);
     const [selectedProductForTracking, setSelectedProductForTracking] = useState(null);
@@ -175,6 +176,35 @@ function Products() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
+            // Uniqueness validation
+            const nameLower = (formData.name || '').trim().toLowerCase();
+            const codeLower = (formData.code || '').trim().toLowerCase();
+
+            if (!nameLower) {
+                toast.error(t('name_required') || 'اسم المنتج مطلوب!');
+                return;
+            }
+
+            const duplicateName = products.some(p => 
+                p.name.trim().toLowerCase() === nameLower && 
+                (!editingProduct || p.id !== editingProduct.id)
+            );
+            if (duplicateName) {
+                toast.error(t('product_name_exists') || 'اسم المنتج هذا موجود بالفعل!');
+                return;
+            }
+
+            if (codeLower) {
+                const duplicateCode = products.some(p => 
+                    (p.code || '').trim().toLowerCase() === codeLower && 
+                    (!editingProduct || p.id !== editingProduct.id)
+                );
+                if (duplicateCode) {
+                    toast.error(t('product_code_exists') || 'كود المنتج هذا مستخدم بالفعل!');
+                    return;
+                }
+            }
+
             const selectedSupplierIds = Array.isArray(formData.supplier_ids) ? formData.supplier_ids : [];
             const primarySupplierId = selectedSupplierIds.length > 0 ? Number(selectedSupplierIds[0]) : null;
 
@@ -182,18 +212,30 @@ function Products() {
                 ...formData, 
                 purchase_price: parseFloat(formData.purchase_price) || 0, 
                 sale_price: parseFloat(formData.sale_price) || 0, 
-                stock_quantity: parseFloat(formData.stock_quantity) || 0, 
+                warehouse_stock: parseFloat(formData.warehouse_stock) || 0,
+                shop_stock: parseFloat(formData.shop_stock) || 0,
                 min_stock: parseFloat(formData.min_stock) || 0,
                 supplier_id: primarySupplierId,
                 supplier_ids: selectedSupplierIds
             };
 
+            let result;
             if (editingProduct) {
-                await window.api.products.update({ ...data, id: editingProduct.id, is_active: true });
-                toast.success(t('savedSuccess') || 'Product updated successfully');
+                result = await window.api.products.update({ ...data, id: editingProduct.id, is_active: true });
+                if (result.success) {
+                    toast.success(t('savedSuccess') || 'Product updated successfully');
+                } else {
+                    toast.error(result.error || t('errorOccurred'));
+                    return;
+                }
             } else {
-                await window.api.products.create(data);
-                toast.success(t('savedSuccess') || 'Product added successfully');
+                result = await window.api.products.create(data);
+                if (result.success) {
+                    toast.success(t('savedSuccess') || 'Product added successfully');
+                } else {
+                    toast.error(result.error || t('errorOccurred'));
+                    return;
+                }
             }
             loadProducts();
             closeModal();
@@ -236,13 +278,15 @@ function Products() {
 
             setFormData({
                 name: product.name, description: product.description || '', unit: isCustomUnit ? product.unit : product.unit,
-                category: product.category || '', purchase_price: product.purchase_price || '', sale_price: product.sale_price || '', stock_quantity: product.stock_quantity || '', min_stock: product.min_stock || '', image: product.image || '',
+                category: product.category || '', purchase_price: product.purchase_price || '', sale_price: product.sale_price || '', warehouse_stock: product.warehouse_stock || '', shop_stock: product.shop_stock || '', min_stock: product.min_stock || '', image: product.image || '',
                 supplier_id: product.supplier_id || '',
-                supplier_ids: parsedIds
+                supplier_ids: parsedIds,
+                dozen_price: '',
+                dozen_qty: ''
             });
         } else {
             setShowCustomUnit(false);
-            setFormData({ name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', stock_quantity: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [] });
+            setFormData({ name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [], dozen_price: '', dozen_qty: '' });
         }
         setShowModal(true);
     };
@@ -290,6 +334,28 @@ function Products() {
             setShowCustomUnit(false);
             setFormData({ ...formData, unit: value });
         }
+    };
+
+    const handleDozenPriceChange = (value) => {
+        const price = parseFloat(value) || 0;
+        const qty = parseFloat(formData.dozen_qty) || 0;
+        const computed = qty > 0 ? (price / qty).toFixed(3) : '';
+        setFormData(prev => ({
+            ...prev,
+            dozen_price: value,
+            purchase_price: computed
+        }));
+    };
+
+    const handleDozenQtyChange = (value) => {
+        const qty = parseFloat(value) || 0;
+        const price = parseFloat(formData.dozen_price) || 0;
+        const computed = qty > 0 ? (price / qty).toFixed(3) : '';
+        setFormData(prev => ({
+            ...prev,
+            dozen_qty: value,
+            purchase_price: computed
+        }));
     };
 
     const formatCurrency = (amount) => {
@@ -410,7 +476,7 @@ function Products() {
                             <div className="table-container">
                                 <table>
                                     <thead>
-                                        <tr><th>{t('code')}</th><th>{t('prod_name')}</th><th>{t('prod_category')}</th><th>{t('prod_unit')}</th><th>{t('prod_salePrice')}</th><th>{t('prod_stock')}</th><th>{t('actions')}</th></tr>
+                                        <tr><th>{t('code')}</th><th>{t('prod_name')}</th><th>{t('prod_category')}</th><th>{t('prod_unit')}</th><th>{t('prod_salePrice')}</th><th>{t('warehouse_stock') || 'Warehouse Stock'}</th><th>{t('shop_stock') || 'Shop Stock'}</th><th>{t('total_stock') || 'Total Stock'}</th><th>{t('actions')}</th></tr>
                                     </thead>
                                     <tbody>
                                         {displayedProducts.map(p => (
@@ -431,6 +497,8 @@ function Products() {
                                                 <td><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{p.category || '—'}</span></td>
                                                 <td>{p.unit}</td>
                                                 <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{formatCurrency(p.sale_price)}</td>
+                                                <td><span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{p.warehouse_stock || 0}</span></td>
+                                                <td><span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{p.shop_stock || 0}</span></td>
                                                 <td><span className={`badge ${p.stock_quantity <= (p.min_stock || 0) ? 'badge-danger' : 'badge-success'}`}>{p.stock_quantity || 0}</span></td>
                                                 <td>
                                                     <div className="table-actions">
@@ -666,16 +734,24 @@ function Products() {
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px' }}>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
-                                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_purchasePrice')}</label>
-                                    <input type="number" className="form-input" value={formData.purchase_price} onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })} step="0.05" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_dozenPrice') || 'سعر الدرزن'}</label>
+                                    <input type="number" className="form-input" value={formData.dozen_price} onChange={(e) => handleDozenPriceChange(e.target.value)} step="0.05" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_dozenQty') || 'الكمية في الدرزن'}</label>
+                                    <input type="number" className="form-input" value={formData.dozen_qty} onChange={(e) => handleDozenQtyChange(e.target.value)} min="1" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_purchasePrice')} *</label>
+                                    <input type="number" className="form-input" value={formData.purchase_price} onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value, dozen_price: '', dozen_qty: '' })} step="0.05" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_salePrice')}</label>
                                     <input type="number" className="form-input" value={formData.sale_price} onChange={(e) => setFormData({ ...formData, sale_price: e.target.value })} step="0.05" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
-                                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_stock')}</label>
-                                    <input type="number" className="form-input" value={formData.stock_quantity} onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })} min="0" step="0.001" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_stock') || 'Stock Quantity'}</label>
+                                    <input type="number" className="form-input" value={formData.shop_stock} onChange={(e) => setFormData({ ...formData, shop_stock: e.target.value })} min="0" step="0.001" style={{ height: '38px', fontSize: '0.85rem' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_minStock')}</label>

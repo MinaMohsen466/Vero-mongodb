@@ -301,6 +301,7 @@ export default function Settings() {
         { m: 'hr', l: t('hr') || 'HR', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'expenses', l: t('expenses') || 'Expenses', a: ['view', 'create', 'delete'] },
         { m: 'pos', l: t('pos') || 'POS', a: ['view', 'create'] },
+        { m: 'warehouse', l: t('warehouse') || 'Warehouse', a: ['view', 'create', 'delete'] },
         { m: 'offers', l: t('offers') || 'Offers & Coupons', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'reports', l: t('reports') || 'Reports', a: ['view'] },
         { m: 'settings', l: t('settings') || 'Settings', a: ['view', 'edit'] },

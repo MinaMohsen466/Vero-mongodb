@@ -179,7 +179,7 @@ function SalesInvoices() {
             const product = products.find(p => p.id === parseInt(item.product_id));
             if (!product) continue;
 
-            const currentStock = product.stock_quantity || 0;
+            const currentStock = product.shop_stock || 0;
             const requestedQty = parseFloat(item.quantity) || 0;
 
             if (requestedQty > currentStock) {
@@ -670,7 +670,7 @@ function SalesInvoices() {
                                             <tr key={index}>
                                                 <td style={{ minWidth: '200px' }}>
                                                     <SearchableSelect
-                                                        options={products.map(p => ({ value: String(p.id), label: `${p.name} (${p.stock_quantity || 0})`, subLabel: p.code }))}
+                                                        options={products.map(p => ({ value: String(p.id), label: `${p.name} (${p.shop_stock || 0})`, subLabel: p.code }))}
                                                         value={item.product_id ? String(item.product_id) : ''}
                                                         onChange={(val) => handleProductChange(index, val)}
                                                         placeholder={t('inv_selectProduct')}
