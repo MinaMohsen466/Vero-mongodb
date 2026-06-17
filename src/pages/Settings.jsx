@@ -2,7 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
     Settings as Ico, Users, Building2, Database, Plus, Edit2, Trash2, Printer, Shield,
     Image, FolderOpen, HardDrive, FileText, Palette, Globe, AlertTriangle, Save,
-    RefreshCw, Download, Upload, Eye, EyeOff, ChevronRight, X, Check
+    RefreshCw, Download, Upload, Eye, EyeOff, ChevronRight, X, Check,
+    Home, Truck, Package, Wallet, Monitor, ShoppingCart, ShoppingBag, CreditCard,
+    BookOpen, UserCheck, TrendingDown, Warehouse, Ticket, BarChart3, Clock, Calendar,
+    ArrowLeftRight, User, Key
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
@@ -321,6 +324,38 @@ export default function Settings() {
         { key: 'can_delete', label: t('delete') || 'Delete', act: 'delete' },
     ];
     const isAdmin = user?.role === 'admin';
+
+    const getModIcon = (mod) => {
+        const icons = {
+            dashboard: Home,
+            customers: Users,
+            suppliers: Truck,
+            products: Package,
+            sales_invoices: ShoppingCart,
+            purchase_invoices: ShoppingBag,
+            receipt_vouchers: CreditCard,
+            payment_vouchers: Wallet,
+            chart_of_accounts: Building2,
+            cash_bank: Wallet,
+            journal_entries: BookOpen,
+            hr: UserCheck,
+            expenses: TrendingDown,
+            pos: Monitor,
+            warehouse: Warehouse,
+            offers: Ticket,
+            reports: BarChart3,
+            settings: Ico,
+            users: Users,
+            permissions: Shield,
+            database: Database,
+            financial_summary: BarChart3,
+            stock_alerts: AlertTriangle,
+            customer_receivables: CreditCard,
+            dashboard_charts: BarChart3
+        };
+        const IcoComp = icons[mod] || Shield;
+        return <IcoComp size={16} style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />;
+    };
     const [sec, setSec] = useState('company');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -366,15 +401,15 @@ export default function Settings() {
     });
 
     const SECTIONS = [
-        { id: 'company', l: t('company_details') || 'Company Details', icon: Building2 },
-        { id: 'general', l: t('general_settings') || 'General Settings', icon: Ico },
-        { id: 'print_invoice', l: t('invoice_settings') || 'Invoice Settings', icon: FileText },
+        { id: 'company', l: t('company_details') || 'بيانات الشركة', icon: Building2 },
+        { id: 'general', l: t('general_settings') || 'الإعدادات العامة', icon: Ico },
+        { id: 'print_invoice', l: t('invoice_settings') || 'إعدادات الفاتورة', icon: FileText },
         ...(isAdmin ? [
-            { id: 'users', l: t('users') || 'Users', icon: Users },
-            { id: 'permissions', l: t('permissions') || 'Permissions', icon: Shield },
-            { id: 'activity_log', l: t('activity_log') || 'Activity Log', icon: FileText },
+            { id: 'users', l: t('users') || 'إدارة المستخدمين', icon: Users },
+            { id: 'permissions', l: t('permissions') || 'الصلاحيات', icon: Shield },
+            { id: 'activity_log', l: t('activity_log') || 'سجل النشاط', icon: FileText },
         ] : []),
-        { id: 'database', l: t('database') || 'Database', icon: Database },
+        { id: 'database', l: t('database') || 'قاعدة البيانات', icon: Database },
     ];
 
 
@@ -606,12 +641,15 @@ export default function Settings() {
     // ── Perm Toggle Cell ───────────────────────────────────────────────────────
     const PermCell = ({ has, enabled, onToggle }) => enabled ? (
         <div onClick={onToggle} style={{
-            display: 'inline-flex', width: 34, height: 18, borderRadius: 9, position: 'relative',
-            cursor: 'pointer', background: has ? 'var(--primary)' : 'var(--border)', transition: 'background .15s'
+            display: 'inline-flex', width: 38, height: 20, borderRadius: 10, position: 'relative',
+            cursor: 'pointer', background: has ? 'linear-gradient(135deg, var(--primary), #3b82f6)' : 'var(--bg-secondary)',
+            border: has ? '1px solid transparent' : '1px solid var(--border)',
+            transition: 'all .2s cubic-bezier(0.4, 0, 0.2, 1)',
+            boxShadow: has ? '0 0 8px rgba(37, 99, 235, 0.2)' : 'none'
         }}>
             <div style={{
-                position: 'absolute', top: 2, width: 14, height: 14, borderRadius: '50%', background: '#fff',
-                left: has ? 18 : 2, transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.2)'
+                position: 'absolute', top: 2, width: 14, height: 14, borderRadius: '50%', background: has ? '#fff' : 'var(--text-muted)',
+                left: has ? 20 : 2, transition: 'all .2s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: '0 1px 3px rgba(0,0,0,.15)'
             }} />
         </div>
     ) : <span style={{ color: 'var(--border)', fontSize: 12 }}>—</span>;
@@ -634,7 +672,7 @@ export default function Settings() {
                 transition: 'all 0.3s ease'
             }}>
                 <div style={{ padding: '0 12px 10px', fontSize: '.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
-                    {t('settings') || 'Settings'}
+                    {t('settings') || 'الإعدادات'}
                 </div>
                 {SECTIONS.map(s => {
                     const active = sec === s.id;
@@ -982,16 +1020,17 @@ export default function Settings() {
                 {/* ══ 6. UNIFIED PERMISSIONS ══════════════════════════════════════════ */}
                 {sec === 'permissions' && <>
                     {/* Mode switcher */}
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 18, background: 'var(--bg-secondary)', padding: 6, borderRadius: 12, border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 20, background: 'var(--bg-secondary)', padding: 6, borderRadius: 12, border: '1px solid var(--border)' }}>
                         {[{ id: 'role', label: t('role_permissions') || 'Role Permissions', icon: Shield }, { id: 'user', label: t('individual_permissions') || 'Individual Permissions', icon: Users }].map(m => (
                             <button key={m.id} onClick={() => setPermMode(m.id)} style={{
                                 flex: 1, padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                                fontSize: '.875rem', fontWeight: permMode === m.id ? 700 : 400, transition: 'all .15s',
-                                background: permMode === m.id ? 'var(--primary)' : 'transparent',
+                                fontSize: '.875rem', fontWeight: permMode === m.id ? 700 : 400, transition: 'all .2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                background: permMode === m.id ? 'linear-gradient(135deg, var(--primary), #3b82f6)' : 'transparent',
                                 color: permMode === m.id ? '#fff' : 'var(--text-secondary)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
+                                boxShadow: permMode === m.id ? '0 4px 12px rgba(37, 99, 235, 0.25)' : 'none',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
                             }}>
-                                <m.icon size={15} /> {m.label}
+                                <m.icon size={16} /> {m.label}
                             </button>
                         ))}
                     </div>
@@ -999,39 +1038,79 @@ export default function Settings() {
                     {/* ── ROLE MODE ── */}
                     {permMode === 'role' && <>
                         {/* Role selector tabs */}
-                        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                            {[['accountant', t('accountant_role') || 'Accountant'], ['user', t('user_role') || 'User']].map(([r, label]) => (
-                                <button key={r} onClick={() => { setSelRole(r); if (!permLoaded) loadPerms(); }} style={{
-                                    padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
-                                    fontSize: '.875rem', fontWeight: selRole === r ? 700 : 400, transition: 'all .15s',
-                                    background: selRole === r ? roleColor(r) : 'var(--bg-secondary)',
-                                    color: selRole === r ? '#fff' : 'var(--text-secondary)',
-                                    border: selRole === r ? 'none' : '1px solid var(--border)'
-                                }}>{label}</button>
-                            ))}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+                            {[
+                                { id: 'accountant', label: t('accountant_role') || 'Accountant', desc: 'صلاحيات متوسطة مخصصة لإدارة العمليات المالية والقيود والحسابات.', icon: Key, color: '#6366f1' },
+                                { id: 'user', label: t('user_role') || 'User', desc: 'صلاحيات محدودة مخصصة لإصدار الفواتير ونقاط البيع بدون العمليات الإدارية.', icon: User, color: '#10b981' }
+                            ].map(role => {
+                                const selected = selRole === role.id;
+                                return (
+                                    <div 
+                                        key={role.id} 
+                                        onClick={() => { setSelRole(role.id); if (!permLoaded) loadPerms(); }} 
+                                        style={{
+                                            padding: '16px 20px', 
+                                            borderRadius: 14, 
+                                            cursor: 'pointer', 
+                                            transition: 'all .25s cubic-bezier(0.4, 0, 0.2, 1)',
+                                            background: selected ? `linear-gradient(135deg, ${role.color}15, ${role.color}05)` : 'var(--surface)',
+                                            border: selected ? `2px solid ${role.color}` : '1px solid var(--border)',
+                                            boxShadow: selected ? `0 8px 24px ${role.color}15` : 'none',
+                                            transform: selected ? 'translateY(-2px)' : 'none',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 16
+                                        }}
+                                    >
+                                        <div style={{
+                                            width: 44, 
+                                            height: 44, 
+                                            borderRadius: 10, 
+                                            background: selected ? role.color : 'var(--bg-secondary)', 
+                                            color: selected ? '#fff' : 'var(--text-secondary)',
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'center', 
+                                            transition: 'all .2s',
+                                            boxShadow: selected ? `0 4px 10px ${role.color}33` : 'none'
+                                        }}>
+                                            <role.icon size={22} />
+                                        </div>
+                                        <div style={{ flex: 1, textAlign: 'right' }}>
+                                            <div style={{ fontWeight: 700, fontSize: '.95rem', color: selected ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{role.label}</div>
+                                            <div style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.4 }}>{role.desc}</div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
 
-                        {!permLoaded && <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>{t('loading') || 'Loading...'}</div>}
+                        {!permLoaded && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}><div className="spinner" /></div>}
                         {permLoaded && (
                             <Card title={`${t('role_permissions') || 'Role Permissions'}: ${roleName(selRole)}`} icon={Shield}
                                 action={
-                                    selRole === 'admin' ? <span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,.1)', color: '#ef4444', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('admin_role') || 'Admin'}</span> : null
+                                    selRole === 'admin' ? <span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,.1)', color: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 700 }}>{t('admin_role') || 'Admin'}</span> : null
                                 }
                             >
-                                <div style={{ overflowX: 'auto' }}>
+                                <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
                                         <thead>
-                                            <tr>
-                                                <th style={{ ...thStyle(null), textAlign: 'right', padding: '9px 12px' }}>{t('module') || 'Module'}</th>
-                                                {PERM_KEYS.map(pk => <th key={pk.key} style={thStyle(70)}>{pk.label}</th>)}
+                                            <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, fontSize: '.8rem', color: 'var(--text-secondary)', width: '40%' }}>{t('module') || 'Module'}</th>
+                                                {PERM_KEYS.map(pk => <th key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600, fontSize: '.8rem', color: 'var(--text-secondary)', width: '15%' }}>{pk.label}</th>)}
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {PERM_MODS.map((m, i) => (
                                                 <tr key={m.m} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
-                                                    <td style={{ padding: '9px 12px', fontWeight: 500, fontSize: '.875rem' }}>{m.l}</td>
+                                                    <td style={{ padding: '12px 16px', fontWeight: 600, fontSize: '.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                        <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(37,99,235,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                            {getModIcon(m.m)}
+                                                        </div>
+                                                        <span>{m.l}</span>
+                                                    </td>
                                                     {PERM_KEYS.map(pk => (
-                                                        <td key={pk.key} style={{ padding: 8, textAlign: 'center' }}>
+                                                        <td key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
                                                             <PermCell has={!!permState[selRole]?.[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
                                                                 onToggle={() => togglePerm(selRole, m.m, pk.key)} />
                                                         </td>
@@ -1043,9 +1122,9 @@ export default function Settings() {
                                 </div>
                             </Card>
                         )}
-                        {permLoaded && <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                            <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving} onClick={savePerms}>
-                                <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_role_permissions') || 'Save Role Permissions')}
+                        {permLoaded && <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+                            <button style={{ ...btnStyle, background: 'linear-gradient(135deg, var(--primary), #3b82f6)', color: '#fff', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)', transition: 'all .2s' }} disabled={saving} onClick={savePerms}>
+                                <Save size={15} /> {saving ? (t('saving') || 'Saving...') : (t('save_role_permissions') || 'Save Role Permissions')}
                             </button>
                         </div>}
                     </>}
@@ -1054,17 +1133,17 @@ export default function Settings() {
                     {permMode === 'user' && <>
                         <Card title={t('select_user_permissions') || 'Select a user to customize permissions'} icon={Users}>
                             {/* Search bar */}
-                            <div style={{ position: 'relative', marginBottom: 14 }}>
+                            <div style={{ position: 'relative', marginBottom: 16 }}>
                                 <input
                                     placeholder={t('search_user_placeholder') || 'ابحث بالاسم...'}
                                     value={permSearch}
                                     onChange={e => setPermSearch(e.target.value)}
-                                    style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 10, fontSize: '.9rem', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                                    style={{ width: '100%', padding: '12px 16px', border: '1px solid var(--border)', borderRadius: 12, fontSize: '.9rem', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'all .2s' }}
                                 />
                                 {permSearch && (
                                     <button onClick={() => { setPermSearch(''); setSelUser(null); }}
-                                        style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, display: 'flex', alignItems: 'center' }}>
-                                        <X size={14} />
+                                        style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, display: 'flex', alignItems: 'center' }}>
+                                        <X size={16} />
                                     </button>
                                 )}
                             </div>
@@ -1081,26 +1160,29 @@ export default function Settings() {
                                 if (users.length === 0) return <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: '.875rem' }}>{t('loading') || 'جاري التحميل...'}</div>;
                                 if (filtered.length === 0) return <div style={{ textAlign: 'center', padding: 16, color: 'var(--text-muted)', fontSize: '.875rem' }}>{t('no_results') || 'لا توجد نتائج'}</div>;
                                 return (
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
                                         {filtered.map(u => {
                                             const selected = selUser?.id === u.id;
                                             return (
                                                 <div key={u.id} onClick={() => { setSelUser(u); loadUserPerms(u); setPermSearch(''); }}
                                                     style={{
-                                                        padding: '12px 14px', borderRadius: 12, cursor: 'pointer', transition: 'all .15s',
-                                                        display: 'flex', alignItems: 'center', gap: 10,
+                                                        padding: '14px 16px', borderRadius: 14, cursor: 'pointer', transition: 'all .25s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                        display: 'flex', alignItems: 'center', gap: 12,
                                                         border: selected ? `2px solid var(--primary)` : '1px solid var(--border)',
-                                                        background: selected ? 'rgba(37,99,235,.08)' : 'var(--surface)',
-                                                    }}>
-                                                    <div style={{ width: 38, height: 38, borderRadius: '50%', background: `linear-gradient(135deg, ${roleColor(u.role)}, ${roleColor(u.role)}88)`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flexShrink: 0, fontSize: '1rem' }}>
+                                                        background: selected ? 'linear-gradient(135deg, rgba(37,99,235,.08), rgba(37,99,235,.02))' : 'var(--surface)',
+                                                        boxShadow: selected ? '0 8px 16px rgba(37, 99, 235, 0.08)' : 'none',
+                                                        transform: selected ? 'translateY(-2px)' : 'none'
+                                                    }}
+                                                >
+                                                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: `linear-gradient(135deg, ${roleColor(u.role)}, ${roleColor(u.role)}88)`, color: '#fff', display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', fontWeight: 800, flexShrink: 0, fontSize: '1rem', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}>
                                                         {(u.full_name || u.username || '?')[0].toUpperCase()}
                                                     </div>
-                                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ fontWeight: 600, fontSize: '.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name || u.username}</div>
-                                                        <div style={{ fontSize: '.72rem', color: 'var(--text-muted)' }}>@{u.username}</div>
-                                                        <span style={{ fontSize: '.67rem', fontWeight: 700, padding: '1px 7px', borderRadius: 20, display: 'inline-block', marginTop: 2, background: roleColor(u.role) + '18', color: roleColor(u.role) }}>{roleName(u.role)}</span>
+                                                    <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
+                                                        <div style={{ fontWeight: 700, fontSize: '.9rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name || u.username}</div>
+                                                        <div style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 2 }}>@{u.username}</div>
+                                                        <span style={{ fontSize: '.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'inline-block', marginTop: 4, background: roleColor(u.role) + '18', color: roleColor(u.role) }}>{roleName(u.role)}</span>
                                                     </div>
-                                                    {selected && <Check size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />}
+                                                    {selected && <Check size={18} style={{ color: 'var(--primary)', flexShrink: 0 }} />}
                                                 </div>
                                             );
                                         })}
@@ -1114,24 +1196,29 @@ export default function Settings() {
                                 title={`${t('override_role_permissions') || 'Override Role Permissions'}: ${selUser.full_name || selUser.username}`}
                                 icon={Shield}
                                 action={upHasInd
-                                    ? <span style={{ fontSize: '.72rem', background: 'rgba(16,185,129,.1)', color: 'var(--success)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('custom_permissions_badge') || 'Custom Permissions Active'}</span>
-                                    : <span style={{ fontSize: '.72rem', background: 'var(--bg-secondary)', color: 'var(--text-muted)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('default_role_permissions_badge') || 'Using Role Permissions'}</span>}
+                                    ? <span style={{ fontSize: '.72rem', background: 'rgba(16,185,129,.12)', color: 'var(--success)', padding: '4px 12px', borderRadius: 20, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }}></span> {t('custom_permissions_badge') || 'Custom Permissions Active'}</span>
+                                    : <span style={{ fontSize: '.72rem', background: 'var(--bg-secondary)', color: 'var(--text-muted)', padding: '4px 12px', borderRadius: 20, fontWeight: 700 }}>{t('default_role_permissions_badge') || 'Using Role Permissions'}</span>}
                             >
-                                {upLoading ? <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>{t('loading') || 'Loading...'}</div> : <>
-                                    <div style={{ overflowX: 'auto', marginBottom: 14 }}>
+                                {upLoading ? <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}><div className="spinner" /></div> : <>
+                                    <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', marginBottom: 16 }}>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
                                             <thead>
-                                                <tr>
-                                                    <th style={{ ...thStyle(null), textAlign: 'right', padding: '9px 12px' }}>{t('module') || 'Module'}</th>
-                                                    {PERM_KEYS.map(pk => <th key={pk.key} style={thStyle(70)}>{pk.label}</th>)}
+                                                <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                                    <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, fontSize: '.8rem', color: 'var(--text-secondary)', width: '40%' }}>{t('module') || 'Module'}</th>
+                                                    {PERM_KEYS.map(pk => <th key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600, fontSize: '.8rem', color: 'var(--text-secondary)', width: '15%' }}>{pk.label}</th>)}
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {PERM_MODS.map((m, i) => (
                                                     <tr key={m.m} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
-                                                        <td style={{ padding: '9px 12px', fontWeight: 500, fontSize: '.875rem' }}>{m.l}</td>
+                                                        <td style={{ padding: '12px 16px', fontWeight: 600, fontSize: '.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                            <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(37,99,235,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                {getModIcon(m.m)}
+                                                            </div>
+                                                            <span>{m.l}</span>
+                                                        </td>
                                                         {PERM_KEYS.map(pk => (
-                                                            <td key={pk.key} style={{ padding: 8, textAlign: 'center' }}>
+                                                            <td key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
                                                                 <PermCell has={!!upState[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
                                                                     onToggle={() => setUpState(p => ({ ...p, [m.m]: { ...p[m.m], [pk.key]: !p[m.m]?.[pk.key] } }))} />
                                                             </td>
@@ -1142,12 +1229,12 @@ export default function Settings() {
                                         </table>
                                     </div>
                                     <div style={{ display: 'flex', gap: 10 }}>
-                                        <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving} onClick={saveUserPerms}>
-                                            <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_individual_permissions') || 'Save Individual Permissions')}
+                                        <button style={{ ...btnStyle, background: 'linear-gradient(135deg, var(--primary), #3b82f6)', color: '#fff', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)', transition: 'all .2s' }} disabled={saving} onClick={saveUserPerms}>
+                                            <Save size={15} /> {saving ? (t('saving') || 'Saving...') : (t('save_individual_permissions') || 'Save Individual Permissions')}
                                         </button>
                                         {upHasInd && <button style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
                                             disabled={saving} onClick={clearUserPerms}>
-                                            <RefreshCw size={13} /> {t('reset_to_role_permissions') || 'Reset to Role Permissions'}
+                                            <RefreshCw size={14} /> {t('reset_to_role_permissions') || 'Reset to Role Permissions'}
                                         </button>}
                                     </div>
                                 </>}
@@ -1159,6 +1246,7 @@ export default function Settings() {
                 {/* ══ 7b. ACTIVITY LOG ════════════════════════════════════════════════ */}
                 {sec === 'activity_log' && isAdmin && (() => {
                     const actionColors = { create: '#10b981', update: '#f59e0b', delete: '#ef4444', login: '#3b82f6' };
+                    const actionIcons = { create: Plus, update: Edit2, delete: Trash2, login: Key };
                     const actionLabels = { create: t('log_action_create') || 'إنشاء', update: t('log_action_update') || 'تعديل', delete: t('log_action_delete') || 'حذف', login: t('log_action_login') || 'دخول' };
                     const moduleLabels = {
                         customers: t('log_module_customers') || 'العملاء',
@@ -1192,106 +1280,151 @@ export default function Settings() {
                                 </button>
                             }>
                                 {/* Filter Row */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: 10, marginBottom: 16 }}>
-                                    <input
-                                        placeholder={t('log_filter_user') || 'فلترة بالمستخدم...'}
-                                        value={logFilters.user_name}
-                                        onChange={e => setLogFilters(f => ({ ...f, user_name: e.target.value }))}
-                                        style={{ ...inp, margin: 0 }}
-                                    />
-                                    <select
-                                        value={logFilters.module}
-                                        onChange={e => setLogFilters(f => ({ ...f, module: e.target.value }))}
-                                        style={{ ...inp, margin: 0 }}
-                                    >
-                                        <option value="">{t('log_all_modules') || 'جميع الوحدات'}</option>
-                                        {allModules.map(m => <option key={m} value={m}>{moduleLabels[m]}</option>)}
-                                    </select>
-                                    <select
-                                        value={logFilters.action}
-                                        onChange={e => setLogFilters(f => ({ ...f, action: e.target.value }))}
-                                        style={{ ...inp, margin: 0 }}
-                                    >
-                                        <option value="">{t('log_all_actions') || 'جميع الأنواع'}</option>
-                                        {Object.entries(actionLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                                    </select>
-                                    <input type="date" value={logFilters.startDate} onChange={e => setLogFilters(f => ({ ...f, startDate: e.target.value }))} style={{ ...inp, margin: 0 }} />
-                                    <input type="date" value={logFilters.endDate} onChange={e => setLogFilters(f => ({ ...f, endDate: e.target.value }))} style={{ ...inp, margin: 0 }} />
-                                    <button
-                                        onClick={() => {
-                                            const newF = { module: '', action: '', user_name: '', startDate: '', endDate: '' };
-                                            setLogFilters(newF);
-                                            loadActivityLog(newF);
-                                        }}
-                                        style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}
-                                    >
-                                        <X size={14} />
-                                    </button>
-                                </div>
-
-                                {/* Apply button */}
-                                <div style={{ marginBottom: 14 }}>
-                                    <button
-                                        onClick={() => loadActivityLog(logFilters)}
-                                        style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
-                                    >
-                                        <Eye size={14} /> {t('filter') || 'تصفية'}
-                                    </button>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18, background: 'var(--bg-secondary)', padding: 16, borderRadius: 14, border: '1px solid var(--border)' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            <label style={{ fontSize: '.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('user') || 'المستخدم'}</label>
+                                            <input
+                                                placeholder={t('log_filter_user') || 'فلترة بالمستخدم...'}
+                                                value={logFilters.user_name}
+                                                onChange={e => setLogFilters(f => ({ ...f, user_name: e.target.value }))}
+                                                style={{ ...inp, margin: 0, padding: '8px 12px' }}
+                                            />
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            <label style={{ fontSize: '.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('log_filter_module') || 'الوحدة'}</label>
+                                            <select
+                                                value={logFilters.module}
+                                                onChange={e => setLogFilters(f => ({ ...f, module: e.target.value }))}
+                                                style={{ ...inp, margin: 0, padding: '8px 12px' }}
+                                            >
+                                                <option value="">{t('log_all_modules') || 'جميع الوحدات'}</option>
+                                                {allModules.map(m => <option key={m} value={m}>{moduleLabels[m]}</option>)}
+                                            </select>
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            <label style={{ fontSize: '.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('log_filter_action') || 'النوع'}</label>
+                                            <select
+                                                value={logFilters.action}
+                                                onChange={e => setLogFilters(f => ({ ...f, action: e.target.value }))}
+                                                style={{ ...inp, margin: 0, padding: '8px 12px' }}
+                                            >
+                                                <option value="">{t('log_all_actions') || 'جميع الأنواع'}</option>
+                                                {Object.entries(actionLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                            </select>
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            <label style={{ fontSize: '.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('from_date') || 'من تاريخ'}</label>
+                                            <input type="date" value={logFilters.startDate} onChange={e => setLogFilters(f => ({ ...f, startDate: e.target.value }))} style={{ ...inp, margin: 0, padding: '8px 12px' }} />
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            <label style={{ fontSize: '.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{t('to_date') || 'إلى تاريخ'}</label>
+                                            <input type="date" value={logFilters.endDate} onChange={e => setLogFilters(f => ({ ...f, endDate: e.target.value }))} style={{ ...inp, margin: 0, padding: '8px 12px' }} />
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid var(--border-light)', paddingTop: 12 }}>
+                                        <button
+                                            onClick={() => loadActivityLog(logFilters)}
+                                            style={{ ...btnStyle, background: 'linear-gradient(135deg, var(--primary), #3b82f6)', color: '#fff', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)', padding: '7px 16px' }}
+                                        >
+                                            <Eye size={14} /> {t('filter') || 'تصفية'}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const newF = { module: '', action: '', user_name: '', startDate: '', endDate: '' };
+                                                setLogFilters(newF);
+                                                loadActivityLog(newF);
+                                            }}
+                                            style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '7px 16px' }}
+                                        >
+                                            <RefreshCw size={14} /> {t('reset_filters') || 'إعادة تعيين'}
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Table */}
                                 {logLoading ? (
-                                    <div style={{ textAlign: 'center', padding: 30 }}><div className="spinner" /></div>
+                                    <div style={{ textAlign: 'center', padding: 40 }}><div className="spinner" /></div>
                                 ) : activityLogs.length === 0 ? (
-                                    <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: '.875rem' }}>
+                                    <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: '.875rem' }}>
                                         {t('log_no_logs') || 'لا توجد سجلات بعد'}
                                     </div>
                                 ) : (
-                                    <div style={{ overflowX: 'auto' }}>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.83rem' }}>
+                                    <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.85rem' }}>
                                             <thead>
-                                                <tr style={{ background: 'var(--bg-secondary)' }}>
-                                                    <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{t('date') || 'التاريخ'}</th>
-                                                    <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>{t('user') || 'المستخدم'}</th>
-                                                    <th style={{ padding: '9px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>{t('log_filter_action') || 'النوع'}</th>
-                                                    <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>{t('log_filter_module') || 'الوحدة'}</th>
-                                                    <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>{t('log_entity_ref') || 'المرجع'}</th>
+                                                <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                                    <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', width: '25%' }}>{t('date') || 'التاريخ'}</th>
+                                                    <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', width: '25%' }}>{t('user') || 'المستخدم'}</th>
+                                                    <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)', width: '15%' }}>{t('log_filter_action') || 'النوع'}</th>
+                                                    <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', width: '15%' }}>{t('log_filter_module') || 'الوحدة'}</th>
+                                                    <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', width: '20%' }}>{t('log_entity_ref') || 'المرجع'}</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {activityLogs.map((log, i) => {
                                                     const color = actionColors[log.action] || '#6b7280';
                                                     const label = actionLabels[log.action] || log.action;
+                                                    const ActionIcon = actionIcons[log.action] || Shield;
                                                     const modLabel = moduleLabels[log.module] || log.module;
                                                     const dt = new Date(log.created_at);
                                                     const dateStr = isNaN(dt) ? log.created_at : dt.toLocaleDateString('ar', { year: 'numeric', month: '2-digit', day: '2-digit' });
                                                     const timeStr = isNaN(dt) ? '' : dt.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
                                                     return (
                                                         <tr key={log.id} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
-                                                            <td style={{ padding: '9px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                                                                <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{dateStr}</div>
-                                                                <div style={{ fontSize: '.75rem' }}>{timeStr}</div>
+                                                            <td style={{ padding: '12px 16px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                                    <Calendar size={13} style={{ color: 'var(--text-muted)' }} />
+                                                                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{dateStr}</span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.75rem', marginTop: 4 }}>
+                                                                    <Clock size={12} style={{ color: 'var(--text-muted)' }} />
+                                                                    <span>{timeStr}</span>
+                                                                </div>
                                                             </td>
-                                                            <td style={{ padding: '9px 12px' }}>
-                                                                <div style={{ fontWeight: 600 }}>{log.user_name}</div>
-                                                                {log.user_id && <div style={{ fontSize: '.72rem', color: 'var(--text-muted)' }}>ID: {log.user_id}</div>}
+                                                            <td style={{ padding: '12px 16px' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg, var(--primary), #3b82f6)`, color: '#fff', display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '.8rem', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
+                                                                        {(log.user_name || '?')[0].toUpperCase()}
+                                                                    </div>
+                                                                    <div style={{ textAlign: 'right' }}>
+                                                                        <div style={{ fontWeight: 700, fontSize: '.88rem', color: 'var(--text-primary)' }}>{log.user_name}</div>
+                                                                        {log.user_id && <div style={{ fontSize: '.72rem', color: 'var(--text-muted)', marginTop: 2 }}>ID: {log.user_id}</div>}
+                                                                    </div>
+                                                                </div>
                                                             </td>
-                                                            <td style={{ padding: '9px 12px', textAlign: 'center' }}>
+                                                            <td style={{ padding: '12px 16px', textAlign: 'center', verticalAlign: 'middle' }}>
                                                                 <span style={{
-                                                                    display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontWeight: 700, fontSize: '.75rem',
-                                                                    background: color + '18', color
-                                                                }}>{label}</span>
+                                                                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: '.75rem',
+                                                                    background: color + '12', color, border: `1px solid ${color}22`, boxShadow: `0 2px 8px ${color}10`
+                                                                }}>
+                                                                    <ActionIcon size={12} />
+                                                                    {label}
+                                                                </span>
                                                             </td>
-                                                            <td style={{ padding: '9px 12px', color: 'var(--text-secondary)', fontWeight: 500 }}>{modLabel}</td>
-                                                            <td style={{ padding: '9px 12px', color: 'var(--text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.entity_ref}>
-                                                                {log.entity_ref || '—'}
+                                                            <td style={{ padding: '12px 16px', verticalAlign: 'middle' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontWeight: 600, fontSize: '.85rem' }}>
+                                                                    <div style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                        {getModIcon(log.module)}
+                                                                    </div>
+                                                                    <span>{modLabel}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td style={{ padding: '12px 16px', verticalAlign: 'middle', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.entity_ref}>
+                                                                {log.entity_ref ? (
+                                                                    <span style={{
+                                                                        fontFamily: 'monospace', fontSize: '.78rem', background: 'var(--bg-secondary)', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-light)', display: 'inline-block', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-secondary)'
+                                                                    }}>
+                                                                        {log.entity_ref}
+                                                                    </span>
+                                                                ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                                                             </td>
                                                         </tr>
                                                     );
                                                 })}
                                             </tbody>
                                         </table>
-                                        <div style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '.78rem', borderTop: '1px solid var(--border)' }}>
+                                        <div style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: '.8rem', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)', borderBottomLeftRadius: 12, borderBottomRightRadius: 12 }}>
                                             {activityLogs.length} {t('records') || 'سجل'}
                                         </div>
                                     </div>
@@ -1329,14 +1462,14 @@ export default function Settings() {
                         </div>
                     </Card>
 
-                    <Card title={t('database_info') || 'Database Info'} icon={HardDrive}>
+                    <Card title={t('database_info') || 'معلومات قاعدة البيانات'} icon={HardDrive}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                             <div style={{ padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8, fontFamily: 'monospace', fontSize: '.82rem', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
-                                <strong>{t('path') || 'Path'}: </strong>{dbPath || (t('not_available') || 'Not available')}
+                                <strong>{t('path') || 'المسار'}: </strong>{dbPath || (t('not_available') || 'غير متاح')}
                             </div>
                             <div style={{ padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8, fontSize: '.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div>
-                                    <strong>{t('size') || 'Size'}: </strong><span dir="ltr">{dbSize || (t('calculating') || 'Calculating...')}</span>
+                                    <strong>{t('size') || 'الحجم'}: </strong><span dir="ltr">{dbSize || (t('calculating') || 'جاري الحساب...')}</span>
                                 </div>
                                 <button style={{ padding: '7px 12px', background: 'var(--primary)', color: '#fff', borderRadius: 6, fontSize: '.75rem', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }} disabled={saving} onClick={async () => {
                                     setSaving(true);
@@ -1359,22 +1492,22 @@ export default function Settings() {
                                     }
                                     setSaving(false);
                                 }}>
-                                    <RefreshCw size={14} /> {t('optimize_space') || 'Optimize Space'}
+                                    <RefreshCw size={14} /> {t('optimize_space') || 'تحسين المساحة'}
                                 </button>
                             </div>
                         </div>
                     </Card>
 
-                    <Card title={t('backup_and_restore') || 'Backup & Restore'} icon={Database}>
+                    <Card title={t('backup_and_restore') || 'النسخ الاحتياطي والاستعادة'} icon={Database}>
                         <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
-                            {t('backup_hint') || 'Take regular backups to protect your data.'}
+                            {t('backup_hint') || 'قم بأخذ نسخ احتياطية بانتظام لحماية بياناتك.'}
                         </p>
                         <div style={{ display: 'flex', gap: 10 }}>
                             <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} onClick={backup}>
-                                <Download size={14} /> {t('backup') || 'Backup'}
+                                <Download size={14} /> {t('backup') || 'نسخ احتياطي'}
                             </button>
                             <button style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }} onClick={restore}>
-                                <Upload size={14} /> {t('restore_from_backup') || 'Restore from Backup'}
+                                <Upload size={14} /> {t('restore_from_backup') || 'استعادة من نسخة احتياطية'}
                             </button>
                         </div>
                     </Card>

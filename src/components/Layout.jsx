@@ -55,7 +55,7 @@ function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
         // First pass: collect visible item IDs
         for (const item of menuItems) {
             if (item.type === 'section') continue;
-            if (isAdmin || userPerms[item.permModule]?.can_view === true) {
+            if (userPerms[item.permModule]?.can_view === true || (isAdmin && ['settings', 'permissions', 'dashboard'].includes(item.permModule))) {
                 visibleIds.add(item.id);
             }
         }

@@ -759,15 +759,7 @@ class UsersRepo {
         const user = this.db.get('SELECT * FROM users WHERE username = ? AND password_hash = ? AND is_active = 1', [username, password]);
         if (user) {
             delete user.password_hash;
-            // Admins (company managers) always have full permissions — hardcoded
-            if (user.role === 'admin') {
-                const permMap = {};
-                const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'pos', 'financial_summary', 'database'];
-                for (const mod of modules) permMap[mod] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
-                user.permissions = permMap;
-                return { success: true, user };
-            }
-            // Non-admin: load role-based permissions
+            // Load role-based permissions
             const rolePerms = this.db.all('SELECT * FROM permissions WHERE role = ?', [user.role]);
             const permMap = {};
             for (const p of rolePerms) {
@@ -781,6 +773,12 @@ class UsersRepo {
                     permMap[p.module] = { can_view: !!p.can_view, can_create: !!p.can_create, can_edit: !!p.can_edit, can_delete: !!p.can_delete };
                 }
                 user.has_individual_permissions = true;
+            }
+            // Admins (company managers) must always have full settings/permissions/dashboard access to prevent lockouts
+            if (user.role === 'admin') {
+                permMap['settings'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                permMap['permissions'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                permMap['dashboard'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
             }
             user.permissions = permMap;
             return { success: true, user };
@@ -2590,6 +2588,37 @@ class StockTransfersRepo {
             }
             const num = transfer.transfer_number || `TR-${String(nextNumNum).padStart(6, '0')}`;
             const direction = transfer.direction || 'shop_to_warehouse';
+
+            // Pre-validate stock levels if allowNegative is false
+            const allowNegativeSetting = this.db.get("SELECT value FROM settings WHERE key = 'allow_negative_stock'");
+            const allowNegative = allowNegativeSetting && (allowNegativeSetting.value === 'yes' || allowNegativeSetting.value === '1');
+
+            if (!allowNegative) {
+                for (const item of transfer.items || []) {
+                    const productId = parseInt(item.product_id, 10);
+                    const quantity = parseFloat(item.quantity) || 0;
+                    if (!productId || quantity <= 0) continue;
+
+                    const product = this.db.get('SELECT name, warehouse_stock, shop_stock FROM products WHERE id = ?', [productId]);
+                    if (!product) continue;
+
+                    if (direction === 'warehouse_to_shop') {
+                        if ((product.warehouse_stock || 0) < quantity) {
+                            return { 
+                                success: false, 
+                                error: `الكمية المطلوبة للتحويل من المستودع غير متوفرة للمنتج "${product.name}" (المتاح: ${product.warehouse_stock || 0}، المطلوب: ${quantity})` 
+                            };
+                        }
+                    } else { // shop_to_warehouse
+                        if ((product.shop_stock || 0) < quantity) {
+                            return { 
+                                success: false, 
+                                error: `الكمية المطلوبة للتحويل من المحل غير متوفرة للمنتج "${product.name}" (المتاح: ${product.shop_stock || 0}، المطلوب: ${quantity})` 
+                            };
+                        }
+                    }
+                }
+            }
 
             const r = this.db.run(
                 "INSERT INTO stock_transfers (transfer_number, date, status, notes, direction, created_by) VALUES (?, ?, ?, ?, ?, ?)",

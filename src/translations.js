@@ -2,6 +2,9 @@ const translations = {
     ar: {
         // App
         appName: 'نظام المحاسبة',
+        good_morning: 'صباح الخير',
+        good_afternoon: 'طاب يومك',
+        good_evening: 'مساء الخير',
         loading: 'جارٍ التحميل...',
         connectionError: 'حدث خطأ في الاتصال',
         search: 'بحث...',
@@ -38,6 +41,7 @@ const translations = {
         menu_pos: 'نقطة البيع (POS)',
         menu_warehouse: 'المخزن',
         cb_totalBalance: 'إجمالي الرصيد',
+        cb_active_account_actions: 'العمليات المتاحة على الحساب المحدد',
 
         // Warehouse
         warehouse: 'المخزن',
@@ -1469,11 +1473,18 @@ const translations = {
         automatic_backup: 'النسخة الاحتياطية التلقائية',
         log_module_rent: 'الإيجار',
         records: 'سجلات',
+        rows_per_page: 'الصفوف لكل صفحة:',
+        showing: 'عرض',
+        of: 'من',
+        reset_filters: 'إعادة تعيين',
     },
     en: {
 
         // App
         appName: 'Accounting System',
+        good_morning: 'Good Morning',
+        good_afternoon: 'Good Afternoon',
+        good_evening: 'Good Evening',
         loading: 'Loading...',
         connectionError: 'Connection error',
         search: 'Search...',
@@ -1510,6 +1521,7 @@ const translations = {
         menu_pos: 'Point of Sale (POS)',
         menu_warehouse: 'Warehouse',
         cb_totalBalance: 'Total Balance',
+        cb_active_account_actions: 'Available Actions for Selected Account',
 
         // Warehouse
         warehouse: 'Warehouse',
@@ -2897,6 +2909,10 @@ const translations = {
         automatic_backup: 'Automatic Backup',
         log_module_rent: 'Rent',
         records: 'records',
+        rows_per_page: 'Rows per page:',
+        showing: 'Showing',
+        of: 'of',
+        reset_filters: 'Reset Filters',
     }
 };
 

@@ -245,7 +245,7 @@ function App() {
                     'hr': 'hr', 'pos': 'pos', 'settings': 'settings'
                 };
                 const mod = moduleMap[target];
-                if (isAdmin || !mod || perms[mod]?.can_view) {
+                if (!mod || perms[mod]?.can_view || (isAdmin && ['settings', 'permissions', 'dashboard'].includes(mod))) {
                     setCurrentPage(target);
                 }
             }

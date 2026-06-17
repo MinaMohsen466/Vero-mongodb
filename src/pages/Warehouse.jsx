@@ -14,6 +14,7 @@ export default function Warehouse() {
     const [loading, setLoading] = useState(false);
     const [products, setProducts] = useState([]);
     const [transfers, setTransfers] = useState([]);
+    const [settings, setSettings] = useState({});
     const isAr = language === 'ar';
 
     const getFriendlyErrorMessage = (error, defaultKey) => {
@@ -67,7 +68,17 @@ export default function Warehouse() {
         const product = products.find(p => p.id === id);
         if (!product) return;
 
-        // Check shop stock availability (removed validation constraint to allow negative stock transfer)
+        // Check shop stock availability if negative stock is not allowed
+        const allowNegative = settings.general?.allow_negative_stock === 'yes';
+        const availableStock = product.shop_stock || 0;
+        if (!allowNegative && qty > availableStock) {
+            toast.error(
+                isAr
+                    ? `الكمية المدخلة تفوق الكمية المتاحة في المحل (${availableStock})`
+                    : `Entered quantity exceeds available stock in shop (${availableStock})`
+            );
+            return;
+        }
 
         setLoading(true);
         try {
@@ -109,6 +120,7 @@ export default function Warehouse() {
         setLoading(true);
         let prodData = [];
         let transferData = [];
+        let settingsData = {};
 
         try {
             if (window.api.products?.getAll) {
@@ -126,8 +138,17 @@ export default function Warehouse() {
             console.error('Failed to load stock transfers:', error);
         }
 
+        try {
+            if (window.api.settings?.getAll) {
+                settingsData = await window.api.settings.getAll();
+            }
+        } catch (error) {
+            console.error('Failed to load settings:', error);
+        }
+
         setProducts(prodData || []);
         setTransfers(transferData || []);
+        setSettings(settingsData || {});
         setLoading(false);
     };
 
@@ -173,6 +194,17 @@ export default function Warehouse() {
         // Calculate available stock for reference display
         const availableStock = transferDirection === 'shop_to_warehouse' ? (product.shop_stock || 0) : (product.warehouse_stock || 0);
 
+        // Check stock availability if negative stock is not allowed
+        const allowNegative = settings.general?.allow_negative_stock === 'yes';
+        if (!allowNegative && qty > availableStock) {
+            toast.error(
+                isAr
+                    ? `الكمية المدخلة تفوق الكمية المتاحة في ${transferDirection === 'shop_to_warehouse' ? 'المحل' : 'المستودع'} (${availableStock})`
+                    : `Entered quantity exceeds available stock in ${transferDirection === 'shop_to_warehouse' ? 'shop' : 'warehouse'} (${availableStock})`
+            );
+            return;
+        }
+
         setTransferItems(prev => [
             ...prev,
             {
@@ -198,6 +230,25 @@ export default function Warehouse() {
         if (transferItems.length === 0) {
             toast.error(t('add_items_error') || 'يرجى إضافة صنف واحد على الأقل للتحويل');
             return;
+        }
+
+        // Final validation of items stock if negative stock is not allowed
+        const allowNegative = settings.general?.allow_negative_stock === 'yes';
+        if (!allowNegative) {
+            for (const item of transferItems) {
+                const prod = products.find(p => p.id === item.product_id);
+                if (prod) {
+                    const availableStock = transferDirection === 'shop_to_warehouse' ? (prod.shop_stock || 0) : (prod.warehouse_stock || 0);
+                    if (item.quantity > availableStock) {
+                        toast.error(
+                            isAr 
+                                ? `الكمية المراد تحويلها لـ "${prod.name}" تفوق الكمية المتاحة في ${transferDirection === 'shop_to_warehouse' ? 'المحل' : 'المستودع'} (المتاح: ${availableStock}، المطلوب: ${item.quantity})`
+                                : `Requested quantity for "${prod.name}" exceeds available stock in ${transferDirection === 'shop_to_warehouse' ? 'shop' : 'warehouse'} (Available: ${availableStock}, Requested: ${item.quantity})`
+                        );
+                        return;
+                    }
+                }
+            }
         }
 
         setLoading(true);
@@ -704,11 +755,11 @@ export default function Warehouse() {
                                         <tr>
                                             <th>{t('code') || 'الكود'}</th>
                                             <th>{t('product_name') || 'اسم المنتج'}</th>
-                                            {transferDirection === 'warehouse_to_shop' && (
-                                                <th style={{ textAlign: 'center' }}>
-                                                    {t('available_in_warehouse') || 'المتاح في المستودع'}
-                                                </th>
-                                            )}
+                                            <th style={{ textAlign: 'center' }}>
+                                                {transferDirection === 'shop_to_warehouse'
+                                                    ? (t('available_in_shop') || 'المتاح في المحل')
+                                                    : (t('available_in_warehouse') || 'المتاح في المستودع')}
+                                            </th>
                                             <th style={{ textAlign: 'center' }}>{t('transfer_quantity') || 'الكمية المحولة'}</th>
                                             <th style={{ width: '50px' }}></th>
                                         </tr>
@@ -718,9 +769,7 @@ export default function Warehouse() {
                                             <tr key={item.product_id}>
                                                 <td>{item.code}</td>
                                                 <td className="font-bold">{item.name}</td>
-                                                {transferDirection === 'warehouse_to_shop' && (
-                                                    <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{item.available}</td>
-                                                )}
+                                                <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{item.available}</td>
                                                 <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--primary)' }}>{item.quantity}</td>
                                                 <td>
                                                     <button

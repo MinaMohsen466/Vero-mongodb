@@ -18,7 +18,7 @@ function Products() {
     const [suppliers, setSuppliers] = useState([]);
     const [supplierSearchQuery, setSupplierSearchQuery] = useState('');
     const [formData, setFormData] = useState({
-        name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [],
+        name: '', description: '', unit: t('prod_piece') || 'قطعة', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [],
         dozen_price: '', dozen_qty: ''
     });
     const [showMovementsModal, setShowMovementsModal] = useState(false);
@@ -113,7 +113,7 @@ function Products() {
                         name: values[1] !== undefined && values[1] !== null ? String(values[1]).trim() : '',
                         description: values[2] !== undefined && values[2] !== null ? String(values[2]).trim() : '',
                         category: values[3] !== undefined && values[3] !== null ? String(values[3]).trim() : '',
-                        unit: values[4] !== undefined && values[4] !== null ? String(values[4]).trim() : t('prod_piece') || 'Piece',
+                        unit: values[4] !== undefined && values[4] !== null ? String(values[4]).trim() : t('prod_piece') || 'قطعة',
                         purchase_price: parseFloat(values[5]) || 0,
                         sale_price: parseFloat(values[6]) || 0,
                         stock_quantity: values.length > 8 ? (parseFloat(values[7]) || 0) : 0,
@@ -157,7 +157,7 @@ function Products() {
         }
     });
 
-    const units = [t('unit_drum') || 'Drum', t('unit_gallon') || 'Gallon', t('unit_liter') || 'Liter', t('unit_kilo') || 'Kilo', t('unit_gram') || 'Gram', t('prod_piece') || 'Piece', t('unit_box') || 'Box', t('unit_carton') || 'Carton'];
+    const units = [t('unit_drum') || 'برميل', t('unit_gallon') || 'جالون', t('unit_liter') || 'لتر', t('unit_kilo') || 'كيلو', t('unit_gram') || 'جرام', t('prod_piece') || 'قطعة', t('unit_box') || 'علبة', t('unit_carton') || 'كرتون'];
 
     useEffect(() => { loadProducts(); }, []);
 
@@ -286,7 +286,7 @@ function Products() {
             });
         } else {
             setShowCustomUnit(false);
-            setFormData({ name: '', description: '', unit: t('prod_piece') || 'Piece', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [], dozen_price: '', dozen_qty: '' });
+            setFormData({ name: '', description: '', unit: t('prod_piece') || 'قطعة', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [], dozen_price: '', dozen_qty: '' });
         }
         setShowModal(true);
     };
@@ -441,12 +441,12 @@ function Products() {
                     </div>
                     {categories.length > 0 && (
                         <select className="form-select" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={{ width: '160px', margin: 0 }}>
-                            <option value="">{t('all') || 'All Categories'}</option>
+                            <option value="">{t('all') || 'جميع الفئات'}</option>
                             {categories.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                     )}
                     {(searchQuery || categoryFilter) && (
-                        <button className="btn btn-ghost btn-sm" onClick={() => { setSearchQuery(''); setCategoryFilter(''); }} style={{ color: 'var(--text-muted)' }}>✕ {t('clear') || 'Clear'}</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => { setSearchQuery(''); setCategoryFilter(''); }} style={{ color: 'var(--text-muted)' }}>✕ {t('clear') || 'مسح'}</button>
                     )}
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -476,7 +476,7 @@ function Products() {
                             <div className="table-container">
                                 <table>
                                     <thead>
-                                        <tr><th>{t('code')}</th><th>{t('prod_name')}</th><th>{t('prod_category')}</th><th>{t('prod_unit')}</th><th>{t('prod_salePrice')}</th><th>{t('warehouse_stock') || 'Warehouse Stock'}</th><th>{t('shop_stock') || 'Shop Stock'}</th><th>{t('total_stock') || 'Total Stock'}</th><th>{t('actions')}</th></tr>
+                                        <tr><th>{t('code') || 'الكود'}</th><th>{t('prod_name') || 'اسم المنتج'}</th><th>{t('prod_category') || 'الفئة'}</th><th>{t('prod_unit') || 'الوحدة'}</th><th>{t('prod_salePrice') || 'سعر البيع'}</th><th>{t('warehouse_stock') || 'مخزون المستودع'}</th><th>{t('shop_stock') || 'مخزون المحل'}</th><th>{t('total_stock') || 'إجمالي المخزون'}</th><th>{t('actions') || 'الإجراءات'}</th></tr>
                                     </thead>
                                     <tbody>
                                         {displayedProducts.map(p => (
@@ -505,7 +505,7 @@ function Products() {
                                                         <button
                                                             className="btn btn-ghost btn-sm"
                                                             onClick={() => openMovementsModal(p)}
-                                                            title={t('prod_track') || 'Track Product'}
+                                                            title={t('prod_track') || 'تتبع حركة المنتج'}
                                                             style={{ color: 'var(--primary)' }}
                                                         >
                                                             <BarChart2 size={16} />
@@ -538,7 +538,7 @@ function Products() {
                                 borderBottomRightRadius: 'var(--radius-lg)'
                             }}>
                                 <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                                    {t('showing') || 'Showing'} {Math.min((activePage - 1) * itemsPerPage + 1, filteredProducts.length)} - {Math.min(activePage * itemsPerPage, filteredProducts.length)} {t('of') || 'of'} {filteredProducts.length}
+                                    {t('showing') || 'عرض'} {Math.min((activePage - 1) * itemsPerPage + 1, filteredProducts.length)} - {Math.min(activePage * itemsPerPage, filteredProducts.length)} {t('of') || 'من'} {filteredProducts.length}
                                 </div>
                                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                                     <button 
@@ -633,8 +633,8 @@ function Products() {
                 title={editingProduct ? t('prod_edit') : t('prod_add')}
                 footer={
                     <>
-                        <button type="button" className="btn btn-secondary" onClick={closeModal}>{t('cancel')} (Esc)</button>
-                        <button type="submit" form="product-form" className="btn btn-primary">{t('save')} (Ctrl+S)</button>
+                        <button type="button" className="btn btn-secondary" onClick={closeModal}>{t('cancel') || 'إلغاء'} (Esc)</button>
+                        <button type="submit" form="product-form" className="btn btn-primary">{t('save') || 'حفظ'} (Ctrl+S)</button>
                     </>
                 }
             >
@@ -659,7 +659,7 @@ function Products() {
 
                             {/* رفع الصورة */}
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100px', flexShrink: 0, gap: '6px' }}>
-                                <label className="form-label" style={{ marginBottom: 0 }}>{t('image') || 'Image'}</label>
+                                <label className="form-label" style={{ marginBottom: 0 }}>{t('image') || 'الصورة'}</label>
                                 <div 
                                     onClick={handleImageUpload}
                                     style={{ 
@@ -689,7 +689,7 @@ function Products() {
                                     )}
                                 </div>
                                 {formData.image && (
-                                    <button type="button" onClick={() => setFormData({ ...formData, image: '' })} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.7rem', cursor: 'pointer', padding: 0 }}>{t('delete') || 'Delete'}</button>
+                                    <button type="button" onClick={() => setFormData({ ...formData, image: '' })} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.7rem', cursor: 'pointer', padding: 0 }}>{t('delete') || 'حذف'}</button>
                                 )}
                             </div>
                         </div>
@@ -698,13 +698,13 @@ function Products() {
                             <label className="form-label">{t('prod_unit')}</label>
                             {showCustomUnit ? (
                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input type="text" className="form-input" value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} placeholder={t('prod_enterUnit') || "Enter unit"} style={{ flex: 1, height: '40px' }} />
-                                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowCustomUnit(false); setFormData({ ...formData, unit: t('prod_piece') || 'Piece' }); }}>{t('cancel') || 'Cancel'}</button>
+                                    <input type="text" className="form-input" value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} placeholder={t('prod_enterUnit') || "أدخل اسم الوحدة"} style={{ flex: 1, height: '40px' }} />
+                                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowCustomUnit(false); setFormData({ ...formData, unit: t('prod_piece') || 'قطعة' }); }}>{t('cancel') || 'إلغاء'}</button>
                                 </div>
                             ) : (
                                 <select className="form-select" value={formData.unit} onChange={(e) => handleUnitChange(e.target.value)} style={{ height: '40px' }}>
                                     {units.map(u => <option key={u} value={u}>{u}</option>)}
-                                    <option value="__custom__">{t('prod_customUnit') || "+ Custom unit..."}</option>
+                                    <option value="__custom__">{t('prod_customUnit') || "+ وحدة مخصصة..."}</option>
                                 </select>
                             )}
                         </div>
@@ -730,7 +730,7 @@ function Products() {
                             gap: '8px'
                         }}>
                             <div style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', paddingBottom: '4px', marginBottom: '2px' }}>
-                                📊 {t('invoice_details') || 'Pricing & Inventory'}
+                                📊 {t('invoice_details') || 'التسعير والمخزون'}
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px' }}>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -750,7 +750,7 @@ function Products() {
                                     <input type="number" className="form-input" value={formData.sale_price} onChange={(e) => setFormData({ ...formData, sale_price: e.target.value })} step="0.05" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
-                                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_stock') || 'Stock Quantity'}</label>
+                                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_stock') || 'مخزون المحل'}</label>
                                     <input type="number" className="form-input" value={formData.shop_stock} onChange={(e) => setFormData({ ...formData, shop_stock: e.target.value })} min="0" step="0.001" style={{ height: '38px', fontSize: '0.85rem' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -787,7 +787,7 @@ function Products() {
                                     <BarChart2 size={22} />
                                 </div>
                                 <div>
-                                    <div style={{ fontWeight: 700, fontSize: '1.05rem' }}>{t('prod_track') || 'Product Tracking'}</div>
+                                    <div style={{ fontWeight: 700, fontSize: '1.05rem' }}>{t('prod_track') || 'تتبع حركة المنتج'}</div>
                                     <div style={{ fontSize: '0.82rem', opacity: 0.85 }}>{selectedProductForTracking.name} — {selectedProductForTracking.code}</div>
                                 </div>
                             </div>
@@ -915,7 +915,7 @@ function Products() {
                             ) : movements.length === 0 ? (
                                 <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-muted)' }}>
                                     <BarChart2 size={48} style={{ opacity: 0.3, marginBottom: '12px' }} />
-                                    <p style={{ fontWeight: 500 }}>{t('prod_noMovements') || 'No movements recorded for this product'}</p>
+                                    <p style={{ fontWeight: 500 }}>{t('prod_noMovements') || 'لا توجد حركات مسجلة لهذا المنتج'}</p>
                                 </div>
                             ) : (
                                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -946,7 +946,7 @@ function Products() {
                                                             color: isSale ? '#dc2626' : '#16a34a'
                                                         }}>
                                                             {isSale ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
-                                                            {isSale ? (t('sale') || 'Sale') : (t('purchase') || 'Purchase')}
+                                                            {isSale ? (t('sale') || 'بيع') : (t('purchase') || 'شراء')}
                                                         </span>
                                                     </td>
                                                     <td style={{ padding: '12px 16px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary)' }}>{m.invoice_number}</td>
