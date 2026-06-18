@@ -579,7 +579,7 @@ function Reports() {
             .text-success{color:#059669;}.text-danger{color:#DC2626;}
             @media print{body{margin:0;}}
         </style></head><body>${el.innerHTML}</body></html>`;
-        window.api.print.invoice(html);
+        window.api.print.invoice(html, { paperSize: 'A4', paperOrientation: 'portrait' });
     };
 
     const exportCSV = async () => {

@@ -6,6 +6,7 @@ const AdminConfig = require('./admin-config');
 
 let mainWindow;
 let adminConfig = null;
+let currentUser = null;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -66,8 +67,8 @@ app.on('before-quit', () => {
 // Helper: log activity safely
 function logActivity(action, module, entity_id, entity_ref, data) {
     try {
-        const user_id = data?._userId || null;
-        const user_name = data?._userName || 'غير معروف';
+        const user_id = data?._userId || (currentUser ? currentUser.id : null);
+        const user_name = data?._userName || (currentUser ? (currentUser.full_name || currentUser.username) : 'غير معروف');
         db.activityLog.log({ user_id, user_name, action, module, entity_id, entity_ref });
     } catch (e) { /* silent */ }
 }
@@ -93,9 +94,14 @@ ipcMain.handle('system:verifySetupAccess', async (event, { username, password })
 ipcMain.handle('users:login', async (event, { username, password }) => {
     const result = db.users.login(username, password);
     if (result.success) {
+        currentUser = result.user;
         db.activityLog.log({ user_id: result.user.id, user_name: result.user.full_name || username, action: 'login', module: 'users', entity_ref: username });
     }
     return result;
+});
+ipcMain.handle('users:setCurrentUser', async (event, user) => {
+    currentUser = user;
+    return { success: true };
 });
 ipcMain.handle('users:getAll', async () => db.users.getAll());
 ipcMain.handle('users:create', async (event, user) => {
@@ -494,7 +500,7 @@ ipcMain.handle('dialog:saveFile', async (event, options) => {
 });
 
 // --- Print ---
-ipcMain.handle('print:invoice', async (event, invoiceHtml) => {
+ipcMain.handle('print:invoice', async (event, invoiceHtml, options = {}) => {
     const printWindow = new BrowserWindow({
         width: 800, height: 600, show: false,
         webPreferences: { nodeIntegration: false, contextIsolation: true }
@@ -503,7 +509,50 @@ ipcMain.handle('print:invoice', async (event, invoiceHtml) => {
     printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(invoiceHtml)}`);
 
     printWindow.webContents.on('did-finish-load', () => {
-        printWindow.webContents.print({ silent: false, printBackground: true }, (success, errorType) => {
+        let paperSize = options.paperSize;
+        let paperOrientation = options.paperOrientation;
+
+        if (!paperSize || !paperOrientation) {
+            try {
+                const settings = db.settings.getAll();
+                const invoiceSettings = settings.invoice || {};
+                if (!paperSize) paperSize = invoiceSettings.paper_size || 'A4';
+                if (!paperOrientation) paperOrientation = invoiceSettings.paper_orientation || 'portrait';
+            } catch (e) {
+                if (!paperSize) paperSize = 'A4';
+                if (!paperOrientation) paperOrientation = 'portrait';
+            }
+        }
+
+        let pageSizeOption = 'A4';
+        if (['A3', 'A4', 'A5', 'Letter', 'Legal'].includes(paperSize)) {
+            pageSizeOption = paperSize;
+        } else if (paperSize === 'thermal_110') {
+            pageSizeOption = { width: 110000, height: 300000 };
+        } else if (paperSize === 'thermal_80') {
+            pageSizeOption = { width: 80000, height: 300000 };
+        } else if (paperSize === 'thermal_76') {
+            pageSizeOption = { width: 76000, height: 300000 };
+        } else if (paperSize === 'thermal_58') {
+            pageSizeOption = { width: 58000, height: 300000 };
+        } else if (paperSize === 'thermal_57') {
+            pageSizeOption = { width: 57000, height: 300000 };
+        }
+
+        const landscape = paperOrientation === 'landscape';
+        const margins = paperSize.startsWith('thermal')
+            ? { marginType: 'none' }
+            : { marginType: 'default' };
+
+        const printOptions = {
+            silent: false,
+            printBackground: true,
+            landscape: landscape,
+            pageSize: pageSizeOption,
+            margins: margins
+        };
+
+        printWindow.webContents.print(printOptions, (success, errorType) => {
             printWindow.close();
             if (mainWindow) {
                 setTimeout(() => {

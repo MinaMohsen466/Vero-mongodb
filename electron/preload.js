@@ -14,7 +14,8 @@ contextBridge.exposeInMainWorld('api', {
         getAll: () => ipcRenderer.invoke('users:getAll'),
         create: (user) => ipcRenderer.invoke('users:create', user),
         update: (user) => ipcRenderer.invoke('users:update', user),
-        delete: (id) => ipcRenderer.invoke('users:delete', id)
+        delete: (id) => ipcRenderer.invoke('users:delete', id),
+        setCurrentUser: (user) => ipcRenderer.invoke('users:setCurrentUser', user)
     },
 
     // Customers
@@ -181,7 +182,7 @@ contextBridge.exposeInMainWorld('api', {
 
     // Print
     print: {
-        invoice: (invoiceHtml) => ipcRenderer.invoke('print:invoice', invoiceHtml)
+        invoice: (invoiceHtml, options) => ipcRenderer.invoke('print:invoice', invoiceHtml, options)
     },
 
     // Coupons

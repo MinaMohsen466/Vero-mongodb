@@ -1477,6 +1477,9 @@ const translations = {
         showing: 'عرض',
         of: 'من',
         reset_filters: 'إعادة تعيين',
+        show_purchase_price_in_pos: 'إظهار سعر الشراء في نقطة البيع',
+        desc_show_purchase_price_in_pos: 'إظهار أيقونة العين على المنتجات في نقطة البيع لمعاينة سعر الشراء بسرعة',
+        purchase_price_label: 'سعر الشراء',
     },
     en: {
 
@@ -2913,6 +2916,9 @@ const translations = {
         showing: 'Showing',
         of: 'of',
         reset_filters: 'Reset Filters',
+        show_purchase_price_in_pos: 'Show Purchase Price in POS',
+        desc_show_purchase_price_in_pos: 'Show an eye icon on products in POS to quickly view the purchase price',
+        purchase_price_label: 'Purchase Price',
     }
 };
 

@@ -278,7 +278,7 @@ function Customers() {
             `;
 
             if (window.api?.print?.invoice) {
-                await window.api.print.invoice(html);
+                await window.api.print.invoice(html, { paperSize: 'A4', paperOrientation: 'portrait' });
             } else {
                 const win = window.open('', '_blank');
                 win.document.write(html);

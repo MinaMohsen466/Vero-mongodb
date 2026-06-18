@@ -7,6 +7,14 @@ import { useAuth, isColorUnit } from '../App';
 // Template 3: Professional (diagonal accent, premium)
 // Template 4: Minimal (compact, no borders)
 
+const parseDbDate = (dbDate) => {
+    if (!dbDate) return new Date();
+    if (dbDate.includes('Z') || dbDate.includes('+') || (dbDate.includes('-') && dbDate.includes(':') && dbDate.includes('T'))) {
+        return new Date(dbDate);
+    }
+    return new Date(dbDate.replace(' ', 'T') + 'Z');
+};
+
 function InvoicePrintPreview({ invoice, settings, onClose, type = 'sales' }) {
     const { t } = useAuth();
     const [logoBase64, setLogoBase64] = useState('');
@@ -193,7 +201,7 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
             </div>` : '';
 
         const invoiceDateStr = new Date(invoice.date).toLocaleDateString(isRtl ? 'ar-KW' : 'en-GB');
-        const invoiceTimeStr = new Date(invoice.created_at || Date.now()).toLocaleTimeString(isRtl ? 'ar-KW' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+        const invoiceTimeStr = parseDbDate(invoice.created_at).toLocaleTimeString(isRtl ? 'ar-KW' : 'en-US', { hour: '2-digit', minute: '2-digit' });
         const combinedDateTime = `${invoiceDateStr} ${invoiceTimeStr}`;
 
         const invoiceDetailsStandard = `
@@ -375,7 +383,7 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
     const handlePrint = async () => {
         const html = generatePrintHTML();
         if (window.api?.print?.invoice) {
-            await window.api.print.invoice(html);
+            await window.api.print.invoice(html, { paperSize, paperOrientation });
         } else {
             const win = window.open('', '_blank', 'width=900,height=700');
             win.document.write(html);
@@ -434,7 +442,7 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
         ) : null;
 
         const invoiceDateStr = new Date(invoice.date).toLocaleDateString(isRtl ? 'ar-KW' : 'en-GB');
-        const invoiceTimeStr = new Date(invoice.created_at || Date.now()).toLocaleTimeString(isRtl ? 'ar-KW' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+        const invoiceTimeStr = parseDbDate(invoice.created_at).toLocaleTimeString(isRtl ? 'ar-KW' : 'en-US', { hour: '2-digit', minute: '2-digit' });
         const combinedDateTime = `${invoiceDateStr} ${invoiceTimeStr}`;
 
         const InvoiceDetailsStandard = (

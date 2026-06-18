@@ -160,6 +160,12 @@ function App() {
         document.documentElement.setAttribute('lang', language);
     }, [language]);
 
+    useEffect(() => {
+        if (window.api && window.api.users && typeof window.api.users.setCurrentUser === 'function') {
+            window.api.users.setCurrentUser(user).catch(err => console.error("Error setting session user:", err));
+        }
+    }, [user]);
+
     const login = useCallback(async (username, password) => {
         try {
             const result = await window.api.users.login(username, password);

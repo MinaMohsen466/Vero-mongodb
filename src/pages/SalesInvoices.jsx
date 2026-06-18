@@ -7,6 +7,14 @@ import { useAuth, isColorUnit } from '../App';
 import { toast } from 'react-hot-toast';
 import { useShortcuts } from '../hooks/useShortcuts';
 
+const parseDbDate = (dbDate) => {
+    if (!dbDate) return new Date();
+    if (dbDate.includes('Z') || dbDate.includes('+') || (dbDate.includes('-') && dbDate.includes(':') && dbDate.includes('T'))) {
+        return new Date(dbDate);
+    }
+    return new Date(dbDate.replace(' ', 'T') + 'Z');
+};
+
 function SalesInvoices() {
     const { t, user } = useAuth();
     const [invoices, setInvoices] = useState([]);
@@ -544,7 +552,14 @@ function SalesInvoices() {
                                         <tr key={inv.id}>
                                             <td className="font-bold">{inv.invoice_number}</td>
                                             <td>{inv.customer_name || '-'}</td>
-                                            <td>{new Date(inv.date).toLocaleDateString('en-GB')}</td>
+                                            <td>
+                                                <div>{new Date(inv.date).toLocaleDateString('en-GB')}</div>
+                                                {inv.created_at && (
+                                                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                                                        {parseDbDate(inv.created_at).toLocaleTimeString('ar-KW', { hour: '2-digit', minute: '2-digit' })}
+                                                    </div>
+                                                )}
+                                            </td>
                                             <td className="font-bold">
                                                 {formatCurrency(inv.total)}
                                                 {inv.discount > 0 && <span style={{ display: 'block', fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>{t('discount')}: {formatCurrency(inv.discount)}</span>}

@@ -120,12 +120,15 @@ function LiveInvoicePreview({ inv, co, logoPreview, t }) {
                 padding: isThermal ? '12px 8px' : '20px 16px',
                 width: '100%',
                 maxWidth: isThermal ? '260px' : '100%',
+                aspectRatio: isThermal ? 'auto' : (inv.paper_orientation === 'landscape' ? '1.414 / 1' : '1 / 1.414'),
+                minHeight: isThermal ? 'auto' : (inv.paper_orientation === 'landscape' ? '240px' : '450px'),
                 margin: '0 auto',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
                 fontFamily: 'Cairo, sans-serif',
                 fontSize: isThermal ? '10px' : '11px',
                 transition: 'all 0.3s ease',
-                direction: 'rtl'
+                direction: 'rtl',
+                overflow: 'auto'
             }}>
                 {/* Header */}
                 <div style={{ 
@@ -388,7 +391,8 @@ export default function Settings() {
         currency: t('default_currency') || 'Kuwaiti Dinar', currency_symbol: t('currency_kd') || 'KD', tax_rate: '0', decimal_places: '3',
         allow_negative_stock: 'no', show_financial_summary: 'yes', show_low_stock_products: 'yes', show_customer_receivables: 'yes',
         show_sales_purchases_charts: 'yes', language: 'en', enable_product_color: 'no',
-        brand_color: '#2563eb', enable_pos_sounds: 'yes', enable_alert_sounds: 'yes'
+        brand_color: '#2563eb', enable_pos_sounds: 'yes', enable_alert_sounds: 'yes',
+        show_purchase_price_in_pos: 'no'
     });
     const [inv, setInv] = useState({
         invoice_title_sales: t('sales_invoice') || 'Sales Invoice', invoice_title_purchase: t('purchase_invoice') || 'Purchase Invoice',
@@ -813,6 +817,7 @@ export default function Settings() {
                     <Card title={t('sales_options') || 'Sales Options'} icon={Ico}>
                         <TRow label={t('allow_negative_stock') || 'Allow Negative Stock'} desc={t('desc_negative_stock') || 'Allows completing sales even when stock is depleted'} value={gen.allow_negative_stock} onChange={v => setGen(f => ({ ...f, allow_negative_stock: v }))} />
                         <TRow label={t('enable_product_color') || 'Enable Product Color Field'} desc={t('desc_product_color') || 'Add color field for paint products (Drum, Gallon, Liter)'} value={gen.enable_product_color} onChange={v => setGen(f => ({ ...f, enable_product_color: v }))} />
+                        <TRow label={t('show_purchase_price_in_pos') || 'Show Purchase Price in POS'} desc={t('desc_show_purchase_price_in_pos') || 'Show an eye icon on products in POS to quickly view the purchase price'} value={gen.show_purchase_price_in_pos} onChange={v => setGen(f => ({ ...f, show_purchase_price_in_pos: v }))} />
                     </Card>
                     <Card title={t('system_sounds') || 'أصوات وتنبيهات النظام'} icon={Globe}>
                         <TRow label={t('enable_pos_sounds') || 'تفعيل أصوات نقطة البيع'} desc={t('desc_pos_sounds') || 'إصدار صوت خفيف عند مسح الباركود وإتمام الدفع بنجاح'} value={gen.enable_pos_sounds} onChange={v => setGen(f => ({ ...f, enable_pos_sounds: v }))} />
@@ -879,7 +884,15 @@ export default function Settings() {
                             <Card title={t('paper_size_orientation') || 'Paper Size & Orientation'} icon={FileText}>
                                 <div style={gridTwo}>
                                     <Fld label={t('paper_size') || 'Paper Size'}>
-                                        <select style={inp} value={inv.paper_size} onChange={e => setInv(f => ({ ...f, paper_size: e.target.value }))}>
+                                        <select style={inp} value={inv.paper_size} onChange={e => {
+                                            const val = e.target.value;
+                                            const isThermal = val.startsWith('thermal');
+                                            setInv(f => ({
+                                                ...f,
+                                                paper_size: val,
+                                                ...(isThermal ? { paper_orientation: 'portrait' } : {})
+                                            }));
+                                        }}>
                                             <option value="A3">A3</option>
                                             <option value="A4">A4</option>
                                             <option value="A5">A5</option>
@@ -893,7 +906,7 @@ export default function Settings() {
                                         </select>
                                     </Fld>
                                     <Fld label={t('paper_orientation') || 'Orientation'}>
-                                        <select style={inp} value={inv.paper_orientation} onChange={e => setInv(f => ({ ...f, paper_orientation: e.target.value }))}>
+                                        <select style={inp} disabled={inv.paper_size && inv.paper_size.startsWith('thermal')} value={inv.paper_size && inv.paper_size.startsWith('thermal') ? 'portrait' : inv.paper_orientation} onChange={e => setInv(f => ({ ...f, paper_orientation: e.target.value }))}>
                                             <option value="portrait">{t('portrait') || 'Portrait'}</option>
                                             <option value="landscape">{t('landscape') || 'Landscape'}</option>
                                         </select>

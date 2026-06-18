@@ -52,6 +52,8 @@ function Products() {
                 t('prod_category') || 'Category',
                 t('prod_unit') || 'Unit',
                 t('prod_purchasePrice') || 'Purchase_Price',
+                t('prod_dozenPrice') || 'Dozen_Price',
+                t('prod_dozenQty') || 'Dozen_Qty',
                 t('prod_salePrice') || 'Sale_Price',
                 t('prod_stock') || 'Stock_Quantity',
                 t('prod_minStock') || 'Min_Stock'
@@ -64,12 +66,29 @@ function Products() {
                 p.category || '',
                 p.unit || '',
                 p.purchase_price || 0,
+                p.dozen_price || 0,
+                p.dozen_qty || 0,
                 p.sale_price || 0,
                 p.stock_quantity || 0,
                 p.min_stock || 0
             ]);
             
             const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+            
+            // Add dynamic Excel formulas for the Purchase Price column
+            products.forEach((p, idx) => {
+                const rowNum = idx + 2; // Row numbers in Excel are 1-based, and row 1 is the header
+                const cellRef = `F${rowNum}`;       // Column F: Purchase Price
+                const dozenPriceRef = `G${rowNum}`; // Column G: Dozen Price
+                const dozenQtyRef = `H${rowNum}`;   // Column H: Dozen Qty
+                
+                worksheet[cellRef] = {
+                    t: 'n',
+                    f: `IF(${dozenQtyRef}>0, ${dozenPriceRef}/${dozenQtyRef}, ${p.purchase_price || 0})`,
+                    v: p.purchase_price || 0
+                };
+            });
+
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Products");
             
@@ -100,6 +119,43 @@ function Products() {
                     return;
                 }
 
+                // Detect headers dynamically with normalization (resolves spelling/spacing variants)
+                const normalizeHeader = (str) => {
+                    if (!str) return '';
+                    return String(str)
+                        .trim()
+                        .toLowerCase()
+                        .replace(/ى/g, 'ي') // Normalize dotless ya (ى) to normal ya (ي)
+                        .replace(/\s+/g, ' '); // Normalize spaces
+                };
+
+                const headers = (rows[0] || []).map(h => normalizeHeader(h));
+                const findColIndex = (keys) => {
+                    const normalizedKeys = keys.map(k => normalizeHeader(k));
+                    // Try exact match first to prevent substring collisions (e.g. "الكمية" matching "الكمية في الدرزن")
+                    let idx = headers.findIndex(h => normalizedKeys.some(k => h === k));
+                    if (idx !== -1) return idx;
+                    // Fallback to substring matching
+                    return headers.findIndex(h => normalizedKeys.some(k => h.includes(k)));
+                };
+
+                const codeIdx = findColIndex(['code', 'الكود', 'كود']);
+                const nameIdx = findColIndex(['name', 'الاسم', 'اسم']);
+                const descIdx = findColIndex(['description', 'الوصف', 'وصف']);
+                const catIdx = findColIndex(['category', 'القسم', 'التصنيف', 'قسم', 'تصنيف']);
+                const unitIdx = findColIndex(['unit', 'الوحدة', 'وحدة']);
+                const purchasePriceIdx = findColIndex(['purchase', 'شراء', 'الشراء', 'سعر الشراء']);
+                const dozenPriceIdx = findColIndex(['dozen price', 'سعر الدرزن', 'درزن']);
+                const dozenQtyIdx = findColIndex(['dozen qty', 'الكمية في الدرزن', 'كمية الدرزن', 'الكمية فى الدرزن', 'العدد في الدرزن', 'العدد فى الدرزن']);
+                const salePriceIdx = findColIndex(['sale', 'بيع', 'البيع', 'سعر البيع']);
+                const stockIdx = findColIndex(['stock', 'الكمية', 'المخزون', 'رصيد', 'كمية المخزن', 'مخزون المحل', 'الكمية بالمخزون']);
+                const minStockIdx = findColIndex(['min', 'الحد الأدنى', 'الحد الادنى']);
+
+                const getVal = (row, idx, fallbackIdx) => {
+                    const realIdx = idx !== -1 ? idx : fallbackIdx;
+                    return row[realIdx];
+                };
+
                 let successCount = 0;
                 
                 for (let i = 1; i < rows.length; i++) {
@@ -108,16 +164,39 @@ function Products() {
                         continue;
                     }
                     
+                    const codeVal = getVal(values, codeIdx, 0);
+                    const nameVal = getVal(values, nameIdx, 1);
+                    const descVal = getVal(values, descIdx, 2);
+                    const catVal = getVal(values, catIdx, 3);
+                    const unitVal = getVal(values, unitIdx, 4);
+                    const purchaseVal = getVal(values, purchasePriceIdx, 5);
+                    const dozenPriceVal = getVal(values, dozenPriceIdx, -1);
+                    const dozenQtyVal = getVal(values, dozenQtyIdx, -1);
+                    const hasDozenHeaders = dozenPriceIdx !== -1 || dozenQtyIdx !== -1;
+                    const saleVal = getVal(values, salePriceIdx, hasDozenHeaders ? 8 : 6);
+                    const stockVal = getVal(values, stockIdx, hasDozenHeaders ? 9 : 7);
+                    const minStockVal = getVal(values, minStockIdx, hasDozenHeaders ? 10 : 8);
+
+                    const dPrice = dozenPriceVal !== undefined && dozenPriceVal !== null ? parseFloat(dozenPriceVal) || 0 : 0;
+                    const dQty = dozenQtyVal !== undefined && dozenQtyVal !== null ? parseFloat(dozenQtyVal) || 0 : 0;
+                    let pPrice = parseFloat(purchaseVal) || 0;
+                    if (pPrice === 0 && dPrice > 0 && dQty > 0) {
+                        pPrice = dPrice / dQty;
+                    }
+
                     const productData = {
-                        code: values[0] !== undefined && values[0] !== null ? String(values[0]).trim() : '',
-                        name: values[1] !== undefined && values[1] !== null ? String(values[1]).trim() : '',
-                        description: values[2] !== undefined && values[2] !== null ? String(values[2]).trim() : '',
-                        category: values[3] !== undefined && values[3] !== null ? String(values[3]).trim() : '',
-                        unit: values[4] !== undefined && values[4] !== null ? String(values[4]).trim() : t('prod_piece') || 'قطعة',
-                        purchase_price: parseFloat(values[5]) || 0,
-                        sale_price: parseFloat(values[6]) || 0,
-                        stock_quantity: values.length > 8 ? (parseFloat(values[7]) || 0) : 0,
-                        min_stock: parseFloat(values.length > 8 ? values[8] : values[7]) || 0,
+                        code: codeVal !== undefined && codeVal !== null ? String(codeVal).trim() : '',
+                        name: nameVal !== undefined && nameVal !== null ? String(nameVal).trim() : '',
+                        description: descVal !== undefined && descVal !== null ? String(descVal).trim() : '',
+                        category: catVal !== undefined && catVal !== null ? String(catVal).trim() : '',
+                        unit: unitVal !== undefined && unitVal !== null ? String(unitVal).trim() : t('prod_piece') || 'قطعة',
+                        purchase_price: pPrice,
+                        dozen_price: dPrice,
+                        dozen_qty: dQty,
+                        sale_price: parseFloat(saleVal) || 0,
+                        shop_stock: parseFloat(stockVal) || 0,
+                        warehouse_stock: 0,
+                        min_stock: parseFloat(minStockVal) || 0,
                         is_active: true
                     };
 
@@ -281,8 +360,8 @@ function Products() {
                 category: product.category || '', purchase_price: product.purchase_price || '', sale_price: product.sale_price || '', warehouse_stock: product.warehouse_stock || '', shop_stock: product.shop_stock || '', min_stock: product.min_stock || '', image: product.image || '',
                 supplier_id: product.supplier_id || '',
                 supplier_ids: parsedIds,
-                dozen_price: '',
-                dozen_qty: ''
+                dozen_price: product.dozen_price !== undefined && product.dozen_price !== null ? product.dozen_price : '',
+                dozen_qty: product.dozen_qty !== undefined && product.dozen_qty !== null ? product.dozen_qty : ''
             });
         } else {
             setShowCustomUnit(false);

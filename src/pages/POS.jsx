@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Printer, X, Check, Package, User, UserPlus } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Printer, X, Check, Package, User, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuth, isColorUnit } from '../App';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
@@ -130,11 +130,18 @@ function POS() {
     const [amountPaid, setAmountPaid] = useState('');
     const [saving, setSaving] = useState(false);
     const [lastReceipt, setLastReceipt] = useState(null);
+    const [lastInvoiceId, setLastInvoiceId] = useState(null);
     const [showReceipt, setShowReceipt] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [showInvoicePreview, setShowInvoicePreview] = useState(false);
     const [previewInvoice, setPreviewInvoice] = useState(null);
-    const [lastInvoiceId, setLastInvoiceId] = useState(null);
+    const [visiblePurchasePrices, setVisiblePurchasePrices] = useState({});
+    const togglePurchasePrice = (productId) => {
+        setVisiblePurchasePrices(prev => ({
+            ...prev,
+            [productId]: !prev[productId]
+        }));
+    };
 
     // Add customer
     const [showAddCustomer, setShowAddCustomer] = useState(false);
@@ -433,7 +440,8 @@ function POS() {
                 toast.error(result.error || t('error_checkout') || 'Error during checkout');
             }
         } catch (e) {
-            toast.error(t('error_checkout') || 'Error during checkout');
+            console.error("Checkout exception:", e);
+            toast.error(`${t('error_checkout') || 'Error during checkout'}: ${e.message || String(e)}`);
         }
         setSaving(false);
     };
@@ -626,7 +634,43 @@ function POS() {
                                     minHeight: '85px', justifyContent: 'center', paddingLeft: '95px', textAlign: 'start' 
                                 }}>
                                     <p style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', margin: '0 0 6px 0', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.name}</p>
-                                    <p style={{ fontWeight: 800, color, fontSize: '0.95rem', margin: '0 0 6px 0' }}>{formatCurrency(product.sale_price)}</p>
+                                    
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 6px 0' }}>
+                                        <span style={{ fontWeight: 800, color, fontSize: '0.95rem' }}>{formatCurrency(product.sale_price)}</span>
+                                        {settings.general?.show_purchase_price_in_pos === 'yes' && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    togglePurchasePrice(product.id);
+                                                }}
+                                                style={{
+                                                    background: 'var(--bg-secondary)',
+                                                    border: '1px solid var(--border)',
+                                                    borderRadius: '50%',
+                                                    width: '24px',
+                                                    height: '24px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    cursor: 'pointer',
+                                                    color: visiblePurchasePrices[product.id] ? 'var(--primary)' : 'var(--text-muted)',
+                                                    transition: 'all 0.2s',
+                                                    boxShadow: 'var(--shadow-sm)'
+                                                }}
+                                                onMouseEnter={e => { e.currentTarget.style.background = 'var(--border-light)'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-secondary)'; }}
+                                                title={t('purchase_price_label') || 'سعر الشراء'}
+                                            >
+                                                {visiblePurchasePrices[product.id] ? <EyeOff size={13} /> : <Eye size={13} />}
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {visiblePurchasePrices[product.id] && (
+                                        <p style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0 0 6px 0' }}>
+                                            {t('purchase_price_label') || 'سعر الشراء'}: <span style={{ color: '#ef4444' }}>{formatCurrency(product.purchase_price)}</span>
+                                        </p>
+                                    )}
                                     <div>
                                         {outOfStock ? (
                                             <span style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 600 }}>✗ {t('out_of_stock') || 'Out of Stock'}</span>
