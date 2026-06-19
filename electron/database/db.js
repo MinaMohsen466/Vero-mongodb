@@ -464,7 +464,7 @@ class AppDatabase {
         // Default Permissions
         const permCount = this.get('SELECT COUNT(*) as count FROM permissions');
         if (permCount.count === 0) {
-            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'expenses', 'pos', 'database', 'financial_summary', 'warehouse'];
+            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'expenses', 'pos', 'database', 'financial_summary', 'warehouse', 'offers'];
             for (const mod of modules) {
                 // Admin: full access to everything
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', mod]);
@@ -544,6 +544,16 @@ class AppDatabase {
                     this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'expenses']);
                 }
             } catch (e) { console.log('Expenses permission migration:', e.message); }
+
+            // Migration: add offers permission for existing users
+            try {
+                const adminOffers = this.get("SELECT id FROM permissions WHERE role='admin' AND module='offers'");
+                if (!adminOffers) {
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', 'offers']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 0)", ['accountant', 'offers']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'offers']);
+                }
+            } catch (e) { console.log('Offers permission migration:', e.message); }
         }
     }
 
@@ -812,6 +822,7 @@ class UsersRepo {
                 permMap['settings'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
                 permMap['permissions'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
                 permMap['dashboard'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                permMap['offers'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
             }
             user.permissions = permMap;
             return { success: true, user };

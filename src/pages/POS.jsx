@@ -337,7 +337,9 @@ function POS() {
 
     const filtered = products.filter(p => {
         const matchSearch = p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            p.code?.toLowerCase().includes(searchQuery.toLowerCase());
+            p.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.category?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchCat = categoryFilter === 'all' || p.category === categoryFilter;
         
         let matchSupp = false;

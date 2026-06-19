@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Tag, Ticket, Plus, Edit2, Trash2, Search, Calendar, Check, X } from 'lucide-react';
 import Modal from '../components/Modal';
+import SearchableSelect from '../components/SearchableSelect';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
 
@@ -16,18 +17,21 @@ function OffersAndCoupons() {
     const [editingItem, setEditingItem] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [formData, setFormData] = useState({});
+    const [settings, setSettings] = useState({});
 
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const [_offers, _coupons, _products] = await Promise.all([
+            const [_offers, _coupons, _products, _settings] = await Promise.all([
                 window.api.offers.getAll(),
                 window.api.coupons.getAll(),
-                window.api.products.getAll()
+                window.api.products.getAll(),
+                window.api.settings.getAll()
             ]);
             setOffers(_offers || []);
             setCoupons(_coupons || []);
             setProducts(_products || []);
+            setSettings(_settings || {});
             const cats = [...new Set((_products || []).map(p => p.category).filter(Boolean))];
             setCategories(cats);
         } catch (e) {
@@ -215,6 +219,7 @@ function OffersAndCoupons() {
                                             openModal={openModal}
                                             handleDelete={handleDelete}
                                             toggleStatus={toggleStatus}
+                                            currencySymbol={settings.general?.currency_symbol || 'د.ك'}
                                         />
                                     ))}
                                 </tbody>
@@ -241,14 +246,14 @@ function OffersAndCoupons() {
 }
 
 // Sub-component for table row with memo optimization
-const TableRow = React.memo(({ item, activeTab, t, cannotEdit, cannotDelete, getProductName, openModal, handleDelete, toggleStatus }) => (
+const TableRow = React.memo(({ item, activeTab, t, cannotEdit, cannotDelete, getProductName, openModal, handleDelete, toggleStatus, currencySymbol }) => (
     <tr style={{ opacity: item.is_active ? 1 : 0.6 }}>
         {activeTab === 'offers' ? (
             <>
                 <td className="font-bold">{item.title}</td>
                 <td>
                     {item.offer_type === 'percentage' ? `${item.discount_value}%` :
-                        item.offer_type === 'fixed' ? `${item.discount_value} KD` :
+                        item.offer_type === 'fixed' ? `${item.discount_value} ${currencySymbol}` :
                             `${t('bogo_offer')} (${item.buy_qty}+${item.get_qty})`}
                 </td>
                 <td>
@@ -261,7 +266,7 @@ const TableRow = React.memo(({ item, activeTab, t, cannotEdit, cannotDelete, get
         ) : (
             <>
                 <td className="font-bold" style={{ color: 'var(--primary)', letterSpacing: 1 }}>{item.code}</td>
-                <td>{item.discount_type === 'percentage' ? `${item.discount_value}%` : `${item.discount_value} KD`}</td>
+                <td>{item.discount_type === 'percentage' ? `${item.discount_value}%` : `${item.discount_value} ${currencySymbol}`}</td>
                 <td><span className="badge badge-secondary">{item.current_uses} / {item.max_uses || '∞'}</span></td>
                 <td>{item.valid_to || '—'}</td>
             </>
@@ -328,19 +333,23 @@ const OfferForm = React.memo(({ activeTab, formData, setFormData, categories, pr
                     {formData.target_type === 'category' && (
                         <div className="form-group">
                             <label className="form-label">{t('target_category') || 'Category'} *</label>
-                            <select className="form-select" value={formData.target_id || ''} onChange={e => setFormData({ ...formData, target_id: e.target.value })} required>
-                                <option value="">-- {t('select') || 'Select'} --</option>
-                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
+                            <SearchableSelect
+                                options={categories.map(c => ({ value: c, label: c }))}
+                                value={formData.target_id || ''}
+                                onChange={val => setFormData({ ...formData, target_id: val })}
+                                placeholder={t('select') || 'اختر...'}
+                            />
                         </div>
                     )}
                     {formData.target_type === 'product' && (
                         <div className="form-group">
                             <label className="form-label">{t('target_product') || 'Product'} *</label>
-                            <input list="prods" className="form-input" value={formData.target_id || ''} onChange={e => setFormData({ ...formData, target_id: e.target.value })} required placeholder="ID..." />
-                            <datalist id="prods">
-                                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                            </datalist>
+                            <SearchableSelect
+                                options={products.map(p => ({ value: String(p.id), label: p.name, subLabel: p.code }))}
+                                value={formData.target_id ? String(formData.target_id) : ''}
+                                onChange={val => setFormData({ ...formData, target_id: val })}
+                                placeholder={t('select_product') || 'اختر منتجاً...'}
+                            />
                         </div>
                     )}
                 </div>
@@ -373,14 +382,20 @@ const OfferForm = React.memo(({ activeTab, formData, setFormData, categories, pr
             </>
         )}
 
-        <div className="form-row" style={{ marginTop: 10, padding: 15, background: 'var(--bg-secondary)', borderRadius: 10 }}>
+        <div className="form-row" style={{ marginTop: 16, padding: '16px', background: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border)' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label"><Calendar size={14} style={{ display: 'inline', marginRight: 5 }} /> {t('valid_from') || 'Valid From'}</label>
-                <input type="date" className="form-input" value={formData.valid_from || ''} onChange={e => setFormData({ ...formData, valid_from: e.target.value })} />
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Calendar size={14} style={{ color: 'var(--primary)' }} />
+                    <span>{t('valid_from') || 'Valid From'}</span>
+                </label>
+                <input type="date" className="form-input" value={formData.valid_from || ''} onChange={e => setFormData({ ...formData, valid_from: e.target.value })} style={{ borderRadius: '8px' }} />
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label"><Calendar size={14} style={{ display: 'inline', marginRight: 5 }} /> {t('valid_to') || 'Valid To'}</label>
-                <input type="date" className="form-input" value={formData.valid_to || ''} onChange={e => setFormData({ ...formData, valid_to: e.target.value })} />
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Calendar size={14} style={{ color: 'var(--primary)' }} />
+                    <span>{t('valid_to') || 'Valid To'}</span>
+                </label>
+                <input type="date" className="form-input" value={formData.valid_to || ''} onChange={e => setFormData({ ...formData, valid_to: e.target.value })} style={{ borderRadius: '8px' }} />
             </div>
         </div>
 
