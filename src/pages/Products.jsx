@@ -5,6 +5,7 @@ import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
 import { useShortcuts } from '../hooks/useShortcuts';
 import * as XLSX from 'xlsx';
+import SearchableSelect from '../components/SearchableSelect';
 
 function Products() {
     const { user, t } = useAuth();
@@ -19,7 +20,7 @@ function Products() {
     const [supplierSearchQuery, setSupplierSearchQuery] = useState('');
     const [formData, setFormData] = useState({
         name: '', description: '', unit: t('prod_piece') || 'قطعة', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [],
-        dozen_price: '', dozen_qty: ''
+        dozen_price: '', dozen_qty: 1
     });
     const [showMovementsModal, setShowMovementsModal] = useState(false);
     const [selectedProductForTracking, setSelectedProductForTracking] = useState(null);
@@ -32,6 +33,17 @@ function Products() {
 
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
+
+    const [topSalesCount, setTopSalesCount] = useState(() => {
+        const saved = localStorage.getItem('top_sales_count');
+        return saved !== null ? parseInt(saved, 10) : 10;
+    });
+
+    const topSellingProducts = [...products]
+        .filter(p => (p.total_sold || 0) > 0)
+        .sort((a, b) => (b.total_sold || 0) - (a.total_sold || 0))
+        .slice(0, topSalesCount);
+    const topProductIds = new Set(topSellingProducts.map(p => p.id));
 
     useEffect(() => {
         setCurrentPage(1);
@@ -243,7 +255,7 @@ function Products() {
     const loadProducts = async () => {
         try {
             const [data, supps] = await Promise.all([
-                window.api.products.getAll(),
+                window.api.products.getAllSortedBySales(),
                 window.api.suppliers.getAll()
             ]);
             setProducts(data || []);
@@ -264,23 +276,29 @@ function Products() {
                 return;
             }
 
-            const duplicateName = products.some(p => 
-                p.name.trim().toLowerCase() === nameLower && 
-                (!editingProduct || p.id !== editingProduct.id)
-            );
-            if (duplicateName) {
-                toast.error(t('product_name_exists') || 'اسم المنتج هذا موجود بالفعل!');
-                return;
+            const isNameChanged = !editingProduct || editingProduct.name.trim().toLowerCase() !== nameLower;
+            if (isNameChanged) {
+                const duplicateName = products.some(p => 
+                    p.name.trim().toLowerCase() === nameLower && 
+                    (!editingProduct || String(p.id) !== String(editingProduct.id))
+                );
+                if (duplicateName) {
+                    toast.error(t('product_name_exists') || 'اسم المنتج هذا موجود بالفعل!');
+                    return;
+                }
             }
 
             if (codeLower) {
-                const duplicateCode = products.some(p => 
-                    (p.code || '').trim().toLowerCase() === codeLower && 
-                    (!editingProduct || p.id !== editingProduct.id)
-                );
-                if (duplicateCode) {
-                    toast.error(t('product_code_exists') || 'كود المنتج هذا مستخدم بالفعل!');
-                    return;
+                const isCodeChanged = !editingProduct || (editingProduct.code || '').trim().toLowerCase() !== codeLower;
+                if (isCodeChanged) {
+                    const duplicateCode = products.some(p => 
+                        (p.code || '').trim().toLowerCase() === codeLower && 
+                        (!editingProduct || String(p.id) !== String(editingProduct.id))
+                    );
+                    if (duplicateCode) {
+                        toast.error(t('product_code_exists') || 'كود المنتج هذا مستخدم بالفعل!');
+                        return;
+                    }
                 }
             }
 
@@ -361,11 +379,11 @@ function Products() {
                 supplier_id: product.supplier_id || '',
                 supplier_ids: parsedIds,
                 dozen_price: product.dozen_price !== undefined && product.dozen_price !== null ? product.dozen_price : '',
-                dozen_qty: product.dozen_qty !== undefined && product.dozen_qty !== null ? product.dozen_qty : ''
+                dozen_qty: product.dozen_qty ? product.dozen_qty : 1
             });
         } else {
             setShowCustomUnit(false);
-            setFormData({ name: '', description: '', unit: t('prod_piece') || 'قطعة', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [], dozen_price: '', dozen_qty: '' });
+            setFormData({ name: '', description: '', unit: t('prod_piece') || 'قطعة', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [], dozen_price: '', dozen_qty: 1 });
         }
         setShowModal(true);
     };
@@ -519,14 +537,34 @@ function Products() {
                         /><Search size={18} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     </div>
                     {categories.length > 0 && (
-                        <select className="form-select" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={{ width: '160px', margin: 0 }}>
-                            <option value="">{t('all') || 'جميع الفئات'}</option>
-                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        <div style={{ width: '160px' }}>
+                            <SearchableSelect
+                                options={categories.map(c => ({ value: c, label: c }))}
+                                value={categoryFilter}
+                                onChange={setCategoryFilter}
+                                placeholder={t('all') || 'جميع الفئات'}
+                                emptyLabel={t('all') || 'جميع الفئات'}
+                            />
+                        </div>
                     )}
                     {(searchQuery || categoryFilter) && (
                         <button className="btn btn-ghost btn-sm" onClick={() => { setSearchQuery(''); setCategoryFilter(''); }} style={{ color: 'var(--text-muted)' }}>✕ {t('clear') || 'مسح'}</button>
                     )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
+                        <span style={{ whiteSpace: 'nowrap' }}>{t('top_sales_count') || 'تحديد الأكثر مبيعاً (★):'}</span>
+                        <input
+                            type="number"
+                            className="form-input"
+                            min="0"
+                            value={topSalesCount}
+                            onChange={(e) => {
+                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                setTopSalesCount(val);
+                                localStorage.setItem('top_sales_count', val);
+                            }}
+                            style={{ width: '75px', padding: '4px 8px', height: '38px', margin: 0 }}
+                        />
+                    </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     {user?.permissions?.products?.can_create && (
@@ -571,6 +609,9 @@ function Products() {
                                                             </div>
                                                         )}
                                                         {p.name}
+                                                        {topProductIds.has(p.id) && (
+                                                            <span title={`${t('total_sold') || 'إجمالي المباع'}: ${p.total_sold}`} style={{ color: '#eab308', fontSize: '1.2rem', cursor: 'help', lineHeight: 1 }}>★</span>
+                                                        )}
                                                     </div>
                                                 </td>
                                                 <td><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{p.category || '—'}</span></td>

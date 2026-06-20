@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     BarChart3, FileText, TrendingUp, TrendingDown, Printer, Calendar,
-    DollarSign, ShoppingBag, BarChart2, Download, Plus
+    DollarSign, ShoppingBag, BarChart2, Download, Plus, Search
 } from 'lucide-react';
 import {
     BarChart, Bar, LineChart, Line, PieChart as RechartsPie, Pie, Cell,
@@ -35,6 +35,10 @@ function Reports() {
         start_date: firstDay, end_date: today
     });
 
+    const [plSearchQuery, setPlSearchQuery] = useState('');
+    const [plCategoryFilter, setPlCategoryFilter] = useState('');
+    const [plStockFilter, setPlStockFilter] = useState('all');
+
     useEffect(() => {
         Promise.all([
             window.api.customers.getAll(),
@@ -54,6 +58,9 @@ function Reports() {
     // Auto-generate when switching report type
     useEffect(() => {
         setReportData(null);
+        setPlSearchQuery('');
+        setPlCategoryFilter('');
+        setPlStockFilter('all');
     }, [activeReport]);
 
     const fmt = (v) => {
@@ -703,7 +710,6 @@ function Reports() {
         { id: 'sales_summary', label: t('rep_salesReport') || 'Sales Report', icon: TrendingUp },
         { id: 'purchases_summary', label: t('rep_purchasesReport') || 'Purchases Report', icon: TrendingDown },
         { id: 'profit_loss', label: t('rep_profitLoss') || 'Profit & Loss', icon: BarChart2 },
-        { id: 'detailed_inventory', label: t('rep_inventory_cogs') || 'تقرير المخزون وحركته وتكلفة المبيعات', icon: ShoppingBag },
         { id: 'aging_report', label: t('rep_aging_report') || 'تقرير أعمار الديون', icon: Calendar },
         // { id: 'product_profitability', label: t('rep_product_profitability') || 'تقرير ربحية المنتجات والتصنيفات', icon: BarChart3 },
         { id: 'cash_flow', label: t('rep_cash_flow') || 'تقرير حركة التدفقات النقدية والسيولة', icon: DollarSign },
@@ -1054,50 +1060,131 @@ function Reports() {
                                             </table>
                                         </div>
                                     )}
-                                    {reportData.products?.length > 0 && (
-                                        <div style={{ marginTop: '20px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
-                                            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                                                <h3 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('rep_inventoryReport') || 'Product Prices'}</h3>
-                                                <span style={{ fontSize: '0.8rem', color: reportData.lowStock?.length ? '#D97706' : 'var(--text-muted)', fontWeight: 600 }}>
-                                                    {t('rep_lowStock') || 'Low Stock'}: {reportData.lowStock?.length || 0}
-                                                </span>
-                                            </div>
-                                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                                <thead>
-                                                    <tr style={{ background: 'var(--bg-secondary)' }}>
-                                                        <th style={thStyle}>#</th>
-                                                        <th style={thStyle}>{t('name') || 'Item Name'}</th>
-                                                        <th style={thStyle}>{t('code') || 'Code'}</th>
-                                                        <th style={thStyle}>{t('category') || 'Category'}</th>
-                                                        <th style={thStyle}>{t('prod_quantity') || 'QTY'}</th>
-                                                        <th style={thStyle}>{t('prod_purchasePrice') || 'Purchase Price'}</th>
-                                                        <th style={thStyle}>{t('prod_salePrice') || 'Sale Price'}</th>
-                                                        <th style={thStyle}>{t('rep_stockValue') || 'Stock Value'}</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {reportData.products.map((p, i) => (
-                                                        <tr key={p.id} style={{ borderBottom: '1px solid var(--border)', background: p.stock_quantity <= 0 ? '#FFF7F7' : p.stock_quantity <= 5 ? '#FFFBEB' : 'transparent' }}>
-                                                            <td style={tdStyle}>{i + 1}</td>
-                                                            <td style={tdStyle}><strong>{p.name}</strong></td>
-                                                            <td style={{ ...tdStyle, color: 'var(--text-muted)', fontSize: '0.8rem' }}>{p.code}</td>
-                                                            <td style={tdStyle}>{p.category || '-'}</td>
-                                                            <td style={{ ...tdStyle, fontWeight: 700, color: p.stock_quantity <= 0 ? '#EF4444' : p.stock_quantity <= 5 ? '#F59E0B' : '#10B981' }}>{p.stock_quantity || 0}</td>
-                                                            <td style={tdStyle}>{fmt(p.purchase_price)}</td>
-                                                            <td style={tdStyle}>{fmt(p.sale_price)}</td>
-                                                            <td style={{ ...tdStyle, fontWeight: 700, color: '#0F766E' }}>{fmt((p.stock_quantity || 0) * (p.purchase_price || 0))}</td>
+                                    {(() => {
+                                        const filteredPlProducts = (reportData.products || []).filter(p => {
+                                            const matchesSearch = !plSearchQuery || 
+                                                p.name.toLowerCase().includes(plSearchQuery.toLowerCase()) || 
+                                                p.code?.toLowerCase().includes(plSearchQuery.toLowerCase());
+                                            const matchesCategory = !plCategoryFilter || p.category === plCategoryFilter;
+                                            const matchesStock = plStockFilter === 'all' ? true :
+                                                                 plStockFilter === 'low' ? (p.stock_quantity > 0 && p.stock_quantity <= 5) :
+                                                                 plStockFilter === 'out' ? (p.stock_quantity <= 0) :
+                                                                 plStockFilter === 'safe' ? (p.stock_quantity > 5) : true;
+                                            return matchesSearch && matchesCategory && matchesStock;
+                                        });
+                                        const filteredEndingInventory = filteredPlProducts.reduce((sum, p) => sum + ((parseFloat(p.stock_quantity) || 0) * (parseFloat(p.purchase_price) || 0)), 0);
+                                        const categories = [...new Set(products.map(pr => pr.category).filter(Boolean))];
+
+                                        if (reportData.products?.length === 0) return null;
+
+                                        return (
+                                            <div style={{ marginTop: '20px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+                                                <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                                                        <h3 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>📊 {t('rep_inventoryReport') || 'تقرير المخزون'}</h3>
+                                                        <span style={{ fontSize: '0.8rem', color: filteredPlProducts.filter(p => p.stock_quantity > 0 && p.stock_quantity <= 5).length ? '#D97706' : 'var(--text-muted)', fontWeight: 600 }}>
+                                                            {t('rep_lowStock') || 'Low Stock'}: {filteredPlProducts.filter(p => p.stock_quantity > 0 && p.stock_quantity <= 5).length}
+                                                        </span>
+                                                    </div>
+                                                    
+                                                    {/* Filter Controls Row */}
+                                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                        {/* Search Input */}
+                                                        <div style={{ position: 'relative', width: '200px' }}>
+                                                            <input
+                                                                type="text"
+                                                                className="form-input"
+                                                                placeholder={t('search') || 'بحث...'}
+                                                                value={plSearchQuery}
+                                                                onChange={e => setPlSearchQuery(e.target.value)}
+                                                                style={{ paddingRight: '36px', height: '38px', width: '100%', margin: 0 }}
+                                                            />
+                                                            <Search size={16} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                                                        </div>
+
+                                                        {/* Category Selector */}
+                                                        {categories.length > 0 && (
+                                                            <div style={{ width: '160px' }}>
+                                                                <SearchableSelect
+                                                                    options={categories.map(c => ({ value: c, label: c }))}
+                                                                    value={plCategoryFilter}
+                                                                    onChange={setPlCategoryFilter}
+                                                                    placeholder={t('all') || 'جميع الفئات'}
+                                                                    emptyLabel={t('all') || 'جميع الفئات'}
+                                                                />
+                                                            </div>
+                                                        )}
+
+                                                        {/* Stock Status Selector */}
+                                                        <select
+                                                            className="form-select"
+                                                            value={plStockFilter}
+                                                            onChange={e => setPlStockFilter(e.target.value)}
+                                                            style={{ width: '150px', height: '38px', margin: 0 }}
+                                                        >
+                                                            <option value="all">{t('all') || 'كل المنتجات'}</option>
+                                                            <option value="low">{t('rep_lowStock') || 'نواقص المخزون (<= 5)'}</option>
+                                                            <option value="out">{t('rep_outOfStock') || 'غير متوفر (<= 0)'}</option>
+                                                            <option value="safe">{t('in_stock') || 'المتوفر (> 5)'}</option>
+                                                        </select>
+
+                                                        {/* Reset Button */}
+                                                        {(plSearchQuery || plCategoryFilter || plStockFilter !== 'all') && (
+                                                            <button 
+                                                                className="btn btn-ghost btn-sm" 
+                                                                onClick={() => { setPlSearchQuery(''); setPlCategoryFilter(''); setPlStockFilter('all'); }} 
+                                                                style={{ color: 'var(--text-muted)', height: '38px', padding: '0 8px' }}
+                                                            >
+                                                                ✕ {t('clear') || 'مسح'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                    <thead>
+                                                        <tr style={{ background: 'var(--bg-secondary)' }}>
+                                                            <th style={thStyle}>#</th>
+                                                            <th style={thStyle}>{t('name') || 'Item Name'}</th>
+                                                            <th style={thStyle}>{t('code') || 'Code'}</th>
+                                                            <th style={thStyle}>{t('category') || 'Category'}</th>
+                                                            <th style={thStyle}>{t('prod_quantity') || 'QTY'}</th>
+                                                            <th style={thStyle}>{t('prod_purchasePrice') || 'Purchase Price'}</th>
+                                                            <th style={thStyle}>{t('prod_salePrice') || 'Sale Price'}</th>
+                                                            <th style={thStyle}>{t('rep_stockValue') || 'Stock Value'}</th>
                                                         </tr>
-                                                    ))}
-                                                </tbody>
-                                                <tfoot>
-                                                    <tr style={{ background: 'var(--bg-secondary)', fontWeight: 700 }}>
-                                                        <td colSpan="7" style={tdStyle}>{t('rep_total') || 'Total'}</td>
-                                                        <td style={{ ...tdStyle, color: '#0F766E', fontSize: '1rem' }}>{fmt(reportData.endingInventory)}</td>
-                                                    </tr>
-                                                </tfoot>
-                                            </table>
-                                        </div>
-                                    )}
+                                                    </thead>
+                                                    <tbody>
+                                                        {filteredPlProducts.map((p, idx) => (
+                                                            <tr key={p.id} style={{ borderBottom: '1px solid var(--border)', background: p.stock_quantity <= 0 ? '#FFF7F7' : p.stock_quantity <= 5 ? '#FFFBEB' : 'transparent' }}>
+                                                                <td style={tdStyle}>{idx + 1}</td>
+                                                                <td style={tdStyle}><strong>{p.name}</strong></td>
+                                                                <td style={{ ...tdStyle, color: 'var(--text-muted)', fontSize: '0.8rem' }}>{p.code}</td>
+                                                                <td style={tdStyle}>{p.category || '-'}</td>
+                                                                <td style={{ ...tdStyle, fontWeight: 700, color: p.stock_quantity <= 0 ? '#EF4444' : p.stock_quantity <= 5 ? '#F59E0B' : '#10B981' }}>{p.stock_quantity || 0}</td>
+                                                                <td style={tdStyle}>{fmt(p.purchase_price)}</td>
+                                                                <td style={tdStyle}>{fmt(p.sale_price)}</td>
+                                                                <td style={{ ...tdStyle, fontWeight: 700, color: '#0F766E' }}>{fmt((p.stock_quantity || 0) * (p.purchase_price || 0))}</td>
+                                                            </tr>
+                                                        ))}
+                                                        {filteredPlProducts.length === 0 && (
+                                                            <tr>
+                                                                <td colSpan="8" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                                                                    {t('noData') || 'لا توجد نتائج مطابقة للبحث'}
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                    <tfoot>
+                                                        <tr style={{ background: 'var(--bg-secondary)', fontWeight: 700 }}>
+                                                            <td colSpan="7" style={tdStyle}>{t('rep_total') || 'Total'}</td>
+                                                            <td style={{ ...tdStyle, color: '#0F766E', fontSize: '1rem' }}>{fmt(filteredEndingInventory)}</td>
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             )}
 
