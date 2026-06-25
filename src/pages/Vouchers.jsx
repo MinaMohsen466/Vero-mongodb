@@ -98,6 +98,15 @@ function Vouchers() {
         loadPendingInvoices('payment', supplierId);
     };
 
+    // Calculate the remaining balance for the currently selected invoice
+    const getSelectedInvoiceRemaining = () => {
+        if (!formData.invoice_id) return null;
+        const invoice = pendingInvoices.find(inv => String(inv.id) === String(formData.invoice_id));
+        if (!invoice) return null;
+        return invoice.total - (invoice.paid || 0);
+    };
+    const selectedInvoiceRemaining = getSelectedInvoiceRemaining();
+
     const handleInvoiceSelect = (invoiceId) => {
         if (String(formData.invoice_id) === String(invoiceId)) {
             // Deselect if clicking the same invoice
@@ -106,10 +115,31 @@ function Vouchers() {
         }
         const invoice = pendingInvoices.find(inv => inv.id === parseInt(invoiceId));
         if (invoice) {
-            setFormData({ ...formData, invoice_id: String(invoiceId), amount: invoice.total - (invoice.paid || 0) });
+            const remaining = invoice.total - (invoice.paid || 0);
+            setFormData({ ...formData, invoice_id: String(invoiceId), amount: remaining });
         } else {
             setFormData({ ...formData, invoice_id: '', amount: 0 });
         }
+    };
+
+    // Handle amount change with validation against selected invoice remaining
+    const handleAmountChange = (e) => {
+        let value = e.target.value;
+        // Allow empty input for typing
+        if (value === '' || value === undefined) {
+            setFormData({ ...formData, amount: '' });
+            return;
+        }
+        const numVal = parseFloat(value);
+        // If an invoice is selected, cap at remaining balance
+        if (formData.invoice_id && selectedInvoiceRemaining !== null) {
+            if (numVal > selectedInvoiceRemaining) {
+                toast.error(t('vouch_amount_exceeds') || `لا يمكن إدخال مبلغ أعلى من المتبقي من الفاتورة (${formatCurrency(selectedInvoiceRemaining)})`);
+                setFormData({ ...formData, amount: selectedInvoiceRemaining });
+                return;
+            }
+        }
+        setFormData({ ...formData, amount: value });
     };
 
     const handleSubmit = async (e) => {
@@ -127,10 +157,16 @@ function Vouchers() {
                 toast.error(t('vouch_amount_required') || 'Amount must be greater than zero');
                 return;
             }
-            // If there are pending invoices, user MUST select one
-            if (pendingInvoices.length > 0 && !formData.invoice_id) {
-                toast.error(t('vouch_invoice_required') || 'يجب اختيار فاتورة لربط السند بها');
-                return;
+            // Validate amount doesn't exceed selected invoice remaining
+            if (formData.invoice_id) {
+                const selectedInv = pendingInvoices.find(inv => String(inv.id) === String(formData.invoice_id));
+                if (selectedInv) {
+                    const remaining = selectedInv.total - (selectedInv.paid || 0);
+                    if (parseFloat(formData.amount) > remaining) {
+                        toast.error(t('vouch_amount_exceeds') || `لا يمكن إدخال مبلغ أعلى من المتبقي من الفاتورة (${formatCurrency(remaining)})`);
+                        return;
+                    }
+                }
             }
         }
         try {
@@ -340,7 +376,33 @@ function Vouchers() {
                         </div>
                         <div className="form-group">
                             <label className="form-label">{t('vouch_amount')} *</label>
-                            <input type="number" className="form-input" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} step="0.250" required />
+                            <input 
+                                type="number" 
+                                className="form-input" 
+                                value={formData.amount} 
+                                onChange={handleAmountChange} 
+                                step="0.250" 
+                                min="0"
+                                max={selectedInvoiceRemaining !== null ? selectedInvoiceRemaining : undefined}
+                                required 
+                            />
+                            {formData.invoice_id && selectedInvoiceRemaining !== null && (
+                                <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <small style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                                        📋 {t('vouch_invoiceMax') || 'الحد الأقصى'}: {formatCurrency(selectedInvoiceRemaining)}
+                                    </small>
+                                    {parseFloat(formData.amount) > 0 && parseFloat(formData.amount) < selectedInvoiceRemaining && (
+                                        <small style={{ color: 'var(--warning, #f59e0b)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            ⚡ {t('vouch_partialPayment') || 'دفع جزئي'} — {t('vouch_remainingAfter') || 'المتبقي بعد الدفع'}: {formatCurrency(selectedInvoiceRemaining - parseFloat(formData.amount))}
+                                        </small>
+                                    )}
+                                    {parseFloat(formData.amount) === selectedInvoiceRemaining && (
+                                        <small style={{ color: 'var(--success, #22c55e)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            ✅ {t('vouch_fullPayment') || 'دفع كامل'}
+                                        </small>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -379,7 +441,7 @@ function Vouchers() {
                      {/* Invoice linking section - always visible when customer/supplier is selected */}
                     {((formData.type === 'receipt' && formData.customer_id) || (formData.type === 'payment' && formData.supplier_id)) && (
                         <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-                            <label className="form-label" style={{ color: 'var(--primary)', marginBottom: '8px' }}>🔗 {t('vouch_linkInvoice')} {pendingInvoices.length > 0 ? <span style={{ fontSize: '0.8rem', color: 'var(--danger, #ef4444)', fontWeight: 'bold' }}>* ({t('vouch_invoice_required_short') || 'إلزامي'})</span> : <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({t('vouch_optional') || 'اختياري'})</span>}</label>
+                            <label className="form-label" style={{ color: 'var(--primary)', marginBottom: '8px' }}>🔗 {t('vouch_linkInvoice')} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({t('vouch_optional') || 'اختياري'})</span></label>
 
                             {editMode ? (
                                 <div style={{ 
@@ -477,8 +539,8 @@ function Vouchers() {
                                         )}
                                     </div>
 
-                                    <small style={{ color: 'var(--danger, #ef4444)', marginTop: '6px', display: 'block', fontWeight: 600 }}>
-                                        ⚠️ {t('vouch_linkNote')} ({pendingInvoices.length} {t('vouch_unpaidCount')}) — {t('vouch_invoice_required') || 'يجب اختيار فاتورة لربط السند بها'}
+                                    <small style={{ color: 'var(--text-muted)', marginTop: '6px', display: 'block', fontWeight: 500 }}>
+                                        ℹ️ {t('vouch_linkNote')} ({pendingInvoices.length} {t('vouch_unpaidCount')})
                                     </small>
                                 </>
                             )}

@@ -227,8 +227,8 @@ function App() {
 
     // Create contextValue BEFORE any conditionals - MUST be called every render
     const contextValue = useMemo(() => ({
-        user, login, logout, updateUser, theme, toggleTheme, t, language, setLanguage
-    }), [user, login, logout, updateUser, theme, toggleTheme, t, language, setLanguage]);
+        user, login, logout, updateUser, theme, toggleTheme, t, language, setLanguage, setCurrentPage
+    }), [user, login, logout, updateUser, theme, toggleTheme, t, language, setLanguage, setCurrentPage]);
 
     useShortcuts({
         Help: () => {

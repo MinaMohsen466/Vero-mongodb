@@ -8,7 +8,7 @@ import * as XLSX from 'xlsx';
 import SearchableSelect from '../components/SearchableSelect';
 
 function Products() {
-    const { user, t } = useAuth();
+    const { user, t, setCurrentPage: setAppPage } = useAuth();
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -1069,7 +1069,28 @@ function Products() {
                                                             {isSale ? (t('sale') || 'بيع') : (t('purchase') || 'شراء')}
                                                         </span>
                                                     </td>
-                                                    <td style={{ padding: '12px 16px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary)' }}>{m.invoice_number}</td>
+                                                    <td style={{ padding: '12px 16px', fontSize: '0.85rem', fontWeight: 600 }}>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setShowMovementsModal(false);
+                                                                if (m.type === 'sales') {
+                                                                    setAppPage('sales');
+                                                                } else {
+                                                                    setAppPage('purchases');
+                                                                }
+                                                            }}
+                                                            style={{
+                                                                background: 'none', border: 'none', cursor: 'pointer',
+                                                                color: 'var(--primary)', fontWeight: 600, fontSize: '0.85rem',
+                                                                padding: 0, textDecoration: 'underline',
+                                                                textUnderlineOffset: '3px'
+                                                            }}
+                                                            title={m.type === 'sales' ? (t('sinv_title') || 'فواتير المبيعات') : (t('pinv_title') || 'فواتير المشتريات')}
+                                                        >
+                                                            {m.invoice_number}
+                                                        </button>
+                                                    </td>
                                                     <td style={{ padding: '12px 16px', fontSize: '0.85rem' }}>{m.customer_name || m.supplier_name || '—'}</td>
                                                     <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                                                         <span style={{ fontWeight: 700, fontSize: '0.95rem', color: isSale ? '#dc2626' : '#16a34a' }}>

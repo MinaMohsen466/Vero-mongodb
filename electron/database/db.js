@@ -1082,6 +1082,7 @@ class ProductsRepo {
             let sql = `
                 SELECT
                     ii.id,
+                    i.id as invoice_id,
                     i.invoice_number,
                     i.type,
                     i.date,
@@ -1495,25 +1496,17 @@ class VouchersRepo {
             const prefix = v.type === 'receipt' ? 'RV-' : 'PV-';
             const num = v.voucher_number || `${prefix}${String(count + 1).padStart(6, '0')}`;
 
-            let appliedAmount = parseFloat(v.amount) || 0;
+            let appliedAmount = 0;
             if (v.invoice_id) {
-                let remainingOB = 0;
-                if (v.type === 'receipt' && v.customer_id) {
-                    const customer = this.db.get("SELECT balance FROM customers WHERE id = ?", [v.customer_id]);
-                    const unpaidInvoicesSum = this.db.get("SELECT SUM(total - paid) as sum FROM invoices WHERE customer_id = ? AND status != 'paid'", [v.customer_id])?.sum || 0;
-                    if (customer) {
-                        remainingOB = Math.max(0, (customer.balance || 0) - unpaidInvoicesSum);
-                    }
-                } else if (v.type === 'payment' && v.supplier_id) {
-                    const supplier = this.db.get("SELECT balance FROM suppliers WHERE id = ?", [v.supplier_id]);
-                    const unpaidInvoicesSum = this.db.get("SELECT SUM(total - paid) as sum FROM invoices WHERE supplier_id = ? AND status != 'paid'", [v.supplier_id])?.sum || 0;
-                    if (supplier) {
-                        remainingOB = Math.max(0, (supplier.balance || 0) - unpaidInvoicesSum);
-                    }
+                // When an invoice is explicitly selected, apply the payment amount directly
+                // to that invoice (capped at the invoice's remaining balance)
+                const inv = this.db.get("SELECT total, paid FROM invoices WHERE id = ?", [v.invoice_id]);
+                if (inv) {
+                    const invoiceRemaining = (inv.total || 0) - (inv.paid || 0);
+                    appliedAmount = Math.min(parseFloat(v.amount) || 0, invoiceRemaining);
+                } else {
+                    appliedAmount = parseFloat(v.amount) || 0;
                 }
-                appliedAmount = Math.max(0, (parseFloat(v.amount) || 0) - remainingOB);
-            } else {
-                appliedAmount = 0;
             }
 
             const r = this.db.run("INSERT INTO vouchers (voucher_number, type, date, amount, applied_amount, account_id, customer_id, supplier_id, payment_method, invoice_id, reference, description, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1595,25 +1588,17 @@ class VouchersRepo {
             }
 
             // 4. Calculate new applied amount after reversing
-            let appliedAmount = parseFloat(v.amount) || 0;
+            let appliedAmount = 0;
             if (old.invoice_id) {
-                let remainingOB = 0;
-                if (old.type === 'receipt' && old.customer_id) {
-                    const customer = this.db.get("SELECT balance FROM customers WHERE id = ?", [old.customer_id]);
-                    const unpaidInvoicesSum = this.db.get("SELECT SUM(total - paid) as sum FROM invoices WHERE customer_id = ? AND status != 'paid'", [old.customer_id])?.sum || 0;
-                    if (customer) {
-                        remainingOB = Math.max(0, (customer.balance || 0) - unpaidInvoicesSum);
-                    }
-                } else if (old.type === 'payment' && old.supplier_id) {
-                    const supplier = this.db.get("SELECT balance FROM suppliers WHERE id = ?", [old.supplier_id]);
-                    const unpaidInvoicesSum = this.db.get("SELECT SUM(total - paid) as sum FROM invoices WHERE supplier_id = ? AND status != 'paid'", [old.supplier_id])?.sum || 0;
-                    if (supplier) {
-                        remainingOB = Math.max(0, (supplier.balance || 0) - unpaidInvoicesSum);
-                    }
+                // When an invoice is linked, apply the payment amount directly
+                // to that invoice (capped at the invoice's remaining balance)
+                const inv = this.db.get("SELECT total, paid FROM invoices WHERE id = ?", [old.invoice_id]);
+                if (inv) {
+                    const invoiceRemaining = (inv.total || 0) - (inv.paid || 0);
+                    appliedAmount = Math.min(parseFloat(v.amount) || 0, invoiceRemaining);
+                } else {
+                    appliedAmount = parseFloat(v.amount) || 0;
                 }
-                appliedAmount = Math.max(0, (parseFloat(v.amount) || 0) - remainingOB);
-            } else {
-                appliedAmount = 0;
             }
 
             // 5. Update the voucher record

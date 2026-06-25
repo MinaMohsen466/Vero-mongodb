@@ -335,6 +335,11 @@ const translations = {
         vouch_supplier_required: 'يرجى اختيار المورد أولاً',
         vouch_invoice_required: 'يجب اختيار فاتورة لربط السند بها',
         vouch_invoice_required_short: 'إلزامي',
+        vouch_invoiceMax: 'الحد الأقصى',
+        vouch_partialPayment: 'دفع جزئي',
+        vouch_fullPayment: 'دفع كامل',
+        vouch_remainingAfter: 'المتبقي بعد الدفع',
+        vouch_amount_exceeds: 'لا يمكن إدخال مبلغ أعلى من المتبقي من الفاتورة',
         rep_cashBankBalance: 'رصيد الصندوق والبنوك',
 
         // Reports - Account Statement
@@ -1813,6 +1818,11 @@ const translations = {
         vouch_supplier_required: 'Please select a supplier first',
         vouch_invoice_required: 'An invoice must be selected to link with the voucher',
         vouch_invoice_required_short: 'Required',
+        vouch_invoiceMax: 'Maximum',
+        vouch_partialPayment: 'Partial payment',
+        vouch_fullPayment: 'Full payment',
+        vouch_remainingAfter: 'Remaining after payment',
+        vouch_amount_exceeds: 'Amount cannot exceed the remaining invoice balance',
         rep_cashBankBalance: 'Cash & Bank Balance',
 
         // Reports - Account Statement
