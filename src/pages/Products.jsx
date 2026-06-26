@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, Package, Image as ImageIcon, BarChart2, TrendingUp, TrendingDown, X, Calendar, RefreshCw, Upload, Download } from 'lucide-react';
 import Modal from '../components/Modal';
+import InvoicePrintPreview from '../components/InvoicePrintPreview';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -8,7 +9,7 @@ import * as XLSX from 'xlsx';
 import SearchableSelect from '../components/SearchableSelect';
 
 function Products() {
-    const { user, t, setCurrentPage: setAppPage } = useAuth();
+    const { user, t } = useAuth();
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -28,6 +29,8 @@ function Products() {
     const [loadingMovements, setLoadingMovements] = useState(false);
     const [trackStartDate, setTrackStartDate] = useState('');
     const [trackEndDate, setTrackEndDate] = useState('');
+    const [viewingInvoice, setViewingInvoice] = useState(null);
+    const [invoiceSettings, setInvoiceSettings] = useState({});
     const searchInputRef = React.useRef(null);
     const fileInputRef = React.useRef(null);
 
@@ -521,7 +524,7 @@ function Products() {
 
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
 
-    return (
+    const mainContent = (
         <div>
             <div className="page-header">
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1071,13 +1074,18 @@ function Products() {
                                                     </td>
                                                     <td style={{ padding: '12px 16px', fontSize: '0.85rem', fontWeight: 600 }}>
                                                         <button
-                                                            onClick={(e) => {
+                                                            onClick={async (e) => {
                                                                 e.stopPropagation();
-                                                                setShowMovementsModal(false);
-                                                                if (m.type === 'sales') {
-                                                                    setAppPage('sales');
-                                                                } else {
-                                                                    setAppPage('purchases');
+                                                                try {
+                                                                    const freshSettings = await window.api.settings.getAll();
+                                                                    setInvoiceSettings(freshSettings || {});
+                                                                    const invoice = await window.api.invoices.getById(m.invoice_id);
+                                                                    if (invoice) {
+                                                                        setViewingInvoice({ ...invoice, _type: m.type });
+                                                                    }
+                                                                } catch (err) {
+                                                                    console.error('Error loading invoice:', err);
+                                                                    toast.error(t('errorOccurred') || 'حدث خطأ');
                                                                 }
                                                             }}
                                                             style={{
@@ -1086,7 +1094,7 @@ function Products() {
                                                                 padding: 0, textDecoration: 'underline',
                                                                 textUnderlineOffset: '3px'
                                                             }}
-                                                            title={m.type === 'sales' ? (t('sinv_title') || 'فواتير المبيعات') : (t('pinv_title') || 'فواتير المشتريات')}
+                                                            title={t('inv_view') || 'عرض الفاتورة'}
                                                         >
                                                             {m.invoice_number}
                                                         </button>
@@ -1110,6 +1118,24 @@ function Products() {
                 </div>
             )}
         </div>
+    );
+
+    return (
+        <>
+            {mainContent}
+
+            {/* Invoice Preview Modal - opens when clicking invoice number in tracking */}
+            {viewingInvoice && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 10001 }}>
+                    <InvoicePrintPreview
+                        invoice={viewingInvoice}
+                        settings={invoiceSettings}
+                        type={viewingInvoice._type || 'sales'}
+                        onClose={() => setViewingInvoice(null)}
+                    />
+                </div>
+            )}
+        </>
     );
 }
 

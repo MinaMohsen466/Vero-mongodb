@@ -104,6 +104,10 @@ function PurchaseInvoices() {
             unit: product?.unit || '',
             total: calculateItemTotal({ ...newItems[index], unit_price: product?.purchase_price || 0 })
         };
+        // Auto-add new row if product was selected on the last row
+        if (productId && index === newItems.length - 1) {
+            newItems.push({ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' });
+        }
         setFormData({ ...formData, items: newItems });
     };
 

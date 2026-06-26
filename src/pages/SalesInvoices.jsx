@@ -164,6 +164,10 @@ function SalesInvoices() {
             unit: product?.unit || '',
         };
         newItems[index].total = calculateItemTotal(newItems[index]).finalTotal;
+        // Auto-add new row if product was selected on the last row
+        if (productId && index === newItems.length - 1) {
+            newItems.push({ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' });
+        }
         setFormData({ ...formData, items: newItems });
     };
 
