@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('api', {
         create: (product) => ipcRenderer.invoke('products:create', product),
         update: (product) => ipcRenderer.invoke('products:update', product),
         delete: (id) => ipcRenderer.invoke('products:delete', id),
+        deleteAll: () => ipcRenderer.invoke('products:deleteAll'),
         getMovements: (id, startDate, endDate) => ipcRenderer.invoke('products:getMovements', { id, startDate, endDate }),
         addWarehouseStock: (id, quantity) => ipcRenderer.invoke('products:addWarehouseStock', { id, quantity })
     },

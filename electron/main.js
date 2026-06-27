@@ -198,6 +198,11 @@ ipcMain.handle('products:delete', async (event, id) => {
     if (result.success) logActivity('delete', 'products', id, String(id), {});
     return result;
 });
+ipcMain.handle('products:deleteAll', async () => {
+    const result = db.products.deleteAll();
+    if (result.success) logActivity('delete', 'products', 0, 'all_products', { deleted: result.deleted || 0 });
+    return result;
+});
 ipcMain.handle('products:getMovements', async (event, { id, startDate, endDate }) => db.products.getMovements(id, startDate, endDate));
 ipcMain.handle('products:addWarehouseStock', async (event, { id, quantity }) => {
     const result = db.products.addWarehouseStock(id, quantity);

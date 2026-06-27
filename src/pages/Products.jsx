@@ -5,8 +5,20 @@ import InvoicePrintPreview from '../components/InvoicePrintPreview';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
 import { useShortcuts } from '../hooks/useShortcuts';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import SearchableSelect from '../components/SearchableSelect';
+
+const normalizeDozenQty = (qty) => {
+    const n = parseFloat(qty);
+    return n > 0 ? n : 1;
+};
+
+const EXCEL_BORDER = {
+    top: { style: 'thin', color: { argb: 'FFB4C6E7' } },
+    bottom: { style: 'thin', color: { argb: 'FFB4C6E7' } },
+    left: { style: 'thin', color: { argb: 'FFB4C6E7' } },
+    right: { style: 'thin', color: { argb: 'FFB4C6E7' } },
+};
 
 function Products() {
     const { user, t } = useAuth();
@@ -52,14 +64,13 @@ function Products() {
         setCurrentPage(1);
     }, [searchQuery, categoryFilter]);
 
-    const handleExportProducts = () => {
+    const handleExportProducts = async () => {
         if (!products || products.length === 0) {
             toast.error(t('noData'));
             return;
         }
         
         try {
-            // Excel headers matching translated/localized labels or English fallback
             const headers = [
                 t('code') || 'Code',
                 t('prod_name') || 'Name',
@@ -73,41 +84,68 @@ function Products() {
                 t('prod_stock') || 'Stock_Quantity',
                 t('prod_minStock') || 'Min_Stock'
             ];
-            
-            const rows = products.map(p => [
-                p.code || '',
-                p.name || '',
-                p.description || '',
-                p.category || '',
-                p.unit || '',
-                p.purchase_price || 0,
-                p.dozen_price || 0,
-                p.dozen_qty || 0,
-                p.sale_price || 0,
-                p.stock_quantity || 0,
-                p.min_stock || 0
-            ]);
-            
-            const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-            
-            // Add dynamic Excel formulas for the Purchase Price column
-            products.forEach((p, idx) => {
-                const rowNum = idx + 2; // Row numbers in Excel are 1-based, and row 1 is the header
-                const cellRef = `F${rowNum}`;       // Column F: Purchase Price
-                const dozenPriceRef = `G${rowNum}`; // Column G: Dozen Price
-                const dozenQtyRef = `H${rowNum}`;   // Column H: Dozen Qty
-                
-                worksheet[cellRef] = {
-                    t: 'n',
-                    f: `IF(${dozenQtyRef}>0, ${dozenPriceRef}/${dozenQtyRef}, ${p.purchase_price || 0})`,
-                    v: p.purchase_price || 0
-                };
+
+            const ExcelJS = (await import('exceljs')).default;
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Products', {
+                views: [{ state: 'frozen', ySplit: 1, xSplit: 0, topLeftCell: 'A2', activeCell: 'A2' }],
             });
 
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Products");
-            
-            XLSX.writeFile(workbook, `products_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+            sheet.columns = [
+                { width: 14 }, { width: 28 }, { width: 24 }, { width: 16 }, { width: 12 },
+                { width: 14 }, { width: 14 }, { width: 12 }, { width: 14 }, { width: 14 }, { width: 12 },
+            ];
+
+            const headerRow = sheet.addRow(headers);
+            headerRow.height = 28;
+            headerRow.eachCell((cell) => {
+                cell.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5496' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+                cell.border = EXCEL_BORDER;
+            });
+
+            products.forEach((p, idx) => {
+                const rowNum = idx + 2;
+                const dozenQty = normalizeDozenQty(p.dozen_qty);
+                const row = sheet.addRow([
+                    p.code || '',
+                    p.name || '',
+                    p.description || '',
+                    p.category || '',
+                    p.unit || '',
+                    p.purchase_price || 0,
+                    p.dozen_price || 0,
+                    dozenQty,
+                    p.sale_price || 0,
+                    p.stock_quantity || 0,
+                    p.min_stock || 0,
+                ]);
+
+                row.getCell(6).value = {
+                    formula: `IF(H${rowNum}>0,G${rowNum}/H${rowNum},${p.purchase_price || 0})`,
+                    result: p.purchase_price || 0,
+                };
+
+                const fillColor = idx % 2 === 1 ? 'FFDEEAF6' : 'FFFFFFFF';
+                row.eachCell((cell, colNumber) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } };
+                    cell.font = { size: 10, color: { argb: 'FF333333' } };
+                    cell.alignment = { vertical: 'middle', horizontal: colNumber >= 6 ? 'right' : 'left' };
+                    cell.border = EXCEL_BORDER;
+                    if (colNumber >= 6 && colNumber <= 8) cell.numFmt = '#,##0.00';
+                    if (colNumber >= 9) cell.numFmt = '#,##0';
+                });
+            });
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `products_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+            link.click();
+            URL.revokeObjectURL(url);
             toast.success(t('savedSuccess') || 'Exported successfully');
         } catch (error) {
             console.error('Export error:', error);
@@ -193,7 +231,9 @@ function Products() {
                     const minStockVal = getVal(values, minStockIdx, hasDozenHeaders ? 10 : 8);
 
                     const dPrice = dozenPriceVal !== undefined && dozenPriceVal !== null ? parseFloat(dozenPriceVal) || 0 : 0;
-                    const dQty = dozenQtyVal !== undefined && dozenQtyVal !== null ? parseFloat(dozenQtyVal) || 0 : 0;
+                    const dQty = dozenQtyVal !== undefined && dozenQtyVal !== null && dozenQtyVal !== ''
+                        ? normalizeDozenQty(dozenQtyVal)
+                        : 1;
                     let pPrice = parseFloat(purchaseVal) || 0;
                     if (pPrice === 0 && dPrice > 0 && dQty > 0) {
                         pPrice = dPrice / dQty;
@@ -315,6 +355,8 @@ function Products() {
                 warehouse_stock: parseFloat(formData.warehouse_stock) || 0,
                 shop_stock: parseFloat(formData.shop_stock) || 0,
                 min_stock: parseFloat(formData.min_stock) || 0,
+                dozen_qty: normalizeDozenQty(formData.dozen_qty),
+                dozen_price: parseFloat(formData.dozen_price) || 0,
                 supplier_id: primarySupplierId,
                 supplier_ids: selectedSupplierIds
             };
@@ -382,7 +424,7 @@ function Products() {
                 supplier_id: product.supplier_id || '',
                 supplier_ids: parsedIds,
                 dozen_price: product.dozen_price !== undefined && product.dozen_price !== null ? product.dozen_price : '',
-                dozen_qty: product.dozen_qty ? product.dozen_qty : 1
+                dozen_qty: normalizeDozenQty(product.dozen_qty)
             });
         } else {
             setShowCustomUnit(false);
@@ -438,8 +480,8 @@ function Products() {
 
     const handleDozenPriceChange = (value) => {
         const price = parseFloat(value) || 0;
-        const qty = parseFloat(formData.dozen_qty) || 0;
-        const computed = qty > 0 ? (price / qty).toFixed(3) : '';
+        const qty = normalizeDozenQty(formData.dozen_qty);
+        const computed = price > 0 ? (price / qty).toFixed(3) : '';
         setFormData(prev => ({
             ...prev,
             dozen_price: value,
@@ -448,12 +490,12 @@ function Products() {
     };
 
     const handleDozenQtyChange = (value) => {
-        const qty = parseFloat(value) || 0;
+        const qty = normalizeDozenQty(value);
         const price = parseFloat(formData.dozen_price) || 0;
-        const computed = qty > 0 ? (price / qty).toFixed(3) : '';
+        const computed = price > 0 ? (price / qty).toFixed(3) : '';
         setFormData(prev => ({
             ...prev,
-            dozen_qty: value,
+            dozen_qty: value === '' || value === null ? value : qty,
             purchase_price: computed
         }));
     };

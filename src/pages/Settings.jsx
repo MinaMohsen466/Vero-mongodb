@@ -630,6 +630,23 @@ export default function Settings() {
             await window.api.settings?.resetApp?.();
     };
 
+    const handleDeleteAll = async () => {
+        if (confirm(t('prod_deleteAllConfirm') || 'Are you sure you want to delete all products from the database? This action cannot be undone!')) {
+            try {
+                const result = await window.api.products.deleteAll();
+                if (result && result.success) {
+                    toast.success(t('savedSuccess') || 'Products deleted successfully');
+                    loadData();
+                } else {
+                    toast.error(result?.error || t('errorOccurred') || 'An error occurred while deleting products');
+                }
+            } catch (error) {
+                console.error(error);
+                toast.error(t('errorOccurred') || 'An error occurred while deleting products');
+            }
+        }
+    };
+
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
 
     const btnStyle = {
@@ -1606,6 +1623,19 @@ export default function Settings() {
                             </button>
                         )}
                     </Card>
+
+                    {user?.permissions?.products?.can_delete && (
+                        <Card title={t('prod_deleteAll') || 'حذف كل المنتجات'} icon={AlertTriangle} action={
+                            <span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('danger') || 'Danger'}</span>
+                        }>
+                            <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.7 }}>
+                                {t('prod_deleteAllConfirm') || 'هل أنت متأكد من حذف جميع المنتجات من قاعدة البيانات؟ لا يمكن التراجع عن هذه الخطوة!'}
+                            </p>
+                            <button style={{ ...btnStyle, background: 'var(--danger)', color: '#fff' }} onClick={handleDeleteAll}>
+                                <Trash2 size={14} /> {t('prod_deleteAll') || 'حذف كل المنتجات'}
+                            </button>
+                        </Card>
+                    )}
 
                     <Card title={t('reset_app') || 'Reset App'} icon={AlertTriangle} action={
                         <span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('danger') || 'Danger'}</span>

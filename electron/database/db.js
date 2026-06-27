@@ -150,7 +150,7 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, phone TEXT, email TEXT, address TEXT, tax_number TEXT, balance REAL DEFAULT 0, credit_limit REAL DEFAULT 0, notes TEXT, is_active INTEGER DEFAULT 1, opening_balance REAL DEFAULT 0, opening_balance_date TEXT, opening_balance_je_id INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS suppliers (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, phone TEXT, email TEXT, address TEXT, tax_number TEXT, balance REAL DEFAULT 0, notes TEXT, is_active INTEGER DEFAULT 1, opening_balance REAL DEFAULT 0, opening_balance_date TEXT, opening_balance_je_id INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, parent_id INTEGER, account_type TEXT NOT NULL, nature TEXT NOT NULL, balance REAL DEFAULT 0, is_active INTEGER DEFAULT 1, can_post INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (parent_id) REFERENCES accounts(id));
-      CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, description TEXT, unit TEXT DEFAULT 'قطعة', category TEXT, purchase_price REAL DEFAULT 0, sale_price REAL DEFAULT 0, stock_quantity REAL DEFAULT 0, min_stock REAL DEFAULT 0, image TEXT, supplier_id INTEGER, supplier_ids TEXT DEFAULT '[]', is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP, dozen_price REAL DEFAULT 0, dozen_qty REAL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, description TEXT, unit TEXT DEFAULT 'قطعة', category TEXT, purchase_price REAL DEFAULT 0, sale_price REAL DEFAULT 0, stock_quantity REAL DEFAULT 0, min_stock REAL DEFAULT 0, image TEXT, supplier_id INTEGER, supplier_ids TEXT DEFAULT '[]', is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP, dozen_price REAL DEFAULT 0, dozen_qty REAL DEFAULT 1);
       CREATE TABLE IF NOT EXISTS invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_number TEXT UNIQUE NOT NULL, type TEXT NOT NULL, customer_id INTEGER, supplier_id INTEGER, date TEXT NOT NULL, due_date TEXT, subtotal REAL DEFAULT 0, discount REAL DEFAULT 0, tax REAL DEFAULT 0, total REAL DEFAULT 0, paid REAL DEFAULT 0, status TEXT DEFAULT 'pending', payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS invoice_items (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id INTEGER NOT NULL, product_id INTEGER, description TEXT, quantity REAL NOT NULL, unit_price REAL NOT NULL, discount REAL DEFAULT 0, tax REAL DEFAULT 0, total REAL NOT NULL, FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS vouchers (id INTEGER PRIMARY KEY AUTOINCREMENT, voucher_number TEXT UNIQUE NOT NULL, type TEXT NOT NULL, date TEXT NOT NULL, amount REAL NOT NULL, applied_amount REAL DEFAULT 0, account_id INTEGER, customer_id INTEGER, supplier_id INTEGER, payment_method TEXT DEFAULT 'cash', invoice_id INTEGER, reference TEXT, description TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -201,7 +201,7 @@ class AppDatabase {
             const hasDozenPrice = productCols.some(col => col.name === 'dozen_price');
             if (!hasDozenPrice) this.exec("ALTER TABLE products ADD COLUMN dozen_price REAL DEFAULT 0");
             const hasDozenQty = productCols.some(col => col.name === 'dozen_qty');
-            if (!hasDozenQty) this.exec("ALTER TABLE products ADD COLUMN dozen_qty REAL DEFAULT 0");
+            if (!hasDozenQty) this.exec("ALTER TABLE products ADD COLUMN dozen_qty REAL DEFAULT 1");
         } catch (e) { console.log('Products migration check:', e.message); }
 
         try {
@@ -1038,7 +1038,7 @@ class ProductsRepo {
             const totalStock = warehouseStock + shopStock;
             const r = this.db.run(
                 "INSERT INTO products (code, name, description, unit, category, purchase_price, sale_price, stock_quantity, min_stock, image, supplier_id, supplier_ids, warehouse_stock, shop_stock, dozen_price, dozen_qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [code, p.name, p.description, p.unit, p.category, p.purchase_price || 0, p.sale_price || 0, totalStock, p.min_stock || 0, p.image || null, p.supplier_id !== undefined ? p.supplier_id : null, supplierIdsJson, warehouseStock, shopStock, p.dozen_price || 0, p.dozen_qty || 0]
+                [code, p.name, p.description, p.unit, p.category, p.purchase_price || 0, p.sale_price || 0, totalStock, p.min_stock || 0, p.image || null, p.supplier_id !== undefined ? p.supplier_id : null, supplierIdsJson, warehouseStock, shopStock, p.dozen_price || 0, (parseFloat(p.dozen_qty) > 0 ? parseFloat(p.dozen_qty) : 1)]
             );
             return { success: true, id: r.lastInsertRowid };
         } catch (e) {
@@ -1053,7 +1053,7 @@ class ProductsRepo {
             const totalStock = warehouseStock + shopStock;
             this.db.run(
                 "UPDATE products SET name=?, description=?, unit=?, category=?, purchase_price=?, sale_price=?, stock_quantity=?, min_stock=?, image=?, supplier_id=?, supplier_ids=?, is_active=?, warehouse_stock=?, shop_stock=?, dozen_price=?, dozen_qty=? WHERE id=?",
-                [p.name, p.description, p.unit, p.category, p.purchase_price, p.sale_price, totalStock, p.min_stock, p.image || null, p.supplier_id !== undefined ? p.supplier_id : null, supplierIdsJson, p.is_active ? 1 : 0, warehouseStock, shopStock, p.dozen_price || 0, p.dozen_qty || 0, p.id]
+                [p.name, p.description, p.unit, p.category, p.purchase_price, p.sale_price, totalStock, p.min_stock, p.image || null, p.supplier_id !== undefined ? p.supplier_id : null, supplierIdsJson, p.is_active ? 1 : 0, warehouseStock, shopStock, p.dozen_price || 0, (parseFloat(p.dozen_qty) > 0 ? parseFloat(p.dozen_qty) : 1), p.id]
             );
             return { success: true };
         } catch (e) {
@@ -1061,6 +1061,17 @@ class ProductsRepo {
         }
     }
     delete(id) { try { this.db.run('DELETE FROM products WHERE id = ?', [id]); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+    deleteAll() {
+        try {
+            const countObj = this.db.get('SELECT COUNT(*) as count FROM products');
+            const count = countObj ? countObj.count : 0;
+            this.db.run('DELETE FROM products');
+            return { success: true, deleted: count };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
 
     addWarehouseStock(productId, quantity) {
         try {
