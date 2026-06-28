@@ -8,8 +8,15 @@ import { useShortcuts } from '../hooks/useShortcuts';
 import * as XLSX from 'xlsx-js-style';
 import SearchableSelect from '../components/SearchableSelect';
 
+const parseExcelNumber = (val) => {
+    if (val === undefined || val === null || val === '') return 0;
+    if (typeof val === 'number') return val;
+    const cleanStr = String(val).replace(/,/g, '').trim();
+    return parseFloat(cleanStr) || 0;
+};
+
 const normalizeDozenQty = (qty) => {
-    const n = parseFloat(qty);
+    const n = parseExcelNumber(qty);
     return n > 0 ? n : 1;
 };
 
@@ -133,8 +140,11 @@ function Products() {
                     cell.font = { size: 10, color: { argb: 'FF333333' } };
                     cell.alignment = { vertical: 'middle', horizontal: colNumber >= 6 ? 'right' : 'left' };
                     cell.border = EXCEL_BORDER;
-                    if (colNumber >= 6 && colNumber <= 8) cell.numFmt = '#,##0.00';
-                    if (colNumber >= 9) cell.numFmt = '#,##0';
+                    if (colNumber === 6 || colNumber === 7 || colNumber === 9) {
+                        cell.numFmt = '#,##0.000';
+                    } else if (colNumber === 8 || colNumber === 10 || colNumber === 11) {
+                        cell.numFmt = '#,##0.00';
+                    }
                 });
             });
 
@@ -230,11 +240,11 @@ function Products() {
                     const stockVal = getVal(values, stockIdx, hasDozenHeaders ? 9 : 7);
                     const minStockVal = getVal(values, minStockIdx, hasDozenHeaders ? 10 : 8);
 
-                    const dPrice = dozenPriceVal !== undefined && dozenPriceVal !== null ? parseFloat(dozenPriceVal) || 0 : 0;
+                    const dPrice = dozenPriceVal !== undefined && dozenPriceVal !== null ? parseExcelNumber(dozenPriceVal) : 0;
                     const dQty = dozenQtyVal !== undefined && dozenQtyVal !== null && dozenQtyVal !== ''
                         ? normalizeDozenQty(dozenQtyVal)
                         : 1;
-                    let pPrice = parseFloat(purchaseVal) || 0;
+                    let pPrice = parseExcelNumber(purchaseVal);
                     if (pPrice === 0 && dPrice > 0 && dQty > 0) {
                         pPrice = dPrice / dQty;
                     }
@@ -248,10 +258,10 @@ function Products() {
                         purchase_price: pPrice,
                         dozen_price: dPrice,
                         dozen_qty: dQty,
-                        sale_price: parseFloat(saleVal) || 0,
-                        shop_stock: parseFloat(stockVal) || 0,
+                        sale_price: parseExcelNumber(saleVal),
+                        shop_stock: parseExcelNumber(stockVal),
                         warehouse_stock: 0,
-                        min_stock: parseFloat(minStockVal) || 0,
+                        min_stock: parseExcelNumber(minStockVal),
                         is_active: true
                     };
 
@@ -900,27 +910,27 @@ function Products() {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px' }}>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_dozenPrice') || 'سعر الدرزن'}</label>
-                                    <input type="number" className="form-input" value={formData.dozen_price} onChange={(e) => handleDozenPriceChange(e.target.value)} step="0.05" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <input type="number" className="form-input" value={formData.dozen_price} onChange={(e) => handleDozenPriceChange(e.target.value)} step="any" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_dozenQty') || 'الكمية في الدرزن'}</label>
-                                    <input type="number" className="form-input" value={formData.dozen_qty} onChange={(e) => handleDozenQtyChange(e.target.value)} min="1" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <input type="number" className="form-input" value={formData.dozen_qty} onChange={(e) => handleDozenQtyChange(e.target.value)} step="any" min="1" style={{ height: '38px', fontSize: '0.85rem' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_purchasePrice')} *</label>
-                                    <input type="number" className="form-input" value={formData.purchase_price} onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value, dozen_price: '', dozen_qty: '' })} step="0.05" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <input type="number" className="form-input" value={formData.purchase_price} onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value, dozen_price: '', dozen_qty: '' })} step="any" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_salePrice')}</label>
-                                    <input type="number" className="form-input" value={formData.sale_price} onChange={(e) => setFormData({ ...formData, sale_price: e.target.value })} step="0.05" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <input type="number" className="form-input" value={formData.sale_price} onChange={(e) => setFormData({ ...formData, sale_price: e.target.value })} step="any" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_stock') || 'مخزون المحل'}</label>
-                                    <input type="number" className="form-input" value={formData.shop_stock} onChange={(e) => setFormData({ ...formData, shop_stock: e.target.value })} min="0" step="0.001" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <input type="number" className="form-input" value={formData.shop_stock} onChange={(e) => setFormData({ ...formData, shop_stock: e.target.value })} min="0" step="any" style={{ height: '38px', fontSize: '0.85rem' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_minStock')}</label>
-                                    <input type="number" className="form-input" value={formData.min_stock} onChange={(e) => setFormData({ ...formData, min_stock: e.target.value })} min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <input type="number" className="form-input" value={formData.min_stock} onChange={(e) => setFormData({ ...formData, min_stock: e.target.value })} step="any" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
                                 </div>
                             </div>
                         </div>
