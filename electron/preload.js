@@ -72,6 +72,14 @@ contextBridge.exposeInMainWorld('api', {
         updateStatus: (id, status) => ipcRenderer.invoke('invoices:updateStatus', { id, status })
     },
 
+    // Returns
+    returns: {
+        getAll: (type) => ipcRenderer.invoke('returns:getAll', type),
+        getById: (id) => ipcRenderer.invoke('returns:getById', id),
+        create: (ret) => ipcRenderer.invoke('returns:create', ret),
+        delete: (id) => ipcRenderer.invoke('returns:delete', id)
+    },
+
     // Vouchers
     vouchers: {
         getAll: (type) => ipcRenderer.invoke('vouchers:getAll', type),

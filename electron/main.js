@@ -246,6 +246,21 @@ ipcMain.handle('invoices:getByCustomer', async (event, customerId) => db.invoice
 ipcMain.handle('invoices:getBySupplier', async (event, supplierId) => db.invoices.getBySupplier(supplierId));
 ipcMain.handle('invoices:updateStatus', async (event, { id, status }) => db.invoices.updateStatus(id, status));
 
+// --- Returns ---
+ipcMain.handle('returns:getAll', async (event, type) => db.returns.getAll(type));
+ipcMain.handle('returns:getById', async (event, id) => db.returns.getById(id));
+ipcMain.handle('returns:create', async (event, ret) => {
+    const result = db.returns.create(ret);
+    if (result.success) logActivity('create', ret.type === 'sales_return' ? 'sales_returns' : 'purchase_returns', result.id, result.return_number, ret);
+    return result;
+});
+ipcMain.handle('returns:delete', async (event, id) => {
+    const existing = db.returns.getById(id);
+    const result = db.returns.delete(id);
+    if (result.success) logActivity('delete', existing?.type === 'sales_return' ? 'sales_returns' : 'purchase_returns', id, existing?.return_number || String(id), {});
+    return result;
+});
+
 // --- Vouchers ---
 ipcMain.handle('vouchers:getAll', async (event, type) => db.vouchers.getAll(type));
 ipcMain.handle('vouchers:getById', async (event, id) => db.vouchers.getById(id));

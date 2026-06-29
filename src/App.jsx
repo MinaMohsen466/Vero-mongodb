@@ -38,6 +38,8 @@ const Installments = lazy(() => import('./pages/Installments'));
 const OffersAndCoupons = lazy(() => import('./pages/OffersAndCoupons'));
 const Expenses = lazy(() => import('./pages/Expenses'));
 const WarehousePage = lazy(() => import('./pages/Warehouse'));
+const SalesReturns = lazy(() => import('./pages/SalesReturns'));
+const PurchaseReturns = lazy(() => import('./pages/PurchaseReturns'));
 
 const LoadingScreen = () => (
     <div className="loading" style={{ height: '100vh' }}>
@@ -217,7 +219,9 @@ function App() {
         'pos': POS,
         'installments': Installments,
         'offers': OffersAndCoupons,
-        'warehouse': WarehousePage
+        'warehouse': WarehousePage,
+        'sales_returns': SalesReturns,
+        'purchase_returns': PurchaseReturns
     };
 
     const renderPage = useCallback(() => {

@@ -1349,3 +1349,76 @@ select {
 .invoice-preview-table tbody tr:hover {
   background: transparent !important;
 }
+
+/* Sidebar Nav Group Dropdowns */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 2px;
+}
+
+.nav-group-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: var(--transition);
+  color: var(--sidebar-text);
+  user-select: none;
+}
+
+.nav-group-header:hover {
+  background: var(--sidebar-hover);
+}
+
+.nav-group-header.parent-active {
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 500;
+  color: #fff;
+}
+
+.nav-group-header-arrow {
+  transition: transform 0.2s ease;
+  color: var(--text-muted);
+}
+
+/* Children container */
+.nav-group-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-inline-start: 24px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 2px;
+  margin-bottom: 4px;
+}
+
+.nav-sub-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: var(--transition);
+  color: var(--sidebar-text);
+  font-size: 0.85rem;
+}
+
+.nav-sub-item:hover {
+  background: var(--sidebar-hover);
+}
+
+.nav-sub-item.active {
+  background: var(--sidebar-active);
+  color: #fff;
+}
+
+/* Collapse behavior */
+.sidebar.collapsed .nav-group-header-arrow,
+.sidebar.collapsed .nav-group-children {
+  display: none !important;
+}

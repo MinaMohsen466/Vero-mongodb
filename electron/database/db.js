@@ -165,6 +165,8 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS coupons (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, discount_type TEXT NOT NULL, discount_value REAL NOT NULL, max_uses INTEGER DEFAULT 0, current_uses INTEGER DEFAULT 0, valid_from TEXT, valid_to TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS offers (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, offer_type TEXT NOT NULL, discount_value REAL DEFAULT 0, target_type TEXT NOT NULL, target_id TEXT, buy_qty INTEGER DEFAULT 0, get_qty INTEGER DEFAULT 0, valid_from TEXT, valid_to TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, user_name TEXT NOT NULL, action TEXT NOT NULL, module TEXT NOT NULL, entity_id INTEGER, entity_ref TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS returns (id INTEGER PRIMARY KEY AUTOINCREMENT, return_number TEXT UNIQUE NOT NULL, invoice_id INTEGER, type TEXT NOT NULL, customer_id INTEGER, supplier_id INTEGER, date TEXT NOT NULL, subtotal REAL DEFAULT 0, discount REAL DEFAULT 0, total REAL DEFAULT 0, refunded_amount REAL DEFAULT 0, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, notes TEXT, journal_entry_id INTEGER, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (invoice_id) REFERENCES invoices(id));
+      CREATE TABLE IF NOT EXISTS return_items (id INTEGER PRIMARY KEY AUTOINCREMENT, return_id INTEGER NOT NULL, product_id INTEGER, description TEXT, quantity REAL NOT NULL, unit_price REAL NOT NULL, total REAL NOT NULL, FOREIGN KEY (return_id) REFERENCES returns(id) ON DELETE CASCADE, FOREIGN KEY (product_id) REFERENCES products(id));
     `);
 
         /// Migration for existing databases - add missing columns
@@ -364,6 +366,44 @@ class AppDatabase {
                 this.exec("ALTER TABLE stock_transfers ADD COLUMN direction TEXT DEFAULT 'shop_to_warehouse'");
             }
         } catch (e) { console.log('Add direction column migration:', e.message); }
+
+        // Migration: Create returns and return_items tables for existing databases
+        try {
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS returns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    return_number TEXT UNIQUE NOT NULL,
+                    invoice_id INTEGER,
+                    type TEXT NOT NULL,
+                    customer_id INTEGER,
+                    supplier_id INTEGER,
+                    date TEXT NOT NULL,
+                    subtotal REAL DEFAULT 0,
+                    discount REAL DEFAULT 0,
+                    total REAL DEFAULT 0,
+                    refunded_amount REAL DEFAULT 0,
+                    payment_method TEXT DEFAULT 'cash',
+                    payment_account_id INTEGER,
+                    notes TEXT,
+                    journal_entry_id INTEGER,
+                    created_by INTEGER,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+                );
+                CREATE TABLE IF NOT EXISTS return_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    return_id INTEGER NOT NULL,
+                    product_id INTEGER,
+                    description TEXT,
+                    quantity REAL NOT NULL,
+                    unit_price REAL NOT NULL,
+                    total REAL NOT NULL,
+                    FOREIGN KEY (return_id) REFERENCES returns(id) ON DELETE CASCADE,
+                    FOREIGN KEY (product_id) REFERENCES products(id)
+                );
+            `);
+            this.save();
+        } catch (e) { console.log('Returns tables migration:', e.message); }
     }
 
     seedDefaultData() {
@@ -464,7 +504,7 @@ class AppDatabase {
         // Default Permissions
         const permCount = this.get('SELECT COUNT(*) as count FROM permissions');
         if (permCount.count === 0) {
-            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'expenses', 'pos', 'database', 'financial_summary', 'warehouse', 'offers'];
+            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'expenses', 'pos', 'database', 'financial_summary', 'warehouse', 'offers', 'sales_returns', 'purchase_returns'];
             for (const mod of modules) {
                 // Admin: full access to everything
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', mod]);
@@ -474,17 +514,19 @@ class AppDatabase {
                 dashboard: [1, 0, 0, 0], customers: [1, 1, 1, 0], suppliers: [1, 1, 1, 0], products: [1, 1, 1, 0],
                 sales_invoices: [1, 1, 1, 0], purchase_invoices: [1, 1, 1, 0], receipt_vouchers: [1, 1, 1, 0], payment_vouchers: [1, 1, 1, 0],
                 chart_of_accounts: [1, 0, 0, 0], cash_bank: [1, 0, 0, 0], journal_entries: [1, 1, 0, 0], reports: [1, 0, 0, 0],
-                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [1, 1, 1, 0], expenses: [1, 1, 1, 0], pos: [1, 1, 1, 0]
+                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [1, 1, 1, 0], expenses: [1, 1, 1, 0], pos: [1, 1, 1, 0],
+                sales_returns: [1, 1, 1, 0], purchase_returns: [1, 1, 1, 0]
             };
             for (const [mod, [v, c, e, d]] of Object.entries(accountantPerms)) {
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?)", ['accountant', mod, v, c, e, d]);
             }
-            // User: very limited - only dashboard, sales invoices, receipt vouchers
+            // User: very limited - only dashboard, sales invoices, receipt vouchers, sales returns
             const userPerms = {
                 dashboard: [1, 0, 0, 0], customers: [0, 0, 0, 0], suppliers: [0, 0, 0, 0], products: [0, 0, 0, 0],
                 sales_invoices: [1, 1, 0, 0], purchase_invoices: [0, 0, 0, 0], receipt_vouchers: [1, 1, 0, 0], payment_vouchers: [0, 0, 0, 0],
                 chart_of_accounts: [0, 0, 0, 0], cash_bank: [0, 0, 0, 0], journal_entries: [0, 0, 0, 0], reports: [0, 0, 0, 0],
-                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [0, 0, 0, 0], expenses: [0, 0, 0, 0], pos: [1, 1, 1, 0], database: [0, 0, 0, 0]
+                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [0, 0, 0, 0], expenses: [0, 0, 0, 0], pos: [1, 1, 1, 0], database: [0, 0, 0, 0],
+                sales_returns: [1, 1, 0, 0], purchase_returns: [0, 0, 0, 0]
             };
             for (const [mod, [v, c, e, d]] of Object.entries(userPerms)) {
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, ?, ?, ?, ?)", ['user', mod, v, c, e, d]);
@@ -554,6 +596,22 @@ class AppDatabase {
                     this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'offers']);
                 }
             } catch (e) { console.log('Offers permission migration:', e.message); }
+
+            // Migration: add sales_returns and purchase_returns permissions for existing users
+            try {
+                const adminSr = this.get("SELECT id FROM permissions WHERE role='admin' AND module='sales_returns'");
+                if (!adminSr) {
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', 'sales_returns']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 0)", ['accountant', 'sales_returns']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 0, 0)", ['user', 'sales_returns']);
+                }
+                const adminPr = this.get("SELECT id FROM permissions WHERE role='admin' AND module='purchase_returns'");
+                if (!adminPr) {
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', 'purchase_returns']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 0)", ['accountant', 'purchase_returns']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'purchase_returns']);
+                }
+            } catch (e) { console.log('Returns permissions migration:', e.message); }
         }
     }
 
@@ -655,6 +713,7 @@ class AppDatabase {
         this.system = new SystemRepo(this);
         this.activityLog = new ActivityLogRepo(this);
         this.stockTransfers = new StockTransfersRepo(this);
+        this.returns = new ReturnsRepo(this);
     }
 
     backup() {
@@ -2724,6 +2783,198 @@ class StockTransfersRepo {
             this.db.run('DELETE FROM stock_transfers WHERE id = ?', [id]);
             return { success: true };
         } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+}
+
+class ReturnsRepo {
+    constructor(db) { this.db = db; }
+    
+    getAll(type) {
+        const returns = type ? 
+            this.db.all("SELECT r.*, c.name as customer_name, s.name as supplier_name, i.invoice_number as invoice_number FROM returns r LEFT JOIN customers c ON r.customer_id=c.id LEFT JOIN suppliers s ON r.supplier_id=s.id LEFT JOIN invoices i ON r.invoice_id=i.id WHERE r.type=? ORDER BY r.date DESC", [type]) : 
+            this.db.all("SELECT r.*, c.name as customer_name, s.name as supplier_name, i.invoice_number as invoice_number FROM returns r LEFT JOIN customers c ON r.customer_id=c.id LEFT JOIN suppliers s ON r.supplier_id=s.id LEFT JOIN invoices i ON r.invoice_id=i.id ORDER BY r.date DESC");
+        return returns.map(ret => {
+            const items = this.db.all("SELECT ri.*, p.name as product_name FROM return_items ri LEFT JOIN products p ON ri.product_id=p.id WHERE ri.return_id=?", [ret.id]);
+            return { ...ret, items: items || [] };
+        });
+    }
+
+    getById(id) {
+        const returnId = parseInt(id, 10);
+        const ret = this.db.get("SELECT r.*, c.name as customer_name, s.name as supplier_name, i.invoice_number as invoice_number FROM returns r LEFT JOIN customers c ON r.customer_id=c.id LEFT JOIN suppliers s ON r.supplier_id=s.id LEFT JOIN invoices i ON r.invoice_id=i.id WHERE r.id=?", [returnId]);
+        if (ret) {
+            const items = this.db.all("SELECT ri.*, p.name as product_name FROM return_items ri LEFT JOIN products p ON ri.product_id=p.id WHERE ri.return_id=?", [returnId]);
+            return { ...ret, items: items || [] };
+        }
+        return ret;
+    }
+
+    _createReturnJournalEntry(ret, returnId, num) {
+        const total = parseFloat(ret.total) || 0;
+        if (total === 0) return null;
+
+        const lines = [];
+        const cashAccount = this.db.get("SELECT id FROM accounts WHERE code = '111'");
+        const bankAccount = this.db.get("SELECT id FROM accounts WHERE code = '112'");
+        const revenueAccount = this.db.get("SELECT id FROM accounts WHERE code = '41'");
+        const costAccount = this.db.get("SELECT id FROM accounts WHERE code = '51'");
+
+        if (ret.type === 'sales_return') {
+            if (revenueAccount) lines.push({ account_id: revenueAccount.id, debit: total, credit: 0, description: `مرتجع مبيعات ${num}` });
+            const creditAcct = (ret.payment_method === 'bank' && bankAccount) ? bankAccount : cashAccount;
+            if (creditAcct) lines.push({ account_id: creditAcct.id, debit: 0, credit: total, description: `مرتجع مبيعات ${num}` });
+        } else if (ret.type === 'purchase_return') {
+            const debitAcct = (ret.payment_method === 'bank' && bankAccount) ? bankAccount : cashAccount;
+            if (debitAcct) lines.push({ account_id: debitAcct.id, debit: total, credit: 0, description: `مرتجع مشتريات ${num}` });
+            if (costAccount) lines.push({ account_id: costAccount.id, debit: 0, credit: total, description: `مرتجع مشتريات ${num}` });
+        }
+
+        if (lines.length < 2) return null;
+
+        const jeMaxNum = this.db.get("SELECT MAX(CAST(SUBSTR(entry_number, 4) AS INTEGER)) as maxNum FROM journal_entries");
+        const jeNextNum = (jeMaxNum?.maxNum || 0) + 1;
+        const jeNum = `JE-${String(jeNextNum).padStart(6, '0')}`;
+        const jeDesc = ret.type === 'sales_return' ? `قيد مرتجع مبيعات ${num}` : `قيد مرتجع مشتريات ${num}`;
+        const jeR = this.db.run("INSERT INTO journal_entries (entry_number, date, description, reference, created_by) VALUES (?, ?, ?, ?, ?)",
+            [jeNum, ret.date, jeDesc, num, ret.created_by || null]);
+        const jeId = jeR.lastInsertRowid;
+
+        for (const line of lines) {
+            this.db.run("INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?, ?, ?, ?, ?)",
+                [jeId, line.account_id, line.debit, line.credit, line.description]);
+            const change = (line.debit || 0) - (line.credit || 0);
+            this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [change, line.account_id]);
+        }
+
+        return jeId;
+    }
+
+    _deleteJournalEntry(journalEntryId) {
+        if (!journalEntryId) return;
+        const lines = this.db.all("SELECT * FROM journal_entry_lines WHERE entry_id = ?", [journalEntryId]);
+        for (const line of lines) {
+            const change = (line.credit || 0) - (line.debit || 0);
+            this.db.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [change, line.account_id]);
+        }
+        this.db.run('DELETE FROM journal_entry_lines WHERE entry_id = ?', [journalEntryId]);
+        this.db.run('DELETE FROM journal_entries WHERE id = ?', [journalEntryId]);
+    }
+
+    create(ret) {
+        try {
+            // Validation: check original invoice quantities
+            if (ret.invoice_id) {
+                const invoiceItems = this.db.all("SELECT * FROM invoice_items WHERE invoice_id = ?", [ret.invoice_id]);
+                const prevReturned = this.db.all(`
+                    SELECT ri.product_id, SUM(ri.quantity) as qty 
+                    FROM return_items ri 
+                    JOIN returns r ON ri.return_id = r.id 
+                    WHERE r.invoice_id = ?
+                    GROUP BY ri.product_id
+                `, [ret.invoice_id]);
+
+                const prevReturnedMap = {};
+                for (const row of prevReturned) {
+                    prevReturnedMap[row.product_id] = row.qty;
+                }
+
+                for (const item of ret.items || []) {
+                    if (!item.product_id) continue;
+                    const originalItem = invoiceItems.find(ii => ii.product_id === parseInt(item.product_id));
+                    if (!originalItem) {
+                        return { success: false, error: 'المنتج المرتجع غير موجود في الفاتورة الأصلية' };
+                    }
+                    const alreadyReturned = prevReturnedMap[item.product_id] || 0;
+                    const remainingToReturn = originalItem.quantity - alreadyReturned;
+                    if (item.quantity > remainingToReturn) {
+                        return { success: false, error: `الكمية المراد إرجاعها للمنتج "${item.description || originalItem.description}" (${item.quantity}) تتجاوز الكمية المتاحة للإرجاع (${remainingToReturn})` };
+                    }
+                    if (ret.type === 'purchase_return') {
+                        const product = this.db.get("SELECT name, shop_stock FROM products WHERE id = ?", [item.product_id]);
+                        if (product && product.shop_stock < item.quantity) {
+                            return { success: false, error: `الكمية المتوفرة في المخزن للمنتج "${product.name}" (${product.shop_stock}) غير كافية لإتمام مرتجع المشتريات (المطلوب إرجاعه: ${item.quantity})` };
+                        }
+                    }
+                }
+            }
+
+            const count = this.db.get("SELECT COUNT(*) as count FROM returns WHERE type = ?", [ret.type])?.count || 0;
+            const prefix = ret.type === 'sales_return' ? 'RT-SL-' : 'RT-PU-';
+            const num = ret.return_number || `${prefix}${String(count + 1).padStart(6, '0')}`;
+
+            const n = (v) => v === undefined ? null : v;
+
+            const r = this.db.run(
+                "INSERT INTO returns (return_number, invoice_id, type, customer_id, supplier_id, date, subtotal, discount, total, refunded_amount, payment_method, payment_account_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [num, n(ret.invoice_id), ret.type, n(ret.customer_id), n(ret.supplier_id), ret.date, n(ret.subtotal) || 0, n(ret.discount) || 0, n(ret.total) || 0, n(ret.total) || 0, n(ret.payment_method) || 'cash', n(ret.payment_account_id), n(ret.notes), n(ret.created_by)]
+            );
+            const returnId = Number(r.lastInsertRowid);
+
+            for (const item of ret.items || []) {
+                const productId = item.product_id ? parseInt(item.product_id, 10) : null;
+                const description = item.description || '';
+                const quantity = parseFloat(item.quantity) || 0;
+                const unitPrice = parseFloat(item.unit_price) || 0;
+                const total = parseFloat(item.total) || (quantity * unitPrice);
+
+                this.db.run(
+                    "INSERT INTO return_items (return_id, product_id, description, quantity, unit_price, total) VALUES (?, ?, ?, ?, ?, ?)",
+                    [returnId, productId, description, quantity, unitPrice, total]
+                );
+
+                // Update product stock
+                if (productId) {
+                    if (ret.type === 'sales_return') {
+                        this.db.run('UPDATE products SET shop_stock = shop_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?', [quantity, quantity, productId]);
+                    } else {
+                        this.db.run('UPDATE products SET shop_stock = shop_stock - ?, stock_quantity = stock_quantity - ? WHERE id = ?', [quantity, quantity, productId]);
+                    }
+                }
+            }
+
+            // Create journal entry
+            const jeId = this._createReturnJournalEntry(ret, returnId, num);
+            if (jeId) {
+                this.db.run('UPDATE returns SET journal_entry_id = ? WHERE id = ?', [jeId, returnId]);
+            }
+
+            return { success: true, id: returnId, return_number: num };
+        } catch (e) {
+            console.error('Return creation error:', e);
+            return { success: false, error: e.message || String(e) };
+        }
+    }
+
+    delete(id) {
+        try {
+            const ret = this.getById(id);
+            if (!ret) return { success: false, error: 'Return not found' };
+
+            // Reverse stock changes
+            for (const item of ret.items || []) {
+                if (item.product_id) {
+                    if (ret.type === 'sales_return') {
+                        this.db.run('UPDATE products SET shop_stock = shop_stock - ?, stock_quantity = stock_quantity - ? WHERE id = ?', [item.quantity, item.quantity, item.product_id]);
+                    } else {
+                        this.db.run('UPDATE products SET shop_stock = shop_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?', [item.quantity, item.quantity, item.product_id]);
+                    }
+                }
+            }
+
+            // Delete journal entry
+            if (ret.journal_entry_id) {
+                this._deleteJournalEntry(ret.journal_entry_id);
+            }
+
+            // Delete return and items
+            this.db.run('DELETE FROM return_items WHERE return_id = ?', [id]);
+            this.db.run('DELETE FROM returns WHERE id = ?', [id]);
+
+            return { success: true };
+        } catch (e) {
+            console.error('Return deletion error:', e);
             return { success: false, error: e.message };
         }
     }

@@ -5,7 +5,7 @@ import {
     RefreshCw, Download, Upload, Eye, EyeOff, ChevronRight, X, Check,
     Home, Truck, Package, Wallet, Monitor, ShoppingCart, ShoppingBag, CreditCard,
     BookOpen, UserCheck, TrendingDown, Warehouse, Ticket, BarChart3, Clock, Calendar,
-    ArrowLeftRight, User, Key
+    ArrowLeftRight, User, Key, Undo, RotateCcw
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
@@ -298,7 +298,9 @@ export default function Settings() {
         { m: 'suppliers', l: t('suppliers') || 'Suppliers', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'products', l: t('products') || 'Products', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'sales_invoices', l: t('sales_invoices') || 'Sales Invoices', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'sales_returns', l: t('sales_returns') || 'Sales Returns', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'purchase_invoices', l: t('purchase_invoices') || 'Purchase Invoices', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'purchase_returns', l: t('purchase_returns') || 'Purchase Returns', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'receipt_vouchers', l: t('receipt_vouchers') || 'Receipt Vouchers', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'payment_vouchers', l: t('payment_vouchers') || 'Payment Vouchers', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'chart_of_accounts', l: t('chart_of_accounts') || 'Chart of Accounts', a: ['view', 'create', 'edit', 'delete'] },
@@ -335,7 +337,9 @@ export default function Settings() {
             suppliers: Truck,
             products: Package,
             sales_invoices: ShoppingCart,
+            sales_returns: Undo,
             purchase_invoices: ShoppingBag,
+            purchase_returns: RotateCcw,
             receipt_vouchers: CreditCard,
             payment_vouchers: Wallet,
             chart_of_accounts: Building2,
