@@ -293,11 +293,13 @@ function Suppliers() {
     const showSupplierInvoices = async (supplier) => {
         setSelectedSupplier(supplier);
         try {
-            const [invoices, vouchers] = await Promise.all([
+            const [invoices, vouchers, returnsData] = await Promise.all([
                 window.api.invoices.getBySupplier(supplier.id),
-                window.api.vouchers.getAll('payment')
+                window.api.vouchers.getAll('payment'),
+                window.api.returns.getAll('purchase_return')
             ]);
             const paymentVouchers = (vouchers || []).filter(v => Number(v.supplier_id) === Number(supplier.id));
+            const supplierReturns = (returnsData || []).filter(r => Number(r.supplier_id) === Number(supplier.id));
             let seq = 0;
             const rows = [];
 
@@ -336,8 +338,18 @@ function Suppliers() {
             paymentVouchers.forEach(v => {
                 rows.push({
                     date: v.date,
-                    description: v.description || `${t('vouchers') || 'Voucher'} ${v.voucher_number}`,
+                    description: v.description || `${t('payment_voucher') || 'سند صرف'} ${v.voucher_number}`,
                     debit: v.amount || 0,
+                    credit: 0,
+                    seq: seq++
+                });
+            });
+
+            supplierReturns.forEach(ret => {
+                rows.push({
+                    date: ret.date,
+                    description: `${t('purchase_return') || 'مرتجع مشتريات'} ${ret.return_number} ${ret.payment_method === 'credit' ? `(${t('on_account') || 'على الحساب'})` : `(${t('cash') || 'نقداً'})`}`,
+                    debit: ret.payment_method === 'credit' ? (ret.total || 0) : 0,
                     credit: 0,
                     seq: seq++
                 });

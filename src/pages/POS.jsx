@@ -72,7 +72,7 @@ function CustomerSearch({ customers, value, onChange }) {
                         >
                             {window.t ? window.t('cash_customer_no_account') : 'Cash Customer (No Account)'}
                         </div>
-                        {filtered.map(c => (
+                        {[...filtered].sort((a, b) => a.code === 'CUST-CASH' ? -1 : b.code === 'CUST-CASH' ? 1 : 0).map(c => (
                             <div
                                 key={c.id}
                                 onClick={() => { onChange(c); setOpen(false); setQuery(''); }}
@@ -191,6 +191,12 @@ function POS() {
         return () => clearInterval(interval);
     }, []);
 
+    useEffect(() => {
+        if (selectedCustomer?.code === 'CUST-CASH' && payMethod === 'credit') {
+            setPayMethod('cash');
+        }
+    }, [selectedCustomer, payMethod]);
+
     const loadData = async () => {
         setLoading(true);
         try {
@@ -205,6 +211,10 @@ function POS() {
             setAllProducts(active);
             setProducts(active);
             setCustomers(custs || []);
+            const defaultCust = (custs || []).find(c => c.code === 'CUST-CASH');
+            if (defaultCust) {
+                setSelectedCustomer(defaultCust);
+            }
             setSettings(sett || {});
             setActiveOffers(offers || []);
             setSuppliers(supps || []);
@@ -274,7 +284,15 @@ function POS() {
     };
 
     const removeFromCart = (id) => setCart(prev => prev.filter(i => i.id !== id));
-    const clearCart = () => { setCart([]); setSelectedCustomer(null); setDiscount(0); setNote(''); setCouponCode(''); setAppliedCoupon(null); };
+    const clearCart = () => {
+        setCart([]);
+        const defaultCust = customers.find(c => c.code === 'CUST-CASH');
+        setSelectedCustomer(defaultCust || null);
+        setDiscount(0);
+        setNote('');
+        setCouponCode('');
+        setAppliedCoupon(null);
+    };
 
     // Cart Calculation logic handles BOGO, Fixed, Percentage offers
     let enrichedCart = [];
@@ -370,6 +388,17 @@ function POS() {
 
     const openPayModal = () => {
         if (cart.length === 0) { toast.error(t('cart_empty') || 'Cart is empty'); return; }
+        if (couponDiscountAmount > calcSubtotal) {
+            toast.error('قيمة خصم الكوبون أكبر من قيمة الفاتورة، تم إلغاء الكوبون');
+            setAppliedCoupon(null);
+            setCouponCode('');
+            return;
+        }
+        if (manualDiscAmount > calcSubtotal - couponDiscountAmount) {
+            toast.error('قيمة الخصم اليدوي أكبر من قيمة الفاتورة المتبقية، تم تعديلها');
+            setDiscount(Math.max(0, calcSubtotal - couponDiscountAmount));
+            return;
+        }
         setAmountPaid(total.toFixed(3));
         setShowPayModal(true);
     };
@@ -378,6 +407,44 @@ function POS() {
         if (!couponCode) { setAppliedCoupon(null); return; }
         const result = await window.api.coupons.validate(couponCode);
         if (result.valid) {
+            const sub = cart.reduce((sum, item) => {
+                let finalPrice = parseFloat(item.price);
+                let finalTotal = finalPrice * item.qty;
+                const offer = activeOffers.find(o => 
+                    o.target_type === 'all' || 
+                    (o.target_type === 'product' && String(o.target_id) === String(item.id)) ||
+                    (o.target_type === 'category' && o.target_id === item.category)
+                );
+                if (offer) {
+                    if (offer.offer_type === 'percentage') {
+                        finalPrice = Math.max(0, finalPrice * (1 - parseFloat(offer.discount_value) / 100));
+                        finalTotal = finalPrice * item.qty;
+                    } else if (offer.offer_type === 'fixed') {
+                        finalPrice = Math.max(0, finalPrice - parseFloat(offer.discount_value));
+                        finalTotal = finalPrice * item.qty;
+                    } else if (offer.offer_type === 'bogo') {
+                        const bundleSize = offer.buy_qty + offer.get_qty;
+                        const bundles = Math.floor(item.qty / bundleSize);
+                        finalTotal = finalPrice * (item.qty - (bundles * offer.get_qty));
+                    }
+                }
+                return sum + finalTotal;
+            }, 0);
+            
+            let couponVal = 0;
+            if (result.coupon.discount_type === 'percentage') {
+                couponVal = sub * (parseFloat(result.coupon.discount_value) / 100);
+            } else {
+                couponVal = parseFloat(result.coupon.discount_value);
+            }
+            const manualDisc = parseFloat(discount) || 0;
+            if (couponVal > Math.max(0, sub - manualDisc)) {
+                toast.error('قيمة خصم الكوبون أكبر من قيمة الفاتورة المتبقية، لا يمكن تطبيقه');
+                setCouponCode('');
+                setAppliedCoupon(null);
+                return;
+            }
+
             setAppliedCoupon(result.coupon);
             toast.success(t('coupon_applied_success') || 'Coupon applied successfully!');
         } else {
@@ -391,8 +458,20 @@ function POS() {
         if (cart.length === 0) return;
         
         // Require customer for credit sales
-        if (payMethod === 'credit' && !selectedCustomer) {
-            toast.error('العميل مطلوب للعمليات الآجلة');
+        if (payMethod === 'credit' && (!selectedCustomer || selectedCustomer.code === 'CUST-CASH')) {
+            toast.error(t('cash_customer_no_credit') || 'لا يمكن إجراء عملية بيع آجل للعميل النقدي');
+            return;
+        }
+
+        if (couponDiscountAmount > calcSubtotal) {
+            toast.error('قيمة خصم الكوبون أكبر من قيمة الفاتورة، تم إلغاء الكوبون');
+            setAppliedCoupon(null);
+            setCouponCode('');
+            return;
+        }
+        if (manualDiscAmount > calcSubtotal - couponDiscountAmount) {
+            toast.error('قيمة الخصم اليدوي أكبر من قيمة الفاتورة المتبقية، تم تعديلها');
+            setDiscount(Math.max(0, calcSubtotal - couponDiscountAmount));
             return;
         }
         
@@ -405,6 +484,8 @@ function POS() {
                 customer_id: selectedCustomer?.id || null,
                 date: new Date().toISOString().split('T')[0],
                 subtotal, discount: discountAmount, tax: 0, total,
+                manual_discount: manualDiscAmount,
+                coupon_code: appliedCoupon ? appliedCoupon.code : null,
                 paid: isCredit ? 0 : total,
                 status: isCredit ? 'pending' : 'paid',
                 payment_method: isCredit ? 'credit' : payMethod,
@@ -845,7 +926,16 @@ function POS() {
                             type="number"
                             className="form-input"
                             value={discount}
-                            onChange={e => setDiscount(e.target.value)}
+                            onChange={e => {
+                                const val = parseFloat(e.target.value) || 0;
+                                const maxAllowed = Math.max(0, calcSubtotal - couponDiscountAmount);
+                                if (val > maxAllowed) {
+                                    toast.error('قيمة الخصم اليدوي لا يمكن أن تتجاوز قيمة الفاتورة المتبقية');
+                                    setDiscount(maxAllowed > 0 ? String(maxAllowed) : '0');
+                                } else {
+                                    setDiscount(e.target.value);
+                                }
+                            }}
                             min="0" step="0.250"
                             style={{ flex: 1, padding: '4px 8px', fontSize: '0.83rem', textAlign: 'left' }}
                         />
@@ -942,18 +1032,29 @@ function POS() {
                                     { id: 'cash', label: `💵 ${t('cash') || 'Cash'}` },
                                     { id: 'bank', label: `💳 ${t('bank_transfer') || 'Bank Transfer'}` },
                                     { id: 'credit', label: `🕐 ${t('credit') || 'Credit'}` }
-                                ].map(m => (
-                                    <button key={m.id} onClick={() => setPayMethod(m.id)} style={{
-                                        padding: '10px 6px', borderRadius: '10px',
-                                        border: `2px solid ${payMethod === m.id ? 'var(--primary)' : 'var(--border)'}`,
-                                        background: payMethod === m.id ? 'rgba(99,102,241,0.08)' : 'transparent',
-                                        cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem',
-                                        color: payMethod === m.id ? 'var(--primary)' : 'var(--text-secondary)',
-                                        transition: 'all 0.15s'
-                                    }}>
-                                        {m.label}
-                                    </button>
-                                ))}
+                                ].map(m => {
+                                    const isDisabled = m.id === 'credit' && selectedCustomer?.code === 'CUST-CASH';
+                                    return (
+                                        <button 
+                                            key={m.id} 
+                                            onClick={() => !isDisabled && setPayMethod(m.id)} 
+                                            disabled={isDisabled}
+                                            style={{
+                                                padding: '10px 6px', borderRadius: '10px',
+                                                border: `2px solid ${payMethod === m.id ? 'var(--primary)' : 'var(--border)'}`,
+                                                background: payMethod === m.id ? 'rgba(99,102,241,0.08)' : 'transparent',
+                                                cursor: isDisabled ? 'not-allowed' : 'pointer', 
+                                                fontWeight: 600, fontSize: '0.82rem',
+                                                color: payMethod === m.id ? 'var(--primary)' : 'var(--text-secondary)',
+                                                opacity: isDisabled ? 0.45 : 1,
+                                                transition: 'all 0.15s'
+                                            }}
+                                            title={isDisabled ? (t('cash_customer_no_credit') || 'لا يمكن إجراء عملية بيع آجل للعميل النقدي') : ''}
+                                        >
+                                            {m.label}
+                                        </button>
+                                    );
+                                })}
                             </div>
                             {payMethod === 'credit' && !selectedCustomer && (
                                 <p style={{ color: '#F59E0B', fontSize: '0.78rem', marginTop: '6px', padding: '6px 10px', background: '#FEF3C7', borderRadius: '6px' }}>

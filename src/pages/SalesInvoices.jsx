@@ -44,6 +44,7 @@ function SalesInvoices() {
     const emptyForm = () => ({
         customer_id: '', date: new Date().toISOString().split('T')[0], due_date: '', notes: '',
         status: 'paid', payment_method: 'cash', payment_account_id: '', paid: 0,
+        manual_discount: 0,
         items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }]
     });
 
@@ -148,9 +149,11 @@ function SalesInvoices() {
             }
         }
         
-        const actualTotalDiscount = Math.min(subtotal, couponDiscountAmount);
+        const manualDiscount = parseFloat(formData.manual_discount) || 0;
+        const totalDiscount = couponDiscountAmount + manualDiscount;
+        const actualTotalDiscount = Math.min(subtotal, totalDiscount);
         const finalTotal = subtotal - actualTotalDiscount;
-        return { subtotal, total: finalTotal, couponDiscountAmount: actualTotalDiscount };
+        return { subtotal, total: finalTotal, couponDiscountAmount, manualDiscount, totalDiscount: actualTotalDiscount };
     };
 
     const handleProductChange = (index, productId) => {
@@ -206,6 +209,22 @@ function SalesInvoices() {
         if (!couponCode) { setAppliedCoupon(null); return; }
         const result = await window.api.coupons.validate(couponCode);
         if (result.valid) {
+            const subtotal = formData.items.reduce((sum, item) => sum + calculateItemTotal(item).finalTotal, 0);
+            let couponVal = 0;
+            if (result.coupon.discount_type === 'percentage') {
+                couponVal = subtotal * (parseFloat(result.coupon.discount_value) / 100);
+            } else {
+                couponVal = parseFloat(result.coupon.discount_value);
+            }
+            const manualDiscount = parseFloat(formData.manual_discount) || 0;
+            const remainingBeforeCoupon = Math.max(0, subtotal - manualDiscount);
+            if (couponVal > remainingBeforeCoupon) {
+                toast.error('قيمة خصم الكوبون أكبر من قيمة الفاتورة المتبقية، لا يمكن تطبيقه');
+                setCouponCode('');
+                setAppliedCoupon(null);
+                return;
+            }
+
             setAppliedCoupon(result.coupon);
             toast.success(t('coupon_applied_success') || 'Coupon applied successfully!');
         } else {
@@ -220,14 +239,24 @@ function SalesInvoices() {
         setError('');
 
         const validItems = formData.items.filter(item => (item.product_id || item.description) && item.quantity > 0);
+        const totals = calculateTotals();
+        if (totals.couponDiscountAmount > totals.subtotal) {
+            setError('قيمة خصم الكوبون أكبر من قيمة الفاتورة، تم إلغاء الكوبون');
+            return;
+        }
+        if (totals.manualDiscount > totals.subtotal - totals.couponDiscountAmount) {
+            setError('قيمة الخصم الإضافي لا يمكن أن تتجاوز قيمة الفاتورة المتبقية');
+            return;
+        }
         if (validItems.length === 0) {
             setError(t('inv_noItems'));
             return;
         }
 
         // Require customer for unpaid invoices
-        if (formData.status !== 'paid' && !formData.customer_id) {
-            setError('العميل مطلوب للفواتير غير المدفوعة');
+        const selectedCustomerObj = customers.find(c => String(c.id) === String(formData.customer_id));
+        if (formData.status !== 'paid' && (!formData.customer_id || (selectedCustomerObj && selectedCustomerObj.code === 'CUST-CASH'))) {
+            setError(t('cash_customer_no_credit') || 'لا يمكن إجراء عملية بيع آجل للعميل النقدي');
             return;
         }
 
@@ -281,7 +310,9 @@ function SalesInvoices() {
                 due_date: formData.due_date || null,
                 notes: formData.notes,
                 subtotal: totals.subtotal,
-                discount: totals.couponDiscountAmount,
+                discount: totals.totalDiscount,
+                manual_discount: totals.manualDiscount,
+                coupon_code: appliedCoupon ? appliedCoupon.code : null,
                 tax: 0,
                 total: totals.total,
                 paid: paidAmount,
@@ -389,6 +420,17 @@ function SalesInvoices() {
             setEditMode(true);
             setEditingId(invoiceId);
             setError('');
+            if (invoice.coupon_code) {
+                setCouponCode(invoice.coupon_code);
+                window.api.coupons.validate(invoice.coupon_code).then(res => {
+                    if (res.success && res.coupon) {
+                        setAppliedCoupon(res.coupon);
+                    }
+                }).catch(e => console.error('Error loading coupon:', e));
+            } else {
+                setCouponCode('');
+                setAppliedCoupon(null);
+            }
             setFormData({
                 customer_id: invoice.customer_id != null ? String(invoice.customer_id) : '',
                 date: invoice.date || new Date().toISOString().split('T')[0],
@@ -398,6 +440,7 @@ function SalesInvoices() {
                 payment_method: invoice.payment_method || 'cash',
                 payment_account_id: invoice.payment_account_id != null ? String(invoice.payment_account_id) : '',
                 paid: invoice.paid || 0,
+                manual_discount: invoice.manual_discount || 0,
                 items: mappedItems
             });
             setShowModal(true);
@@ -425,7 +468,14 @@ function SalesInvoices() {
         setError('');
         setEditMode(false);
         setEditingId(null);
-        setFormData(emptyForm());
+        setCouponCode('');
+        setAppliedCoupon(null);
+        const cashCust = customers.find(c => c.code === 'CUST-CASH');
+        const defaultForm = emptyForm();
+        if (cashCust) {
+            defaultForm.customer_id = String(cashCust.id);
+        }
+        setFormData(defaultForm);
         setShowModal(true);
     };
 
@@ -439,7 +489,13 @@ function SalesInvoices() {
     const formatCurrency = (amount) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (settings.general?.currency_symbol || (t('currency_kd') || 'KD'));
 
     const filteredInvoices = invoices.filter(inv => {
-        const matchesSearch = inv.invoice_number?.includes(searchQuery) || inv.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesSearch = 
+            inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+            inv.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (inv.items || []).some(item => 
+                item.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                item.description?.toLowerCase().includes(searchQuery.toLowerCase())
+            );
         const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
         const matchesCustomer = !customerFilter || String(inv.customer_id) === customerFilter;
         const matchesDateFrom = !dateFrom || inv.date >= dateFrom;
@@ -617,9 +673,21 @@ function SalesInvoices() {
                             <div className="form-group" style={{ marginBottom: 0 }}>
                                 <label className="form-label" style={{ fontWeight: '600' }}>{t('sinv_customer')}</label>
                                 <SearchableSelect
-                                    options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+                                    options={[...customers].sort((a, b) => a.code === 'CUST-CASH' ? -1 : b.code === 'CUST-CASH' ? 1 : 0).map(c => ({ value: String(c.id), label: c.name }))}
                                     value={formData.customer_id ? String(formData.customer_id) : ''}
-                                    onChange={(val) => setFormData({ ...formData, customer_id: val })}
+                                    onChange={(val) => {
+                                        const selected = customers.find(c => String(c.id) === String(val));
+                                        const isCash = selected && selected.code === 'CUST-CASH';
+                                        setFormData(prev => {
+                                            const newStatus = isCash ? 'paid' : prev.status;
+                                            return {
+                                                ...prev,
+                                                customer_id: val,
+                                                status: newStatus,
+                                                paid: newStatus === 'paid' ? calculateTotals().total : prev.paid
+                                            };
+                                        });
+                                    }}
                                     placeholder={t('sinv_selectCustomer')}
                                     emptyLabel={t('sinv_selectCustomer')}
                                 />
@@ -642,8 +710,14 @@ function SalesInvoices() {
                                     setFormData({ ...formData, status: newStatus, paid: newPaid });
                                 }} style={{ height: '40px' }}>
                                     <option value="paid">{t('inv_paid')}</option>
-                                    <option value="partial">{t('inv_partial')}</option>
-                                    <option value="pending">{t('inv_credit')}</option>
+                                    <option value="partial" disabled={(() => {
+                                        const selected = customers.find(c => String(c.id) === String(formData.customer_id));
+                                        return selected && selected.code === 'CUST-CASH';
+                                    })()}>{t('inv_partial')}</option>
+                                    <option value="pending" disabled={(() => {
+                                        const selected = customers.find(c => String(c.id) === String(formData.customer_id));
+                                        return selected && selected.code === 'CUST-CASH';
+                                    })()}>{t('inv_credit')}</option>
                                 </select>
                             </div>
                             {(formData.status === 'paid' || formData.status === 'partial') && (
@@ -727,7 +801,7 @@ function SalesInvoices() {
                                 <button type="button" className="btn btn-secondary" onClick={addItem}><Plus size={16} /> {t('inv_addItem')}</button>
                                 
                                 {/* Coupon Application UI */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '260px', border: '1px solid var(--border)', borderRadius: '8px', padding: '2px 8px', background: 'var(--bg-primary)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '240px', border: '1px solid var(--border)', borderRadius: '8px', padding: '2px 8px', background: 'var(--bg-primary)' }}>
                                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>🏷️ {t('coupon') || 'Coupon'}:</span>
                                     <input
                                         type="text"
@@ -747,6 +821,37 @@ function SalesInvoices() {
                                             <X size={12} />
                                         </button>
                                     )}
+                                </div>
+
+                                {/* Manual Discount Input */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '180px', border: '1px solid var(--border)', borderRadius: '8px', padding: '2px 8px', background: 'var(--bg-primary)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>💸 {t('discount') || 'خصم إضافي'}:</span>
+                                    <input
+                                        type="number"
+                                        className="form-input"
+                                        placeholder="0"
+                                        value={formData.manual_discount === 0 ? '' : formData.manual_discount}
+                                        onChange={e => {
+                                            const subtotal = formData.items.reduce((sum, item) => sum + calculateItemTotal(item).finalTotal, 0);
+                                            let couponVal = 0;
+                                            if (appliedCoupon) {
+                                                if (appliedCoupon.discount_type === 'percentage') {
+                                                    couponVal = subtotal * (parseFloat(appliedCoupon.discount_value) / 100);
+                                                } else {
+                                                    couponVal = parseFloat(appliedCoupon.discount_value);
+                                                }
+                                            }
+                                            const maxAllowed = Math.max(0, subtotal - couponVal);
+                                            const val = parseFloat(e.target.value) || 0;
+                                            if (val > maxAllowed) {
+                                                toast.error('قيمة الخصم الإضافي لا يمكن أن تتجاوز قيمة الفاتورة المتبقية');
+                                                setFormData({ ...formData, manual_discount: maxAllowed });
+                                            } else {
+                                                setFormData({ ...formData, manual_discount: val });
+                                            }
+                                        }}
+                                        style={{ flex: 1, padding: '4px 6px', fontSize: '0.8rem', margin: 0, height: '28px', border: 'none', background: 'transparent' }}
+                                    />
                                 </div>
                             </div>
 

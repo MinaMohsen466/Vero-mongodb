@@ -344,6 +344,10 @@ const translations = {
         vouch_fullPayment: 'دفع كامل',
         vouch_remainingAfter: 'المتبقي بعد الدفع',
         vouch_amount_exceeds: 'لا يمكن إدخال مبلغ أعلى من المتبقي من الفاتورة',
+        cash_customer_no_credit: 'لا يمكن إجراء عملية بيع آجل للعميل النقدي الافتراضي',
+        cash_supplier_no_credit: 'لا يمكن إجراء عملية شراء آجل من المورد النقدي الافتراضي',
+        vouch_alert_has_pending_invoices: 'تنبيه: يوجد فواتير مستحقة وغير مدفوعة لهذا الحساب. هل تريد التراجع لكي تقوم بربط السند بفاتورة؟',
+        vouch_partyType: 'نوع الحساب / الطرف الثاني',
         rep_cashBankBalance: 'رصيد الصندوق والبنوك',
 
         // Reports - Account Statement
@@ -1510,6 +1514,8 @@ const translations = {
         return_delete_confirm: 'هل أنت متأكد من حذف هذا المرتجع؟ سيتم تعديل المخازن والحسابات.',
         return_deleted: 'تم حذف المرتجع بنجاح!',
         refunded: 'المسترد نقداً',
+        return_discount: 'الخصم المسترد',
+        on_account: 'على الحساب',
         add_return: 'إرجاع منتجات',
         ret_noItems: 'يرجى إضافة منتجات للإرجاع بكميات صحيحة',
         ret_stockError: 'الكمية المراد إرجاعها تتجاوز الكمية المتاحة للإرجاع',
@@ -1865,6 +1871,10 @@ const translations = {
         vouch_fullPayment: 'Full payment',
         vouch_remainingAfter: 'Remaining after payment',
         vouch_amount_exceeds: 'Amount cannot exceed the remaining invoice balance',
+        cash_customer_no_credit: 'Default Cash Customer cannot have credit sales',
+        cash_supplier_no_credit: 'Default Cash Supplier cannot have credit purchases',
+        vouch_alert_has_pending_invoices: 'Warning: There are outstanding invoices for this account. Do you want to go back and link this voucher to an invoice?',
+        vouch_partyType: 'Account Type / Second Party',
         rep_cashBankBalance: 'Cash & Bank Balance',
 
         // Reports - Account Statement
@@ -2997,6 +3007,8 @@ const translations = {
         return_delete_confirm: 'Are you sure you want to delete this return? Stock and accounts will be adjusted.',
         return_deleted: 'Return deleted successfully!',
         refunded: 'Refunded Cash',
+        return_discount: 'Return Discount',
+        on_account: 'On Account',
         add_return: 'Return Products',
         ret_noItems: 'Please add products to return with valid quantities',
         ret_stockError: 'Returned quantity exceeds the quantity available for return',

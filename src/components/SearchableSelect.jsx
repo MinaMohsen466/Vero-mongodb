@@ -28,7 +28,11 @@ function SearchableSelect({ options = [], value, onChange, placeholder, emptyLab
     }, []);
 
     const filtered = search.trim()
-        ? options.filter(o => o.label?.toLowerCase().includes(search.toLowerCase()))
+        ? options.filter(o => 
+            o.label?.toLowerCase().includes(search.toLowerCase()) || 
+            o.subLabel?.toLowerCase().includes(search.toLowerCase()) ||
+            o.searchKeywords?.toLowerCase().includes(search.toLowerCase())
+          )
         : options;
 
     const handleSelect = (val) => {

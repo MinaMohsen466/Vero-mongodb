@@ -151,7 +151,7 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS suppliers (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, phone TEXT, email TEXT, address TEXT, tax_number TEXT, balance REAL DEFAULT 0, notes TEXT, is_active INTEGER DEFAULT 1, opening_balance REAL DEFAULT 0, opening_balance_date TEXT, opening_balance_je_id INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, parent_id INTEGER, account_type TEXT NOT NULL, nature TEXT NOT NULL, balance REAL DEFAULT 0, is_active INTEGER DEFAULT 1, can_post INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (parent_id) REFERENCES accounts(id));
       CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, description TEXT, unit TEXT DEFAULT 'قطعة', category TEXT, purchase_price REAL DEFAULT 0, sale_price REAL DEFAULT 0, stock_quantity REAL DEFAULT 0, min_stock REAL DEFAULT 0, image TEXT, supplier_id INTEGER, supplier_ids TEXT DEFAULT '[]', is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP, dozen_price REAL DEFAULT 0, dozen_qty REAL DEFAULT 1);
-      CREATE TABLE IF NOT EXISTS invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_number TEXT UNIQUE NOT NULL, type TEXT NOT NULL, customer_id INTEGER, supplier_id INTEGER, date TEXT NOT NULL, due_date TEXT, subtotal REAL DEFAULT 0, discount REAL DEFAULT 0, tax REAL DEFAULT 0, total REAL DEFAULT 0, paid REAL DEFAULT 0, status TEXT DEFAULT 'pending', payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_number TEXT UNIQUE NOT NULL, type TEXT NOT NULL, customer_id INTEGER, supplier_id INTEGER, date TEXT NOT NULL, due_date TEXT, subtotal REAL DEFAULT 0, discount REAL DEFAULT 0, tax REAL DEFAULT 0, total REAL DEFAULT 0, paid REAL DEFAULT 0, status TEXT DEFAULT 'pending', payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, manual_discount REAL DEFAULT 0, coupon_code TEXT);
       CREATE TABLE IF NOT EXISTS invoice_items (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id INTEGER NOT NULL, product_id INTEGER, description TEXT, quantity REAL NOT NULL, unit_price REAL NOT NULL, discount REAL DEFAULT 0, tax REAL DEFAULT 0, total REAL NOT NULL, FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS vouchers (id INTEGER PRIMARY KEY AUTOINCREMENT, voucher_number TEXT UNIQUE NOT NULL, type TEXT NOT NULL, date TEXT NOT NULL, amount REAL NOT NULL, applied_amount REAL DEFAULT 0, account_id INTEGER, customer_id INTEGER, supplier_id INTEGER, payment_method TEXT DEFAULT 'cash', invoice_id INTEGER, reference TEXT, description TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS journal_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, entry_number TEXT UNIQUE NOT NULL, date TEXT NOT NULL, description TEXT, reference TEXT, is_posted INTEGER DEFAULT 0, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -180,6 +180,10 @@ class AppDatabase {
             if (!hasInvJournal) this.exec("ALTER TABLE invoices ADD COLUMN journal_entry_id INTEGER");
             const hasImage = columns.some(col => col.name === 'image');
             if (!hasImage) this.exec("ALTER TABLE invoices ADD COLUMN image TEXT");
+            const hasManualDiscount = columns.some(col => col.name === 'manual_discount');
+            if (!hasManualDiscount) this.exec("ALTER TABLE invoices ADD COLUMN manual_discount REAL DEFAULT 0");
+            const hasCouponCode = columns.some(col => col.name === 'coupon_code');
+            if (!hasCouponCode) this.exec("ALTER TABLE invoices ADD COLUMN coupon_code TEXT");
         } catch (e) { console.log('Invoices migration check:', e.message); }
 
         try {
@@ -417,6 +421,18 @@ class AppDatabase {
         } else if (admin.password_hash !== adminPassword) {
             // Update password if it's different (for backwards compatibility)
             this.run("UPDATE users SET password_hash = ? WHERE username = ?", [adminPassword, 'admin']);
+        }
+
+        // Ensure default cash customer and supplier exist
+        const cashCust = this.get('SELECT id FROM customers WHERE code = ?', ['CUST-CASH']);
+        if (!cashCust) {
+            this.run("INSERT OR IGNORE INTO customers (code, name, phone, balance, credit_limit, opening_balance, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ['CUST-CASH', 'عميل نقدي', '', 0, 0, 0, 1]);
+        }
+        const cashSupp = this.get('SELECT id FROM suppliers WHERE code = ?', ['SUPP-CASH']);
+        if (!cashSupp) {
+            this.run("INSERT OR IGNORE INTO suppliers (code, name, phone, balance, opening_balance, is_active) VALUES (?, ?, ?, ?, ?, ?)",
+                ['SUPP-CASH', 'مورد نقدي', '', 0, 0, 1]);
         }
 
         // Accounts
@@ -1293,8 +1309,8 @@ class InvoicesRepo {
             const n = (v) => v === undefined ? null : v;
 
             const r = this.db.run(
-                "INSERT INTO invoices (invoice_number, type, customer_id, supplier_id, date, due_date, subtotal, discount, tax, total, paid, status, payment_method, payment_account_id, notes, created_by, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [num, inv.type, n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.paid) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.payment_account_id), n(inv.notes), n(inv.created_by), n(inv.image)]
+                "INSERT INTO invoices (invoice_number, type, customer_id, supplier_id, date, due_date, subtotal, discount, tax, total, paid, status, payment_method, payment_account_id, notes, created_by, image, manual_discount, coupon_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [num, inv.type, n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.paid) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.payment_account_id), n(inv.notes), n(inv.created_by), n(inv.image), n(inv.manual_discount) || 0, n(inv.coupon_code)]
             );
             const invId = Number(r.lastInsertRowid);
 
@@ -1381,8 +1397,8 @@ class InvoicesRepo {
             }
 
             // 4. Update invoice header
-            this.db.run("UPDATE invoices SET customer_id=?, supplier_id=?, date=?, due_date=?, subtotal=?, discount=?, tax=?, total=?, paid=?, status=?, payment_method=?, notes=?, image=? WHERE id=?",
-                [n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.paid) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.notes), n(inv.image), invId]);
+            this.db.run("UPDATE invoices SET customer_id=?, supplier_id=?, date=?, due_date=?, subtotal=?, discount=?, tax=?, total=?, paid=?, status=?, payment_method=?, notes=?, image=?, manual_discount=?, coupon_code=? WHERE id=?",
+                [n(inv.customer_id), n(inv.supplier_id), inv.date, n(inv.due_date), n(inv.subtotal) || 0, n(inv.discount) || 0, n(inv.tax) || 0, n(inv.total) || 0, n(inv.paid) || 0, n(inv.status) || 'pending', n(inv.payment_method) || 'cash', n(inv.notes), n(inv.image), n(inv.manual_discount) || 0, n(inv.coupon_code), invId]);
 
             // 5. Delete old items and insert new ones
             this.db.run("DELETE FROM invoice_items WHERE invoice_id = ?", [invId]);
@@ -1489,10 +1505,18 @@ class InvoicesRepo {
         }
     }
     getByCustomer(customerId) {
-        return this.db.all("SELECT * FROM invoices WHERE customer_id = ? ORDER BY date DESC", [customerId]);
+        const invoices = this.db.all("SELECT * FROM invoices WHERE customer_id = ? ORDER BY date DESC", [customerId]);
+        return (invoices || []).map(inv => {
+            const items = this.db.all("SELECT ii.*, p.name as product_name FROM invoice_items ii LEFT JOIN products p ON ii.product_id=p.id WHERE ii.invoice_id=?", [inv.id]);
+            return { ...inv, items: items || [] };
+        });
     }
     getBySupplier(supplierId) {
-        return this.db.all("SELECT * FROM invoices WHERE supplier_id = ? ORDER BY date DESC", [supplierId]);
+        const invoices = this.db.all("SELECT * FROM invoices WHERE supplier_id = ? ORDER BY date DESC", [supplierId]);
+        return (invoices || []).map(inv => {
+            const items = this.db.all("SELECT ii.*, p.name as product_name FROM invoice_items ii LEFT JOIN products p ON ii.product_id=p.id WHERE ii.invoice_id=?", [inv.id]);
+            return { ...inv, items: items || [] };
+        });
     }
 }
 
@@ -1518,12 +1542,14 @@ class VouchersRepo {
         const cashBankAcct = (paymentMethod === 'bank' && bankAccount) ? bankAccount : cashAccount;
 
         if (v.type === 'receipt') {
-            // Receipt: Debit cash/bank, Credit customers
+            // Receipt: Debit cash/bank, Credit customers (or suppliers if selected)
             if (cashBankAcct) lines.push({ account_id: cashBankAcct.id, debit: amount, credit: 0, description: `سند قبض ${num}` });
-            if (customersAccount) lines.push({ account_id: customersAccount.id, debit: 0, credit: amount, description: `سند قبض ${num}` });
+            const creditAcct = v.supplier_id ? suppliersAccount : customersAccount;
+            if (creditAcct) lines.push({ account_id: creditAcct.id, debit: 0, credit: amount, description: `سند قبض ${num}` });
         } else if (v.type === 'payment') {
-            // Payment: Debit suppliers, Credit cash/bank
-            if (suppliersAccount) lines.push({ account_id: suppliersAccount.id, debit: amount, credit: 0, description: `سند صرف ${num}` });
+            // Payment: Debit suppliers (or customers if selected), Credit cash/bank
+            const debitAcct = v.customer_id ? customersAccount : suppliersAccount;
+            if (debitAcct) lines.push({ account_id: debitAcct.id, debit: amount, credit: 0, description: `سند صرف ${num}` });
             if (cashBankAcct) lines.push({ account_id: cashBankAcct.id, debit: 0, credit: amount, description: `سند صرف ${num}` });
         }
 
@@ -1583,8 +1609,13 @@ class VouchersRepo {
                 [num, v.type, v.date, n(v.amount) || 0, appliedAmount, n(v.account_id), n(v.customer_id), n(v.supplier_id), n(v.payment_method), n(v.invoice_id), n(v.reference), n(v.description), n(v.created_by)]);
 
             // Update customer/supplier balance
-            if (v.type === 'receipt' && v.customer_id) this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [v.amount, v.customer_id]);
-            else if (v.type === 'payment' && v.supplier_id) this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [v.amount, v.supplier_id]);
+            if (v.type === 'receipt') {
+                if (v.customer_id) this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [v.amount, v.customer_id]);
+                else if (v.supplier_id) this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [v.amount, v.supplier_id]);
+            } else if (v.type === 'payment') {
+                if (v.supplier_id) this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [v.amount, v.supplier_id]);
+                else if (v.customer_id) this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [v.amount, v.customer_id]);
+            }
 
             // Update linked invoice paid amount
             if (v.invoice_id) {
@@ -1639,10 +1670,12 @@ class VouchersRepo {
             if (!old) return { success: false, error: 'Voucher not found' };
 
             // 1. Reverse old customer/supplier balance
-            if (old.type === 'receipt' && old.customer_id) {
-                this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [old.amount, old.customer_id]);
-            } else if (old.type === 'payment' && old.supplier_id) {
-                this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [old.amount, old.supplier_id]);
+            if (old.type === 'receipt') {
+                if (old.customer_id) this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [old.amount, old.customer_id]);
+                else if (old.supplier_id) this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [old.amount, old.supplier_id]);
+            } else if (old.type === 'payment') {
+                if (old.supplier_id) this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [old.amount, old.supplier_id]);
+                else if (old.customer_id) this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [old.amount, old.customer_id]);
             }
 
             // 2. Reverse old invoice paid amount if linked
@@ -1679,10 +1712,12 @@ class VouchersRepo {
             const amount = parseFloat(v.amount) || 0;
 
             // 6. Apply new customer/supplier balance
-            if (old.type === 'receipt' && old.customer_id) {
-                this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [amount, old.customer_id]);
-            } else if (old.type === 'payment' && old.supplier_id) {
-                this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [amount, old.supplier_id]);
+            if (old.type === 'receipt') {
+                if (old.customer_id) this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [amount, old.customer_id]);
+                else if (old.supplier_id) this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [amount, old.supplier_id]);
+            } else if (old.type === 'payment') {
+                if (old.supplier_id) this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [amount, old.supplier_id]);
+                else if (old.customer_id) this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [amount, old.customer_id]);
             }
 
             // 7. Re-apply linked invoice paid amount if linked
@@ -1711,10 +1746,12 @@ class VouchersRepo {
             // Get voucher to reverse balance changes
             const voucher = this.getById(id);
             if (voucher) {
-                if (voucher.type === 'receipt' && voucher.customer_id) {
-                    this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [voucher.amount, voucher.customer_id]);
-                } else if (voucher.type === 'payment' && voucher.supplier_id) {
-                    this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [voucher.amount, voucher.supplier_id]);
+                if (voucher.type === 'receipt') {
+                    if (voucher.customer_id) this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [voucher.amount, voucher.customer_id]);
+                    else if (voucher.supplier_id) this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [voucher.amount, voucher.supplier_id]);
+                } else if (voucher.type === 'payment') {
+                    if (voucher.supplier_id) this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [voucher.amount, voucher.supplier_id]);
+                    else if (voucher.customer_id) this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [voucher.amount, voucher.customer_id]);
                 }
 
                 // Delete linked journal entry (reverses account balances automatically)
@@ -2818,15 +2855,19 @@ class ReturnsRepo {
         const lines = [];
         const cashAccount = this.db.get("SELECT id FROM accounts WHERE code = '111'");
         const bankAccount = this.db.get("SELECT id FROM accounts WHERE code = '112'");
+        const customersAccount = this.db.get("SELECT id FROM accounts WHERE code = '113'");
+        const suppliersAccount = this.db.get("SELECT id FROM accounts WHERE code = '211'");
         const revenueAccount = this.db.get("SELECT id FROM accounts WHERE code = '41'");
         const costAccount = this.db.get("SELECT id FROM accounts WHERE code = '51'");
 
         if (ret.type === 'sales_return') {
             if (revenueAccount) lines.push({ account_id: revenueAccount.id, debit: total, credit: 0, description: `مرتجع مبيعات ${num}` });
-            const creditAcct = (ret.payment_method === 'bank' && bankAccount) ? bankAccount : cashAccount;
+            const creditAcct = (ret.payment_method === 'bank' && bankAccount) ? bankAccount : 
+                               (ret.payment_method === 'credit' && customersAccount) ? customersAccount : cashAccount;
             if (creditAcct) lines.push({ account_id: creditAcct.id, debit: 0, credit: total, description: `مرتجع مبيعات ${num}` });
         } else if (ret.type === 'purchase_return') {
-            const debitAcct = (ret.payment_method === 'bank' && bankAccount) ? bankAccount : cashAccount;
+            const debitAcct = (ret.payment_method === 'bank' && bankAccount) ? bankAccount : 
+                              (ret.payment_method === 'credit' && suppliersAccount) ? suppliersAccount : cashAccount;
             if (debitAcct) lines.push({ account_id: debitAcct.id, debit: total, credit: 0, description: `مرتجع مشتريات ${num}` });
             if (costAccount) lines.push({ account_id: costAccount.id, debit: 0, credit: total, description: `مرتجع مشتريات ${num}` });
         }
@@ -2940,6 +2981,15 @@ class ReturnsRepo {
                 this.db.run('UPDATE returns SET journal_entry_id = ? WHERE id = ?', [jeId, returnId]);
             }
 
+            // Update customer/supplier balance if payment method is credit
+            if (ret.payment_method === 'credit') {
+                if (ret.type === 'sales_return' && ret.customer_id) {
+                    this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [parseFloat(ret.total) || 0, ret.customer_id]);
+                } else if (ret.type === 'purchase_return' && ret.supplier_id) {
+                    this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [parseFloat(ret.total) || 0, ret.supplier_id]);
+                }
+            }
+
             return { success: true, id: returnId, return_number: num };
         } catch (e) {
             console.error('Return creation error:', e);
@@ -2966,6 +3016,15 @@ class ReturnsRepo {
             // Delete journal entry
             if (ret.journal_entry_id) {
                 this._deleteJournalEntry(ret.journal_entry_id);
+            }
+
+            // Reverse customer/supplier balance changes if payment method was credit
+            if (ret.payment_method === 'credit') {
+                if (ret.type === 'sales_return' && ret.customer_id) {
+                    this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [parseFloat(ret.total) || 0, ret.customer_id]);
+                } else if (ret.type === 'purchase_return' && ret.supplier_id) {
+                    this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [parseFloat(ret.total) || 0, ret.supplier_id]);
+                }
             }
 
             // Delete return and items

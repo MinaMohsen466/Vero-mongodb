@@ -19,6 +19,7 @@ function SalesReturns() {
     const [selectedReturn, setSelectedReturn] = useState(null);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const [selectedInvoice, setSelectedInvoice] = useState(null);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -28,7 +29,8 @@ function SalesReturns() {
         payment_method: 'cash',
         payment_account_id: '',
         notes: '',
-        items: []
+        items: [],
+        discount: 0
     });
 
     // Selected Invoice Items to Return
@@ -67,19 +69,25 @@ function SalesReturns() {
     };
 
     const handleCustomerChange = (customerId) => {
+        const custObj = customers.find(c => String(c.id) === String(customerId));
+        const isCashCust = custObj && custObj.code === 'CUST-CASH';
         setFormData({
             ...formData,
             customer_id: customerId,
             invoice_id: '',
-            items: []
+            items: [],
+            discount: 0,
+            payment_method: isCashCust ? 'cash' : formData.payment_method
         });
         setSelectedInvoiceItems([]);
+        setSelectedInvoice(null);
     };
 
     const handleInvoiceChange = async (invoiceId) => {
         if (!invoiceId) {
-            setFormData({ ...formData, invoice_id: '', items: [] });
+            setFormData({ ...formData, invoice_id: '', items: [], discount: 0 });
             setSelectedInvoiceItems([]);
+            setSelectedInvoice(null);
             return;
         }
 
@@ -89,6 +97,7 @@ function SalesReturns() {
                 toast.error(t('invoice_not_found') || 'Invoice not found');
                 return;
             }
+            setSelectedInvoice(invoice);
 
             // Fetch previous returns for this invoice
             const allReturns = returns.filter(r => r.invoice_id === parseInt(invoiceId));
@@ -105,13 +114,16 @@ function SalesReturns() {
             const items = (invoice.items || []).map(item => {
                 const alreadyReturned = prevReturnedQty[item.product_id] || 0;
                 const remaining = Math.max(0, item.quantity - alreadyReturned);
+                // Default return price to net unit price paid (total / quantity) if available, otherwise original unit price
+                const netPricePaid = item.quantity > 0 ? (item.total / item.quantity) : item.unit_price;
                 return {
                     product_id: item.product_id,
                     description: item.description || item.product_name,
                     sold_quantity: item.quantity,
                     already_returned: alreadyReturned,
                     remaining: remaining,
-                    unit_price: item.unit_price,
+                    unit_price: netPricePaid,
+                    original_price: item.unit_price,
                     quantity: 0, // Current return quantity
                     total: 0
                 };
@@ -121,7 +133,8 @@ function SalesReturns() {
             setFormData({
                 ...formData,
                 invoice_id: invoiceId,
-                items: []
+                items: [],
+                discount: 0
             });
         } catch (e) {
             console.error('Error fetching invoice details:', e);
@@ -154,16 +167,67 @@ function SalesReturns() {
                 total: it.total
             }));
 
+        // Calculate proportional discount automatically
+        let autoDiscount = 0;
+        const newSubtotal = newItems.reduce((sum, it) => sum + (it.total || 0), 0);
+        if (selectedInvoice) {
+            const itemsSubtotal = (selectedInvoice.items || []).reduce((sum, it) => sum + (it.total || 0), 0);
+            const invoiceLevelDiscount = Math.max(0, itemsSubtotal - (selectedInvoice.total || 0));
+            if (itemsSubtotal > 0 && invoiceLevelDiscount > 0) {
+                autoDiscount = newSubtotal * (invoiceLevelDiscount / itemsSubtotal);
+            }
+        }
+
         setFormData(prev => ({
             ...prev,
-            items: activeItems
+            items: activeItems,
+            discount: parseFloat(autoDiscount.toFixed(3))
+        }));
+    };
+
+    const handleReturnUnitPriceChange = (index, value) => {
+        const price = parseFloat(value) || 0;
+        const newItems = [...selectedInvoiceItems];
+        const item = newItems[index];
+
+        item.unit_price = price;
+        item.total = item.quantity * price;
+        setSelectedInvoiceItems(newItems);
+
+        // Update formData items (only items with quantity > 0)
+        const activeItems = newItems
+            .filter(it => it.quantity > 0)
+            .map(it => ({
+                product_id: it.product_id,
+                description: it.description,
+                quantity: it.quantity,
+                unit_price: it.unit_price,
+                total: it.total
+            }));
+
+        // Calculate proportional discount automatically
+        let autoDiscount = 0;
+        const newSubtotal = newItems.reduce((sum, it) => sum + (it.total || 0), 0);
+        if (selectedInvoice) {
+            const itemsSubtotal = (selectedInvoice.items || []).reduce((sum, it) => sum + (it.total || 0), 0);
+            const invoiceLevelDiscount = Math.max(0, itemsSubtotal - (selectedInvoice.total || 0));
+            if (itemsSubtotal > 0 && invoiceLevelDiscount > 0) {
+                autoDiscount = newSubtotal * (invoiceLevelDiscount / itemsSubtotal);
+            }
+        }
+
+        setFormData(prev => ({
+            ...prev,
+            items: activeItems,
+            discount: parseFloat(autoDiscount.toFixed(3))
         }));
     };
 
     const calculateReturnTotals = () => {
         const subtotal = selectedInvoiceItems.reduce((sum, item) => sum + (item.total || 0), 0);
-        const total = subtotal; // Simpler returns without extra calculations
-        return { subtotal, total };
+        const discount = parseFloat(formData.discount) || 0;
+        const total = Math.max(0, subtotal - discount);
+        return { subtotal, discount, total };
     };
 
     const openModal = () => {
@@ -174,15 +238,18 @@ function SalesReturns() {
             payment_method: 'cash',
             payment_account_id: bankAccounts[0]?.id || '',
             notes: '',
-            items: []
+            items: [],
+            discount: 0
         });
         setSelectedInvoiceItems([]);
+        setSelectedInvoice(null);
         setError('');
         setShowModal(true);
     };
 
     const closeModal = () => {
         setShowModal(false);
+        setSelectedInvoice(null);
     };
 
     const handleSubmit = async (e) => {
@@ -202,11 +269,12 @@ function SalesReturns() {
 
         setSaving(true);
         try {
-            const { subtotal, total } = calculateReturnTotals();
+            const { subtotal, discount, total } = calculateReturnTotals();
             const returnData = {
                 ...formData,
                 type: 'sales_return',
                 subtotal,
+                discount,
                 total,
                 refunded_amount: total,
                 created_by: user?.id || null
@@ -275,7 +343,7 @@ function SalesReturns() {
 
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
 
-    const { subtotal: currentSubtotal, total: currentTotal } = calculateReturnTotals();
+    const { subtotal: currentSubtotal, discount: currentDiscount, total: currentTotal } = calculateReturnTotals();
 
     // Invoices list filtered by selected customer
     const customerInvoices = invoices.filter(inv => inv.customer_id === parseInt(formData.customer_id));
@@ -299,7 +367,7 @@ function SalesReturns() {
                 {/* Customer Filter */}
                 <div style={{ width: '200px' }}>
                     <SearchableSelect
-                        options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+                        options={customers.filter(c => c.code !== 'CUST-CASH').map(c => ({ value: String(c.id), label: c.name }))}
                         value={customerFilter}
                         onChange={setCustomerFilter}
                         placeholder={t('all') || 'كل العملاء'}
@@ -346,7 +414,7 @@ function SalesReturns() {
                                     <td>{ret.customer_name || '-'}</td>
                                     <td>{ret.date}</td>
                                     <td>{formatCurrency(ret.total)}</td>
-                                    <td>{ret.payment_method === 'bank' ? t('bank') || 'بنك' : t('cash') || 'نقداً'}</td>
+                                    <td>{ret.payment_method === 'bank' ? t('bank') || 'بنك' : ret.payment_method === 'credit' ? t('on_account') || 'على الحساب' : t('cash') || 'نقداً'}</td>
                                     <td>
                                         <div className="table-actions">
                                             <button className="btn btn-ghost btn-sm" onClick={() => handleViewDetails(ret)} title={t('view')}>
@@ -369,63 +437,121 @@ function SalesReturns() {
             {/* View Modal */}
             <Modal isOpen={showViewModal} onClose={() => setShowViewModal(false)} title={t('return_details') || 'تفاصيل المرتجع'} size="lg">
                 {selectedReturn && (
-                    <div style={{ padding: '10px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
-                            <div>
-                                <p style={{ margin: '4px 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{t('return_number') || 'رقم المرتجع'}</p>
-                                <p style={{ margin: '4px 0', fontWeight: 'bold', fontSize: '1.1rem' }}>{selectedReturn.return_number}</p>
+                    <div style={{ padding: '15px', color: 'var(--text-primary)' }}>
+                        {/* Premium Return Header Card */}
+                        <div style={{
+                            background: 'linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%)',
+                            borderRadius: '12px',
+                            border: '1px solid var(--border)',
+                            padding: '20px',
+                            marginBottom: '24px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px dashed var(--border)', paddingBottom: '16px' }}>
+                                <div>
+                                    <span style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)' }}>
+                                        {t('return_number') || 'رقم المرتجع'}
+                                    </span>
+                                    <h3 style={{ margin: '4px 0 0 0', fontWeight: '700', color: 'var(--text-primary)' }}>
+                                        {selectedReturn.return_number}
+                                    </h3>
+                                </div>
+                                <div style={{ textAlign: 'left' }}>
+                                    <span style={{
+                                        background: 'rgba(16, 185, 129, 0.1)',
+                                        color: '#10b981',
+                                        padding: '6px 16px',
+                                        borderRadius: '20px',
+                                        fontSize: '0.85rem',
+                                        fontWeight: '600',
+                                        border: '1px solid rgba(16, 185, 129, 0.2)'
+                                    }}>
+                                        {t('completed') || 'مكتمل'}
+                                    </span>
+                                </div>
                             </div>
-                            <div>
-                                <p style={{ margin: '4px 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{t('original_invoice') || 'الفاتورة الأصلية'}</p>
-                                <p style={{ margin: '4px 0', fontWeight: 'bold' }}>{selectedReturn.invoice_number || '-'}</p>
-                            </div>
-                            <div>
-                                <p style={{ margin: '4px 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{t('customer') || 'العميل'}</p>
-                                <p style={{ margin: '4px 0' }}>{selectedReturn.customer_name || '-'}</p>
-                            </div>
-                            <div>
-                                <p style={{ margin: '4px 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{t('date') || 'التاريخ'}</p>
-                                <p style={{ margin: '4px 0' }}>{selectedReturn.date}</p>
-                            </div>
-                            <div>
-                                <p style={{ margin: '4px 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{t('payment_method') || 'طريقة الرد'}</p>
-                                <p style={{ margin: '4px 0' }}>{selectedReturn.payment_method === 'bank' ? (t('bank') || 'بنك') : (t('cash') || 'نقداً')}</p>
-                            </div>
-                            <div>
-                                <p style={{ margin: '4px 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{t('total') || 'الإجمالي'}</p>
-                                <p style={{ margin: '4px 0', fontWeight: 'bold', color: 'var(--primary)', fontSize: '1.1rem' }}>{formatCurrency(selectedReturn.total)}</p>
+                            
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px' }}>
+                                <div>
+                                    <p style={{ margin: '0 0 4px 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('original_invoice') || 'الفاتورة الأصلية'}</p>
+                                    <p style={{ margin: 0, fontWeight: '600', fontSize: '0.95rem' }}>{selectedReturn.invoice_number || '-'}</p>
+                                </div>
+                                <div>
+                                    <p style={{ margin: '0 0 4px 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('customer') || 'العميل'}</p>
+                                    <p style={{ margin: 0, fontWeight: '600', fontSize: '0.95rem' }}>{selectedReturn.customer_name || '-'}</p>
+                                </div>
+                                <div>
+                                    <p style={{ margin: '0 0 4px 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('date') || 'التاريخ'}</p>
+                                    <p style={{ margin: 0, fontWeight: '600', fontSize: '0.95rem' }}>{selectedReturn.date}</p>
+                                </div>
+                                <div>
+                                    <p style={{ margin: '0 0 4px 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('payment_method') || 'طريقة الرد'}</p>
+                                    <p style={{ margin: 0, fontWeight: '600', fontSize: '0.95rem' }}>
+                                        {selectedReturn.payment_method === 'bank' ? (t('bank') || 'بنك') : selectedReturn.payment_method === 'credit' ? (t('on_account') || 'على الحساب') : (t('cash') || 'نقداً')}
+                                    </p>
+                                </div>
                             </div>
                         </div>
 
                         {selectedReturn.notes && (
-                            <div style={{ marginBottom: '20px', padding: '10px', background: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                                <p style={{ margin: '0 0 5px 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('notes') || 'ملاحظات'}</p>
-                                <p style={{ margin: 0, fontSize: '0.9rem' }}>{selectedReturn.notes}</p>
+                            <div style={{ marginBottom: '24px', padding: '12px 16px', background: 'rgba(243, 244, 246, 0.5)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                                <p style={{ margin: '0 0 6px 0', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)' }}>{t('notes') || 'ملاحظات'}</p>
+                                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{selectedReturn.notes}</p>
                             </div>
                         )}
 
-                        <h4 style={{ marginBottom: '10px' }}>{t('return_items') || 'الأصناف المرتجعة'}</h4>
-                        <div className="table-responsive" style={{ border: '1px solid var(--border)', borderRadius: '8px' }}>
-                            <table className="table table-sm">
-                                <thead>
+                        <h4 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600' }}>
+                            <span>📋</span> {t('return_items') || 'الأصناف المرتجعة'}
+                        </h4>
+                        <div className="table-responsive" style={{ border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', marginBottom: '24px' }}>
+                            <table className="table table-sm" style={{ margin: 0 }}>
+                                <thead style={{ background: 'var(--bg-secondary)' }}>
                                     <tr>
-                                        <th>{t('product') || 'المنتج'}</th>
-                                        <th>{t('quantity') || 'الكمية'}</th>
-                                        <th>{t('price') || 'السعر'}</th>
-                                        <th>{t('total') || 'الإجمالي'}</th>
+                                        <th style={{ padding: '10px 12px' }}>{t('product') || 'المنتج'}</th>
+                                        <th style={{ padding: '10px 12px', textAlign: 'center' }}>{t('quantity') || 'الكمية'}</th>
+                                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>{t('price') || 'السعر'}</th>
+                                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>{t('total') || 'الإجمالي'}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {selectedReturn.items && selectedReturn.items.map((item, idx) => (
-                                        <tr key={idx}>
-                                            <td>{item.product_name || item.description}</td>
-                                            <td>{item.quantity}</td>
-                                            <td>{formatCurrency(item.unit_price)}</td>
-                                            <td>{formatCurrency(item.total)}</td>
+                                        <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
+                                            <td style={{ padding: '10px 12px' }}><strong>{item.product_name || item.description}</strong></td>
+                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>{item.quantity}</td>
+                                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>{formatCurrency(item.unit_price)}</td>
+                                            <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(item.total)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+
+                        {/* Invoice Summary Box */}
+                        <div style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-end',
+                            padding: '16px 20px',
+                            background: 'var(--bg-secondary)',
+                            borderRadius: '12px',
+                            border: '1px solid var(--border)',
+                            maxWidth: '320px',
+                            marginLeft: 'auto'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '8px', fontSize: '0.9rem' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>{t('subtotal') || 'الإجمالي الفرعي'}:</span>
+                                <span style={{ fontWeight: '600' }}>{formatCurrency(selectedReturn.subtotal)}</span>
+                            </div>
+                            {selectedReturn.discount > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--danger)' }}>
+                                    <span>{t('discount') || 'الخصم'}:</span>
+                                    <span style={{ fontWeight: '600' }}>- {formatCurrency(selectedReturn.discount)}</span>
+                                </div>
+                            )}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', borderTop: '1px solid var(--border)', paddingTop: '8px', marginTop: '4px' }}>
+                                <span style={{ fontWeight: '700', fontSize: '1rem' }}>{t('total') || 'الإجمالي الصافي'}:</span>
+                                <span style={{ fontWeight: '700', fontSize: '1.15rem', color: 'var(--primary)' }}>{formatCurrency(selectedReturn.total)}</span>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -438,9 +564,30 @@ function SalesReturns() {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
                         <div>
-                            <label className="form-label">{t('customer') || 'العميل'} *</label>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                <label className="form-label" style={{ margin: 0 }}>{t('customer') || 'العميل'} *</label>
+                                {formData.customer_id && (() => {
+                                    const cust = customers.find(c => String(c.id) === String(formData.customer_id));
+                                    if (!cust) return null;
+                                    const balanceVal = cust.balance || 0;
+                                    const isDebit = balanceVal > 0;
+                                    return (
+                                        <span style={{
+                                            fontSize: '0.75rem',
+                                            fontWeight: 'bold',
+                                            color: isDebit ? 'var(--danger)' : 'var(--success)',
+                                            background: isDebit ? 'rgba(239, 68, 68, 0.08)' : 'rgba(34, 197, 94, 0.08)',
+                                            padding: '2px 8px',
+                                            borderRadius: '6px',
+                                            border: `1px solid ${isDebit ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)'}`
+                                        }}>
+                                            الرصيد الحالي: {formatCurrency(Math.abs(balanceVal))} {isDebit ? '(مدين)' : '(دائن)'}
+                                        </span>
+                                    );
+                                })()}
+                            </div>
                             <SearchableSelect
-                                options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+                                options={[...customers].sort((a, b) => (a.code === 'CUST-CASH' ? -1 : b.code === 'CUST-CASH' ? 1 : 0)).map(c => ({ value: String(c.id), label: c.name }))}
                                 value={formData.customer_id}
                                 onChange={handleCustomerChange}
                                 placeholder={t('select_customer') || 'اختر العميل...'}
@@ -449,20 +596,74 @@ function SalesReturns() {
 
                         <div>
                             <label className="form-label">{t('original_invoice') || 'الفاتورة الأصلية'}</label>
-                            <select
-                                className="form-select"
+                            <SearchableSelect
+                                options={customerInvoices.map(inv => {
+                                    const productNames = (inv.items || []).map(it => it.product_name || it.description || '').join(' ');
+                                    return {
+                                        value: String(inv.id),
+                                        label: `${inv.invoice_number} (${inv.date}) - ${formatCurrency(inv.total)}`,
+                                        searchKeywords: productNames
+                                    };
+                                })}
                                 value={formData.invoice_id}
-                                onChange={(e) => handleInvoiceChange(e.target.value)}
+                                onChange={handleInvoiceChange}
+                                placeholder={t('select_invoice') || 'اختر الفاتورة...'}
+                                emptyLabel={t('select_invoice') || 'اختر الفاتورة...'}
                                 disabled={!formData.customer_id}
-                            >
-                                <option value="">{t('select_invoice') || 'اختر الفاتورة...'}</option>
-                                {customerInvoices.map(inv => (
-                                    <option key={inv.id} value={inv.id}>
-                                        {inv.invoice_number} ({inv.date}) - {formatCurrency(inv.total)}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </div>
+
+                        {selectedInvoice && (
+                            <div style={{
+                                gridColumn: '1 / -1',
+                                background: 'rgba(37, 99, 235, 0.05)',
+                                border: '1px dashed var(--primary)',
+                                borderRadius: '8px',
+                                padding: '12px 16px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                fontSize: '0.88rem',
+                                color: 'var(--text-primary)',
+                                margin: '5px 0'
+                            }}>
+                                    {(() => {
+                                        const itemsSubtotal = (selectedInvoice.items || []).reduce((sum, it) => sum + (it.total || 0), 0);
+                                        const offersDiscount = Math.max(0, selectedInvoice.subtotal - itemsSubtotal);
+                                        const manualDiscount = selectedInvoice.manual_discount || 0;
+                                        const couponDiscount = Math.max(0, (itemsSubtotal - selectedInvoice.total) - manualDiscount);
+
+                                        return (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                <div>
+                                                    <span>ℹ️ <strong>تفاصيل الفاتورة الأصلية:</strong> </span>
+                                                    <span style={{ margin: '0 8px' }}></span>
+                                                    <span>الإجمالي قبل الخصم: <strong style={{color:'var(--primary)'}}>{formatCurrency(selectedInvoice.subtotal)}</strong></span>
+                                                    <span style={{ margin: '0 8px' }}>|</span>
+                                                    <span>الصافي المدفوع: <strong>{formatCurrency(selectedInvoice.total)}</strong></span>
+                                                </div>
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                                    {offersDiscount > 0 && <span>🏷️ خصم عروض المنتجات: <strong style={{color:'var(--danger)'}}>-{formatCurrency(offersDiscount)}</strong></span>}
+                                                    {couponDiscount > 0 && <span>🎫 خصم الكوبون: <strong style={{color:'var(--danger)'}}>-{formatCurrency(couponDiscount)}</strong></span>}
+                                                    {manualDiscount > 0 && <span>💸 خصم إضافي (يدوي): <strong style={{color:'var(--danger)'}}>-{formatCurrency(manualDiscount)}</strong></span>}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                {selectedInvoice.discount > 0 && (
+                                    <span style={{
+                                        background: 'var(--primary)',
+                                        color: 'white',
+                                        padding: '2px 8px',
+                                        borderRadius: '12px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 'bold'
+                                    }}>
+                                        خصم {((selectedInvoice.discount / selectedInvoice.subtotal) * 100).toFixed(1)}%
+                                    </span>
+                                )}
+                            </div>
+                        )}
 
                         <div>
                             <label className="form-label">{t('date') || 'التاريخ'} *</label>
@@ -484,6 +685,13 @@ function SalesReturns() {
                             >
                                 <option value="cash">{t('cash') || 'نقداً (من الصندوق)'}</option>
                                 <option value="bank">{t('bank') || 'بنك'}</option>
+                                {(() => {
+                                    const custObj = customers.find(c => String(c.id) === String(formData.customer_id));
+                                    const isCashCust = custObj && custObj.code === 'CUST-CASH';
+                                    return !isCashCust && (
+                                        <option value="credit">{t('on_account') || 'على الحساب (خصم من المديونية)'}</option>
+                                    );
+                                })()}
                             </select>
                         </div>
 
@@ -524,7 +732,7 @@ function SalesReturns() {
                                             <th>{t('product') || 'المنتج'}</th>
                                             <th>{t('sold') || 'المباع'}</th>
                                             <th>{t('returned') || 'المرتجع'}</th>
-                                            <th>{t('unit_price') || 'السعر'}</th>
+                                            <th style={{ width: '130px' }}>{t('unit_price') || 'سعر الإرجاع'}</th>
                                             <th style={{ width: '120px' }}>{t('return_quantity') || 'الكمية المرتجعة'}</th>
                                             <th>{t('total') || 'الإجمالي'}</th>
                                         </tr>
@@ -535,7 +743,25 @@ function SalesReturns() {
                                                 <td>{item.description}</td>
                                                 <td>{item.sold_quantity}</td>
                                                 <td>{item.already_returned}</td>
-                                                <td>{formatCurrency(item.unit_price)}</td>
+                                                <td>
+                                                    <input
+                                                        type="number"
+                                                        className="form-input form-input-sm"
+                                                        value={item.unit_price === 0 ? '' : item.unit_price}
+                                                        onChange={(e) => handleReturnUnitPriceChange(idx, e.target.value)}
+                                                        min="0"
+                                                        step="any"
+                                                        style={{
+                                                            margin: 0,
+                                                            padding: '4px 8px',
+                                                            width: '100px',
+                                                            borderColor: 'var(--border)',
+                                                            borderRadius: '6px',
+                                                            textAlign: 'center'
+                                                        }}
+                                                        placeholder="0.00"
+                                                    />
+                                                </td>
                                                 <td>
                                                     <input
                                                         type="number"
@@ -549,7 +775,7 @@ function SalesReturns() {
                                                         placeholder={`حد أقصى ${item.remaining}`}
                                                     />
                                                 </td>
-                                                <td>{formatCurrency(item.total)}</td>
+                                                <td style={{ fontWeight: '600' }}>{formatCurrency(item.total)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -558,16 +784,81 @@ function SalesReturns() {
                         </div>
                     )}
 
-                    {/* Return summary */}
-                    <div style={{ background: 'var(--bg-secondary)', padding: '15px', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <div>
-                            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{t('refunded') || 'المبلغ المسترد نقداً'}</span>
-                            <h3 style={{ margin: '5px 0 0 0', color: 'var(--primary)' }}>{formatCurrency(currentTotal)}</h3>
+                    {/* Return summary and discount */}
+                    <div style={{
+                        background: 'var(--bg-secondary)',
+                        padding: '16px 20px',
+                        borderRadius: '12px',
+                        border: '1px solid var(--border)',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
+                        marginBottom: '20px'
+                    }}>
+                        <div style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '24px',
+                            marginBottom: '20px',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <div>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>
+                                    {t('subtotal') || 'إجمالي الأصناف المرتجعة'}
+                                </span>
+                                <h4 style={{ margin: '4px 0 0 0', fontSize: '1.2rem', fontWeight: '600' }}>
+                                    {formatCurrency(currentSubtotal)}
+                                </h4>
+                            </div>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label className="form-label" style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>
+                                    {t('return_discount') || 'الخصم على المرتجع'}
+                                </label>
+                                <input
+                                    type="number"
+                                    className="form-input form-input-sm"
+                                    value={formData.discount === 0 ? '' : formData.discount}
+                                    onChange={(e) => {
+                                        const val = Math.max(0, parseFloat(e.target.value) || 0);
+                                        setFormData(prev => ({ ...prev, discount: val }));
+                                    }}
+                                    min="0"
+                                    max={currentSubtotal}
+                                    step="any"
+                                    style={{
+                                        margin: 0,
+                                        padding: '6px 12px',
+                                        width: '130px',
+                                        fontWeight: '600',
+                                        color: 'var(--danger)',
+                                        borderColor: 'var(--border)',
+                                        borderRadius: '8px'
+                                    }}
+                                    placeholder="0.00"
+                                />
+                            </div>
+                            
+                            <div style={{ textAlign: 'left' }}>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>
+                                    {t('refunded') || 'المبلغ الصافي المسترد'}
+                                </span>
+                                <h3 style={{ margin: '4px 0 0 0', color: 'var(--primary)', fontSize: '1.6rem', fontWeight: '700' }}>
+                                    {formatCurrency(currentTotal)}
+                                </h3>
+                            </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                            <button type="button" className="btn btn-secondary" onClick={closeModal}>{t('cancel')}</button>
-                            <button type="submit" className="btn btn-primary" disabled={saving || formData.items.length === 0}>
-                                {saving ? (t('saving') || 'جارٍ الحفظ...') : (t('save') || 'حفظ')}
+                        
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                            <button type="button" className="btn btn-secondary" onClick={closeModal} style={{ padding: '8px 20px', borderRadius: '8px' }}>
+                                {t('cancel')}
+                            </button>
+                            <button
+                                type="submit"
+                                className="btn btn-primary"
+                                disabled={saving || formData.items.length === 0}
+                                style={{ padding: '8px 24px', borderRadius: '8px', fontWeight: '600' }}
+                            >
+                                {saving ? (t('saving') || 'جارٍ الحفظ...') : (t('save') || 'حفظ المرتجع')}
                             </button>
                         </div>
                     </div>

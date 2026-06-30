@@ -294,11 +294,13 @@ function Customers() {
     const showCustomerInvoices = async (customer) => {
         setSelectedCustomer(customer);
         try {
-            const [invoices, vouchers] = await Promise.all([
+            const [invoices, vouchers, returnsData] = await Promise.all([
                 window.api.invoices.getByCustomer(customer.id),
-                window.api.vouchers.getAll('receipt')
+                window.api.vouchers.getAll('receipt'),
+                window.api.returns.getAll('sales_return')
             ]);
             const receiptVouchers = (vouchers || []).filter(v => Number(v.customer_id) === Number(customer.id));
+            const customerReturns = (returnsData || []).filter(r => Number(r.customer_id) === Number(customer.id));
             let seq = 0;
             const rows = [];
 
@@ -337,9 +339,19 @@ function Customers() {
             receiptVouchers.forEach(v => {
                 rows.push({
                     date: v.date,
-                    description: v.description || `${t('vouchers') || 'Voucher'} ${v.voucher_number}`,
+                    description: v.description || `${t('receipt_voucher') || 'سند قبض'} ${v.voucher_number}`,
                     debit: 0,
                     credit: v.amount || 0,
+                    seq: seq++
+                });
+            });
+
+            customerReturns.forEach(ret => {
+                rows.push({
+                    date: ret.date,
+                    description: `${t('sales_return') || 'مرتجع مبيعات'} ${ret.return_number} ${ret.payment_method === 'credit' ? `(${t('on_account') || 'على الحساب'})` : `(${t('cash') || 'نقداً'})`}`,
+                    debit: 0,
+                    credit: ret.payment_method === 'credit' ? (ret.total || 0) : 0,
                     seq: seq++
                 });
             });

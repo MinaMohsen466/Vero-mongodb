@@ -19,6 +19,7 @@ function Vouchers() {
     const [editMode, setEditMode] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [partyType, setPartyType] = useState('customer');
     const [formData, setFormData] = useState({
         type: 'receipt', date: new Date().toISOString().split('T')[0],
         amount: 0, customer_id: '', supplier_id: '',
@@ -63,7 +64,7 @@ function Vouchers() {
 
     // Load ALL unpaid invoices (those not fully paid) when customer/supplier changes
     const loadPendingInvoices = async (type, id, currentInvoiceId = null) => {
-        if (!id) { setPendingInvoices([]); return; }
+        if (!id || id === 'cash') { setPendingInvoices([]); return; }
         try {
             let invoices = [];
             if (type === 'receipt') {
@@ -82,6 +83,17 @@ function Vouchers() {
             });
             setPendingInvoices(unpaid);
         } catch (e) { console.error(e); setPendingInvoices([]); }
+    };
+
+    const handlePartyTypeChange = (type) => {
+        setPartyType(type);
+        setFormData(prev => ({
+            ...prev,
+            customer_id: '',
+            supplier_id: '',
+            invoice_id: ''
+        }));
+        setPendingInvoices([]);
     };
 
     const handleCustomerChange = (e) => {
@@ -145,17 +157,27 @@ function Vouchers() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!editMode) {
-            if (formData.type === 'receipt' && !formData.customer_id) {
+            if (partyType === 'customer' && !formData.customer_id) {
                 toast.error(t('vouch_customer_required') || 'Customer is required');
                 return;
             }
-            if (formData.type === 'payment' && !formData.supplier_id) {
+            if (partyType === 'supplier' && !formData.supplier_id) {
                 toast.error(t('vouch_supplier_required') || 'Supplier is required');
                 return;
             }
             if (parseFloat(formData.amount) <= 0) {
                 toast.error(t('vouch_amount_required') || 'Amount must be greater than zero');
                 return;
+            }
+            // Alert user if there are pending invoices but none was selected
+            if (!formData.invoice_id && pendingInvoices.length > 0) {
+                const confirmLink = window.confirm(
+                    t('vouch_alert_has_pending_invoices') || 
+                    'تنبيه: يوجد فواتير غير مدفوعة لهذا الحساب. هل تريد التراجع لاختيار فاتورة لربطها بالسند؟'
+                );
+                if (confirmLink) {
+                    return; // Stop and let user select an invoice
+                }
             }
             // Validate amount doesn't exceed selected invoice remaining
             if (formData.invoice_id) {
@@ -172,8 +194,8 @@ function Vouchers() {
         try {
             const voucherData = {
                 ...formData,
-                customer_id: formData.customer_id ? parseInt(formData.customer_id) : null,
-                supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
+                customer_id: (partyType === 'customer' && formData.customer_id) ? parseInt(formData.customer_id) : null,
+                supplier_id: (partyType === 'supplier' && formData.supplier_id) ? parseInt(formData.supplier_id) : null,
                 invoice_id: formData.invoice_id ? parseInt(formData.invoice_id) : null,
                 amount: parseFloat(formData.amount) || 0
             };
@@ -207,6 +229,8 @@ function Vouchers() {
     };
 
     const handleEdit = async (voucher) => {
+        const pType = voucher.supplier_id ? 'supplier' : 'customer';
+        setPartyType(pType);
         setEditMode(true);
         setEditingId(voucher.id);
         setFormData({
@@ -222,21 +246,25 @@ function Vouchers() {
         });
         setShowModal(true);
         // Load pending invoices for the linked customer/supplier, passing the current invoice ID
-        if (voucher.type === 'receipt' && voucher.customer_id) {
+        if (pType === 'customer' && voucher.customer_id) {
             loadPendingInvoices('receipt', voucher.customer_id, voucher.invoice_id);
-        } else if (voucher.type === 'payment' && voucher.supplier_id) {
+        } else if (pType === 'supplier' && voucher.supplier_id) {
             loadPendingInvoices('payment', voucher.supplier_id, voucher.invoice_id);
         }
     };
 
     const openModal = (type) => {
+        const defaultParty = type === 'receipt' ? 'customer' : 'supplier';
+        setPartyType(defaultParty);
         setEditMode(false);
         setEditingId(null);
         setPendingInvoices([]);
         setInvoiceSearch('');
         setFormData({
             type, date: new Date().toISOString().split('T')[0],
-            amount: 0, customer_id: '', supplier_id: '',
+            amount: 0,
+            customer_id: '',
+            supplier_id: '',
             payment_method: 'cash', invoice_id: '', reference: '', description: ''
         });
         setShowModal(true);
@@ -406,12 +434,36 @@ function Vouchers() {
                         </div>
                     </div>
 
+                    <div className="form-group" style={{ marginBottom: '16px' }}>
+                        <label className="form-label">{t('vouch_partyType') || 'نوع الحساب / الطرف الثاني'}</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                                type="button"
+                                className={`btn ${partyType === 'customer' ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => handlePartyTypeChange('customer')}
+                                style={{ flex: 1, padding: '6px 12px', fontSize: '0.88rem', borderRadius: '6px' }}
+                                disabled={editMode}
+                            >
+                                {t('dash_customer') || 'عميل'}
+                            </button>
+                            <button
+                                type="button"
+                                className={`btn ${partyType === 'supplier' ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => handlePartyTypeChange('supplier')}
+                                style={{ flex: 1, padding: '6px 12px', fontSize: '0.88rem', borderRadius: '6px' }}
+                                disabled={editMode}
+                            >
+                                {t('dash_supplier') || 'مورد'}
+                            </button>
+                        </div>
+                    </div>
+
                     <div className="form-row">
                         <div className="form-group">
-                            <label className="form-label">{formData.type === 'receipt' ? t('dash_customer') : t('dash_supplier')}</label>
-                            {formData.type === 'receipt' ? (
+                            <label className="form-label">{partyType === 'customer' ? (t('dash_customer') || 'العميل') : (t('dash_supplier') || 'المورد')}</label>
+                            {partyType === 'customer' ? (
                                 <SearchableSelect
-                                    options={customers.map(c => ({ value: String(c.id), label: `${c.name} (${formatCurrency(c.balance)})` }))}
+                                    options={customers.filter(c => c.code !== 'CUST-CASH').map(c => ({ value: String(c.id), label: `${c.name} (${formatCurrency(c.balance)})` }))}
                                     value={formData.customer_id ? String(formData.customer_id) : ''}
                                     onChange={(val) => handleCustomerChange({ target: { value: val } })}
                                     placeholder={t('vouch_selectCustomer')}
@@ -420,7 +472,7 @@ function Vouchers() {
                                 />
                             ) : (
                                 <SearchableSelect
-                                    options={suppliers.map(s => ({ value: String(s.id), label: `${s.name} (${formatCurrency(s.balance)})` }))}
+                                    options={suppliers.filter(s => s.code !== 'SUPP-CASH').map(s => ({ value: String(s.id), label: `${s.name} (${formatCurrency(s.balance)})` }))}
                                     value={formData.supplier_id ? String(formData.supplier_id) : ''}
                                     onChange={(val) => handleSupplierChange({ target: { value: val } })}
                                     placeholder={t('vouch_selectSupplier')}
@@ -438,8 +490,9 @@ function Vouchers() {
                         </div>
                     </div>
 
-                     {/* Invoice linking section - always visible when customer/supplier is selected */}
-                    {((formData.type === 'receipt' && formData.customer_id) || (formData.type === 'payment' && formData.supplier_id)) && (
+                    {/* Invoice linking section - always visible when customer/supplier is selected */}
+                    {((partyType === 'customer' && formData.customer_id) || 
+                      (partyType === 'supplier' && formData.supplier_id)) && (
                         <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
                             <label className="form-label" style={{ color: 'var(--primary)', marginBottom: '8px' }}>🔗 {t('vouch_linkInvoice')} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({t('vouch_optional') || 'اختياري'})</span></label>
 

@@ -40,6 +40,7 @@ function PurchaseInvoices() {
     const emptyForm = () => ({
         supplier_id: '', date: new Date().toISOString().split('T')[0], due_date: '', notes: '',
         status: 'paid', payment_method: 'cash', payment_account_id: '', paid: 0, image: '',
+        manual_discount: 0,
         items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }]
     });
 
@@ -90,7 +91,9 @@ function PurchaseInvoices() {
     const calculateItemTotal = (item) => (item.quantity * item.unit_price) - (item.discount || 0);
     const calculateTotals = () => {
         const subtotal = formData.items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
-        return { subtotal, total: subtotal };
+        const manualDiscount = parseFloat(formData.manual_discount) || 0;
+        const total = Math.max(0, subtotal - manualDiscount);
+        return { subtotal, total, manualDiscount };
     };
 
     const handleProductChange = (index, productId) => {
@@ -126,14 +129,20 @@ function PurchaseInvoices() {
         setError('');
 
         const validItems = formData.items.filter(item => (item.product_id || item.description) && item.quantity > 0);
+        const totals = calculateTotals();
+        if (totals.manualDiscount > totals.subtotal) {
+            setError('قيمة الخصم لا يمكن أن تتجاوز قيمة الفاتورة');
+            return;
+        }
         if (validItems.length === 0) {
             setError(t('inv_noItems'));
             return;
         }
 
         // Require supplier for unpaid invoices
-        if (formData.status !== 'paid' && !formData.supplier_id) {
-            setError('المورد مطلوب للفواتير غير المدفوعة');
+        const selectedSupplierObj = suppliers.find(s => String(s.id) === String(formData.supplier_id));
+        if (formData.status !== 'paid' && (!formData.supplier_id || (selectedSupplierObj && selectedSupplierObj.code === 'SUPP-CASH'))) {
+            setError(t('cash_supplier_no_credit') || 'لا يمكن إجراء عملية شراء آجل من المورد النقدي');
             return;
         }
 
@@ -166,7 +175,8 @@ function PurchaseInvoices() {
                 due_date: formData.due_date || null,
                 notes: formData.notes,
                 subtotal: totals.subtotal,
-                discount: 0,
+                discount: totals.manualDiscount,
+                manual_discount: totals.manualDiscount,
                 tax: 0,
                 total: totals.total,
                 paid: paidAmount,
@@ -291,6 +301,7 @@ function PurchaseInvoices() {
                 payment_account_id: invoice.payment_account_id != null ? String(invoice.payment_account_id) : '',
                 paid: invoice.paid || 0,
                 image: invoice.image || '',
+                manual_discount: invoice.manual_discount || 0,
                 items: mappedItems
             });
 
@@ -320,7 +331,12 @@ function PurchaseInvoices() {
         setError('');
         setEditMode(false);
         setEditingId(null);
-        setFormData(emptyForm());
+        const cashSupp = suppliers.find(s => s.code === 'SUPP-CASH');
+        const defaultForm = emptyForm();
+        if (cashSupp) {
+            defaultForm.supplier_id = String(cashSupp.id);
+        }
+        setFormData(defaultForm);
         setShowModal(true);
     };
 
@@ -379,7 +395,13 @@ function PurchaseInvoices() {
     const formatCurrency = (amount) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (settings.general?.currency_symbol || (t('currency_kd') || 'KD'));
 
     const filteredInvoices = invoices.filter(inv => {
-        const matchesSearch = inv.invoice_number?.includes(searchQuery) || inv.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesSearch = 
+            inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+            inv.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (inv.items || []).some(item => 
+                item.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                item.description?.toLowerCase().includes(searchQuery.toLowerCase())
+            );
         const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
         const matchesSupplier = !supplierFilter || String(inv.supplier_id) === supplierFilter;
         const matchesDateFrom = !dateFrom || inv.date >= dateFrom;
@@ -562,9 +584,21 @@ function PurchaseInvoices() {
                             <div className="form-group" style={{ marginBottom: 0 }}>
                                 <label className="form-label" style={{ fontWeight: '600' }}>{t('pinv_supplier')}</label>
                                 <SearchableSelect
-                                    options={suppliers.map(s => ({ value: String(s.id), label: s.name }))}
+                                    options={[...suppliers].sort((a, b) => a.code === 'SUPP-CASH' ? -1 : b.code === 'SUPP-CASH' ? 1 : 0).map(s => ({ value: String(s.id), label: s.name }))}
                                     value={formData.supplier_id ? String(formData.supplier_id) : ''}
-                                    onChange={(val) => setFormData({ ...formData, supplier_id: val })}
+                                    onChange={(val) => {
+                                        const selected = suppliers.find(s => String(s.id) === String(val));
+                                        const isCash = selected && selected.code === 'SUPP-CASH';
+                                        setFormData(prev => {
+                                            const newStatus = isCash ? 'paid' : prev.status;
+                                            return {
+                                                ...prev,
+                                                supplier_id: val,
+                                                status: newStatus,
+                                                paid: newStatus === 'paid' ? calculateTotals().total : prev.paid
+                                            };
+                                        });
+                                    }}
                                     placeholder={t('pinv_selectSupplier')}
                                     emptyLabel={t('pinv_selectSupplier')}
                                 />
@@ -587,8 +621,14 @@ function PurchaseInvoices() {
                                     setFormData({ ...formData, status: newStatus, paid: newPaid });
                                 }} style={{ height: '40px' }}>
                                     <option value="paid">{t('inv_paid')}</option>
-                                    <option value="partial">{t('inv_partial')}</option>
-                                    <option value="pending">{t('inv_credit')}</option>
+                                    <option value="partial" disabled={(() => {
+                                        const selected = suppliers.find(s => String(s.id) === String(formData.supplier_id));
+                                        return selected && selected.code === 'SUPP-CASH';
+                                    })()}>{t('inv_partial')}</option>
+                                    <option value="pending" disabled={(() => {
+                                        const selected = suppliers.find(s => String(s.id) === String(formData.supplier_id));
+                                        return selected && selected.code === 'SUPP-CASH';
+                                    })()}>{t('inv_credit')}</option>
                                 </select>
                             </div>
                             {(formData.status === 'paid' || formData.status === 'partial') && (
@@ -654,7 +694,31 @@ function PurchaseInvoices() {
                             </table>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', flexWrap: 'wrap', gap: '12px' }}>
-                            <button type="button" className="btn btn-secondary" onClick={addItem}><Plus size={16} /> {t('inv_addItem')}</button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <button type="button" className="btn btn-secondary" onClick={addItem}><Plus size={16} /> {t('inv_addItem')}</button>
+                                
+                                {/* Manual Discount Input */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '180px', border: '1px solid var(--border)', borderRadius: '8px', padding: '2px 8px', background: 'var(--bg-primary)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>💸 {t('discount') || 'الخصم'}:</span>
+                                    <input
+                                        type="number"
+                                        className="form-input"
+                                        placeholder="0"
+                                        value={formData.manual_discount === 0 ? '' : formData.manual_discount}
+                                        onChange={e => {
+                                            const subtotal = formData.items.reduce((sum, item) => sum + (item.quantity * item.unit_price) - (item.discount || 0), 0);
+                                            const val = parseFloat(e.target.value) || 0;
+                                            if (val > subtotal) {
+                                                toast.error('قيمة الخصم لا يمكن أن تتجاوز قيمة الفاتورة');
+                                                setFormData({ ...formData, manual_discount: subtotal });
+                                            } else {
+                                                setFormData({ ...formData, manual_discount: val });
+                                            }
+                                        }}
+                                        style={{ flex: 1, padding: '4px 6px', fontSize: '0.8rem', margin: 0, height: '28px', border: 'none', background: 'transparent' }}
+                                    />
+                                </div>
+                            </div>
                             <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--primary)' }}>{t('inv_total')}: {formatCurrency(calculateTotals().total)}</div>
                         </div>
                     </div>

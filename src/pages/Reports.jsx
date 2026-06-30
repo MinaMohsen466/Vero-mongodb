@@ -759,7 +759,7 @@ function Reports() {
                             <div style={{ minWidth: '220px' }}>
                                 <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>{t('dash_customer') || 'Customer'}</label>
                                 <SearchableSelect
-                                    options={customers.map(c => ({ value: String(c.id), label: c.name, subLabel: c.phone }))}
+                                    options={customers.filter(c => c.code !== 'CUST-CASH').map(c => ({ value: String(c.id), label: c.name, subLabel: c.phone }))}
                                     value={filters.customer_id}
                                     onChange={v => setFilters({ ...filters, customer_id: v })}
                                     placeholder={t('vouch_selectCustomer') || 'Select Customer...'}
@@ -771,7 +771,7 @@ function Reports() {
                             <div style={{ minWidth: '220px' }}>
                                 <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>{t('dash_supplier') || 'Supplier'}</label>
                                 <SearchableSelect
-                                    options={suppliers.map(s => ({ value: String(s.id), label: s.name, subLabel: s.phone }))}
+                                    options={suppliers.filter(s => s.code !== 'SUPP-CASH').map(s => ({ value: String(s.id), label: s.name, subLabel: s.phone }))}
                                     value={filters.supplier_id}
                                     onChange={v => setFilters({ ...filters, supplier_id: v })}
                                     placeholder={t('vouch_selectSupplier') || 'Select Supplier...'}
