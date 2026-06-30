@@ -185,6 +185,34 @@ function POS() {
         setTimeout(() => searchRef.current?.focus(), 300);
     }, []);
 
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('pos_cart_draft');
+        if (savedDraft) {
+            try {
+                const { cart: savedCart, selectedCustomer: savedCust, discount: savedDisc, note: savedNote, couponCode: savedCoupon, appliedCoupon: savedApplied, payMethod: savedPay } = JSON.parse(savedDraft);
+                if (savedCart && savedCart.length > 0) {
+                    setCart(savedCart);
+                    setSelectedCustomer(savedCust || null);
+                    setDiscount(savedDisc || 0);
+                    setNote(savedNote || '');
+                    setCouponCode(savedCoupon || '');
+                    setAppliedCoupon(savedApplied || null);
+                    setPayMethod(savedPay || 'cash');
+                }
+            } catch (e) {
+                console.error('Error parsing POS draft:', e);
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (cart.length > 0) {
+            localStorage.setItem('pos_cart_draft', JSON.stringify({ cart, selectedCustomer, discount, note, couponCode, appliedCoupon, payMethod }));
+        } else {
+            localStorage.removeItem('pos_cart_draft');
+        }
+    }, [cart, selectedCustomer, discount, note, couponCode, appliedCoupon, payMethod]);
+
     // Auto-refresh stock every 30 seconds
     useEffect(() => {
         const interval = setInterval(() => refreshStock(false), 30000);

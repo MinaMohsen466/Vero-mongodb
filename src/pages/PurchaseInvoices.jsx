@@ -70,6 +70,31 @@ function PurchaseInvoices() {
 
     useEffect(() => { loadData(); }, []);
 
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('purchase_invoice_draft');
+        if (savedDraft) {
+            try {
+                const { showModal: savedShow, formData: savedForm, editMode: savedEdit, editingId: savedId } = JSON.parse(savedDraft);
+                if (savedShow) {
+                    setShowModal(savedShow);
+                    setFormData(savedForm);
+                    setEditMode(savedEdit);
+                    setEditingId(savedId);
+                }
+            } catch (e) {
+                console.error('Error parsing purchase draft:', e);
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (showModal) {
+            localStorage.setItem('purchase_invoice_draft', JSON.stringify({ showModal, formData, editMode, editingId }));
+        } else {
+            localStorage.removeItem('purchase_invoice_draft');
+        }
+    }, [showModal, formData, editMode, editingId]);
+
     const loadData = async () => {
         try {
             const [invoicesData, suppliersData, productsData, settingsData, accountsData] = await Promise.all([

@@ -73,6 +73,33 @@ function SalesInvoices() {
 
     useEffect(() => { loadData(); }, []);
 
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('sales_invoice_draft');
+        if (savedDraft) {
+            try {
+                const { showModal: savedShow, formData: savedForm, editMode: savedEdit, editingId: savedId, couponCode: savedCoupon, appliedCoupon: savedApplied } = JSON.parse(savedDraft);
+                if (savedShow) {
+                    setShowModal(savedShow);
+                    setFormData(savedForm);
+                    setEditMode(savedEdit);
+                    setEditingId(savedId);
+                    setCouponCode(savedCoupon || '');
+                    setAppliedCoupon(savedApplied || null);
+                }
+            } catch (e) {
+                console.error('Error parsing sales draft:', e);
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (showModal) {
+            localStorage.setItem('sales_invoice_draft', JSON.stringify({ showModal, formData, editMode, editingId, couponCode, appliedCoupon }));
+        } else {
+            localStorage.removeItem('sales_invoice_draft');
+        }
+    }, [showModal, formData, editMode, editingId, couponCode, appliedCoupon]);
+
     const loadData = async () => {
         try {
             const [invoicesData, customersData, productsData, settingsData, accountsData, offersData] = await Promise.all([
