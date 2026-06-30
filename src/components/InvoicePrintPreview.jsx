@@ -30,7 +30,9 @@ function InvoicePrintPreview({ invoice, settings, onClose, type = 'sales' }) {
     const showCompanyInfo = settings?.invoice?.show_company_info !== 'no';
     const invoiceTitle = type === 'sales'
         ? (settings?.invoice?.invoice_title_sales || t('sales_invoice') || 'Sales Invoice')
-        : (settings?.invoice?.invoice_title_purchase || t('purchase_invoice') || 'Purchase Invoice');
+        : (type === 'quotation'
+            ? (t('quotation') || 'عرض سعر')
+            : (settings?.invoice?.invoice_title_purchase || t('purchase_invoice') || 'Purchase Invoice'));
     const invoiceFooter = settings?.invoice?.invoice_footer || '';
     const invoiceTerms = settings?.invoice?.invoice_terms || '';
     const thankYouMsg = settings?.invoice?.thank_you_message || '';
@@ -145,8 +147,8 @@ function InvoicePrintPreview({ invoice, settings, onClose, type = 'sales' }) {
     };
     const previewWidth = getPreviewWidth();
 
-    const clientName = type === 'sales' ? (invoice.customer_name && invoice.customer_name !== '-' ? invoice.customer_name : (t('cash_client') || 'نقدي')) : (invoice.supplier_name || '-');
-    const clientLabel = type === 'sales' ? (t('customer') || 'Customer') : (t('supplier') || 'Supplier');
+    const clientName = (type === 'sales' || type === 'quotation') ? (invoice.customer_name && invoice.customer_name !== '-' ? invoice.customer_name : (t('cash_client') || 'نقدي')) : (invoice.supplier_name || '-');
+    const clientLabel = (type === 'sales' || type === 'quotation') ? (t('customer') || 'Customer') : (t('supplier') || 'Supplier');
     
     const wrap = (body) => {
         const isRtl = document.documentElement.dir === 'rtl';
@@ -204,18 +206,25 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
         const invoiceTimeStr = parseDbDate(invoice.created_at).toLocaleTimeString(isRtl ? 'ar-KW' : 'en-US', { hour: '2-digit', minute: '2-digit' });
         const combinedDateTime = `${invoiceDateStr} ${invoiceTimeStr}`;
 
+        const numberLabel = type === 'quotation' ? (t('quotation_number') || 'رقم عرض السعر') : (t('inv_number') || 'رقم الفاتورة');
+        const dueDateHtml = (type === 'quotation' && invoice.due_date) ? `
+            <div style="white-space: nowrap;"><strong>${t('due_date') || 'صالح حتى'}:</strong> ${new Date(invoice.due_date).toLocaleDateString(isRtl ? 'ar-KW' : 'en-GB')}</div>
+        ` : '';
+
         const invoiceDetailsStandard = `
             <div style="font-size: ${fonts.body}; line-height: 1.6; color: #1f2937; text-align: ${alignRight}; white-space: nowrap; display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
-                <div style="white-space: nowrap;"><strong>${t('inv_number') || 'رقم الفاتورة'}:</strong> <span style="font-family: monospace; font-size: 13px; font-weight: 700; color: #111827;">${invoice.invoice_number}</span></div>
+                <div style="white-space: nowrap;"><strong>${numberLabel}:</strong> <span style="font-family: monospace; font-size: 13px; font-weight: 700; color: #111827;">${invoice.invoice_number}</span></div>
                 <div style="white-space: nowrap;"><strong>${t('date') || 'التاريخ'}:</strong> ${combinedDateTime}</div>
+                ${dueDateHtml}
                 <div style="white-space: nowrap;"><strong>${clientLabel}:</strong> ${clientName}</div>
             </div>
         `;
 
         const invoiceDetailsThermal = `
             <div style="font-size: 12px; line-height: 1.6; color: #1f2937; text-align: ${isRtl ? 'right' : 'left'}; display: flex; flex-direction: column; gap: 4px; align-items: flex-start;">
-                <div style="white-space: nowrap;"><strong>${t('inv_number') || 'رقم الفاتورة'}:</strong> <span style="font-family: monospace; font-size: 12px; font-weight: 700; color: #111827;">${invoice.invoice_number}</span></div>
+                <div style="white-space: nowrap;"><strong>${numberLabel}:</strong> <span style="font-family: monospace; font-size: 12px; font-weight: 700; color: #111827;">${invoice.invoice_number}</span></div>
                 <div style="white-space: nowrap;"><strong>${t('date') || 'التاريخ'}:</strong> ${combinedDateTime}</div>
+                ${dueDateHtml}
                 <div style="white-space: nowrap;"><strong>${clientLabel}:</strong> ${clientName}</div>
             </div>
         `;
@@ -366,7 +375,14 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
                 <p style="margin-top: 6px; font-size: calc(${fonts.body} - 2px); color: #888;">${companyName} — ${new Date().getFullYear()}</p>
             </div>`;
 
+        const quotationBannerHtml = type === 'quotation' ? `
+            <div style="background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; padding: 8px 12px; border-radius: 6px; text-align: center; margin-bottom: 15px; font-weight: 700; font-size: 13px;">
+                ⚠️ ${t('quotation_not_invoice_banner') || 'عرض سعر مالي - ليس فاتورة ضريبية'}
+            </div>
+        ` : '';
+
         const body = `
+            ${quotationBannerHtml}
             ${headerHtml}
             ${tableHtml}
             ${totalsHtml}
@@ -383,7 +399,7 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
     const handlePrint = async () => {
         const html = generatePrintHTML();
         if (window.api?.print?.invoice) {
-            await window.api.print.invoice(html, { paperSize, paperOrientation });
+            await window.api.print.invoice(html, { paperSize, paperOrientation, invoiceType: type });
         } else {
             const win = window.open('', '_blank', 'width=900,height=700');
             win.document.write(html);
@@ -445,18 +461,26 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
         const invoiceTimeStr = parseDbDate(invoice.created_at).toLocaleTimeString(isRtl ? 'ar-KW' : 'en-US', { hour: '2-digit', minute: '2-digit' });
         const combinedDateTime = `${invoiceDateStr} ${invoiceTimeStr}`;
 
+        const numberLabel = type === 'quotation' ? (t('quotation_number') || 'رقم عرض السعر') : (t('inv_number') || 'رقم الفاتورة');
+
         const InvoiceDetailsStandard = (
             <div style={{ fontSize: bodyFontSizeNum, lineHeight: 1.6, color: '#1f2937', textAlign: isRtl ? 'left' : 'right', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-                <div style={{ whiteSpace: 'nowrap' }}><strong>{t('inv_number') || 'رقم الفاتورة'}:</strong> <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#111827' }}>{invoice.invoice_number}</span></div>
+                <div style={{ whiteSpace: 'nowrap' }}><strong>{numberLabel}:</strong> <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#111827' }}>{invoice.invoice_number}</span></div>
                 <div style={{ whiteSpace: 'nowrap' }}><strong>{t('date') || 'التاريخ'}:</strong> {combinedDateTime}</div>
+                {type === 'quotation' && invoice.due_date && (
+                    <div style={{ whiteSpace: 'nowrap' }}><strong>{t('due_date') || 'صالح حتى'}:</strong> {new Date(invoice.due_date).toLocaleDateString(isRtl ? 'ar-KW' : 'en-GB')}</div>
+                )}
                 <div style={{ whiteSpace: 'nowrap' }}><strong>{clientLabel}:</strong> {clientName}</div>
             </div>
         );
 
         const InvoiceDetailsThermal = (
             <div style={{ fontSize: 12, lineHeight: 1.6, color: '#1f2937', textAlign: isRtl ? 'right' : 'left', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-                <div style={{ whiteSpace: 'nowrap' }}><strong>{t('inv_number') || 'رقم الفاتورة'}:</strong> <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#111827' }}>{invoice.invoice_number}</span></div>
+                <div style={{ whiteSpace: 'nowrap' }}><strong>{numberLabel}:</strong> <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#111827' }}>{invoice.invoice_number}</span></div>
                 <div style={{ whiteSpace: 'nowrap' }}><strong>{t('date') || 'التاريخ'}:</strong> {combinedDateTime}</div>
+                {type === 'quotation' && invoice.due_date && (
+                    <div style={{ whiteSpace: 'nowrap' }}><strong>{t('due_date') || 'صالح حتى'}:</strong> {new Date(invoice.due_date).toLocaleDateString(isRtl ? 'ar-KW' : 'en-GB')}</div>
+                )}
                 <div style={{ whiteSpace: 'nowrap' }}><strong>{clientLabel}:</strong> {clientName}</div>
             </div>
         );
@@ -711,6 +735,11 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
                 <div className="modal-body" style={{ flex: 1, overflow: 'auto', padding: 0, background: 'var(--bg-secondary)' }}>
                     {activeTab === 'invoice' ? (
                         <div style={{ maxWidth: previewWidth, margin: '20px auto', background: 'white', color: '#1f2937', padding: isThermo ? '20px 15px' : (paperSize === 'A3' ? '40px' : paperSize === 'A5' ? '20px' : '28px'), boxShadow: '0 4px 20px rgba(0,0,0,.12)', borderRadius: 6 }}>
+                            {type === 'quotation' && (
+                                <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', color: '#b45309', padding: '10px 16px', borderRadius: 8, textAlign: 'center', marginBottom: 18, fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                                    ⚠️ {t('quotation_not_invoice_banner') || 'عرض سعر مالي - ليس فاتورة ضريبية'}
+                                </div>
+                            )}
                             <HeaderLayout />
                             <TableLayout />
                             <TotalsLayout />

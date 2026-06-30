@@ -40,6 +40,7 @@ const Expenses = lazy(() => import('./pages/Expenses'));
 const WarehousePage = lazy(() => import('./pages/Warehouse'));
 const SalesReturns = lazy(() => import('./pages/SalesReturns'));
 const PurchaseReturns = lazy(() => import('./pages/PurchaseReturns'));
+const Quotations = lazy(() => import('./pages/Quotations'));
 
 const LoadingScreen = () => (
     <div className="loading" style={{ height: '100vh' }}>
@@ -114,7 +115,34 @@ function App() {
 
             const savedUser = localStorage.getItem('accapp_user');
             if (savedUser) {
-                setUser(JSON.parse(savedUser));
+                const parsed = JSON.parse(savedUser);
+                setUser(parsed);
+                // Refresh permissions asynchronously from the database on startup
+                (async () => {
+                    try {
+                        const [rolePerms, userPermsRes] = await Promise.all([
+                            window.api.permissions.getByRole(parsed.role),
+                            window.api.permissions.getUserPermissions(parsed.id)
+                        ]);
+                        const mergedPerms = { ...rolePerms };
+                        if (userPermsRes?.hasIndividual && userPermsRes?.permissions) {
+                            Object.assign(mergedPerms, userPermsRes.permissions);
+                        }
+                        // Admin overrides
+                        if (parsed.role === 'admin') {
+                            mergedPerms['settings'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                            mergedPerms['permissions'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                            mergedPerms['dashboard'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                            mergedPerms['offers'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                            mergedPerms['quotations'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                        }
+                        const updated = { ...parsed, permissions: mergedPerms };
+                        localStorage.setItem('accapp_user', JSON.stringify(updated));
+                        setUser(updated);
+                    } catch (err) {
+                        console.error("Failed to auto-refresh user permissions on startup:", err);
+                    }
+                })();
             }
 
             const savedTheme = localStorage.getItem('accapp_theme') || 'light';
@@ -221,7 +249,8 @@ function App() {
         'offers': OffersAndCoupons,
         'warehouse': WarehousePage,
         'sales_returns': SalesReturns,
-        'purchase_returns': PurchaseReturns
+        'purchase_returns': PurchaseReturns,
+        'quotations': Quotations
     };
 
     const renderPage = useCallback(() => {

@@ -77,6 +77,7 @@ function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
                 { id: 'expenses', labelKey: 'menu_expenses', icon: TrendingDown, permModule: 'expenses' },
                 { id: 'warehouse', labelKey: 'menu_warehouse', icon: Warehouse, permModule: 'warehouse' },
                 { id: 'offers', labelKey: 'offers_and_coupons', icon: Ticket, permModule: 'offers' },
+                { id: 'quotations', labelKey: 'menu_quotations', icon: FileText, permModule: 'quotations' },
                 { id: 'reports', labelKey: 'menu_reports', icon: BarChart3, permModule: 'reports' },
                 { id: 'settings', labelKey: 'menu_settings', icon: Settings, permModule: 'settings' },
             ]
@@ -92,8 +93,7 @@ function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
         for (const item of menuItems) {
             if (item.type === 'group') {
                 const visibleChildren = item.children.filter(child => {
-                    return userPerms[child.permModule]?.can_view === true || 
-                           (isAdmin && ['settings', 'permissions', 'dashboard'].includes(child.permModule));
+                    return isAdmin || userPerms[child.permModule]?.can_view === true;
                 });
                 if (visibleChildren.length > 0) {
                     result.push({
@@ -102,8 +102,7 @@ function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
                     });
                 }
             } else {
-                if (userPerms[item.permModule]?.can_view === true || 
-                    (isAdmin && ['settings', 'permissions', 'dashboard'].includes(item.permModule))) {
+                if (isAdmin || userPerms[item.permModule]?.can_view === true) {
                     result.push(item);
                 }
             }

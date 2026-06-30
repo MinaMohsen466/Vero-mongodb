@@ -1534,6 +1534,36 @@ const translations = {
         saving: 'جارٍ الحفظ...',
         view: 'عرض',
         no_records: 'لا توجد سجلات لعرضها',
+        
+        // Quotations
+        menu_quotations: 'عروض الأسعار',
+        quotation: 'عرض سعر',
+        quotations: 'عروض الأسعار',
+        new_quotation: 'عرض سعر جديد',
+        convert_to_sales_invoice: 'تحويل إلى فاتورة مبيعات',
+        quotation_converted_success: 'تم تحويل عرض السعر إلى فاتورة بنجاح!',
+        due_date: 'صالح حتى',
+        quotation_already_converted_error: 'لا يمكن تعديل عرض سعر تم تحويله لفاتورة',
+        convert_to_sales_invoice_confirm: 'هل أنت متأكد من تحويل عرض السعر هذا إلى فاتورة مبيعات؟',
+        quotation_active: 'نشط / معلق',
+        converted: 'تم تحويلها فاتورة',
+        add_item: 'إضافة صنف',
+        inv_itemError: 'يرجى تحديد المنتجات وإدخال كميات صحيحة',
+        quotation_number: 'رقم عرض السعر',
+        quotation_not_invoice_banner: 'عرض سعر مالي - ليس فاتورة ضريبية',
+        
+        // Printing & Barcode Settings
+        hardware_settings: 'إعدادات الأجهزة والطباعة',
+        pos_printer: 'طابعة الكاشير (حرارية)',
+        invoice_printer: 'طابعة الفواتير (A4)',
+        silent_printing: 'الطباعة المباشرة الصامتة',
+        silent_printing_invoice: 'الطباعة الصامتة للفاتورة كبيرة الحجم',
+        pos_silent_print_desc: 'طباعة الإيصال فوراً دون عرض نافذة النظام',
+        invoice_silent_print_desc: 'طباعة الفاتورة الكبيرة فوراً دون عرض نافذة النظام',
+        barcode_settings: 'إعدادات قارئ الباركود',
+        enable_global_barcode: 'تفعيل قارئ الباركود الذكي',
+        enable_global_barcode_desc: 'الاستماع التلقائي لمسح الباركود وإضافته مباشرة إلى السلة في أي جزء من شاشة المبيعات',
+        none: 'لا يوجد',
     },
     en: {
 
@@ -3027,6 +3057,36 @@ const translations = {
         saving: 'Saving...',
         view: 'View',
         no_records: 'No records to display',
+        
+        // Quotations
+        menu_quotations: 'Quotations',
+        quotation: 'Quotation',
+        quotations: 'Quotations',
+        new_quotation: 'New Quotation',
+        convert_to_sales_invoice: 'Convert to Invoice',
+        quotation_converted_success: 'Quotation converted to invoice successfully!',
+        due_date: 'Valid Until',
+        quotation_already_converted_error: 'Cannot edit a quotation that has already been converted to an invoice',
+        convert_to_sales_invoice_confirm: 'Are you sure you want to convert this quotation to a sales invoice?',
+        quotation_active: 'Active / Pending',
+        converted: 'Converted',
+        add_item: 'Add Item',
+        inv_itemError: 'Please select products with valid quantities',
+        quotation_number: 'Quotation Number',
+        quotation_not_invoice_banner: 'Financial Quotation - Not a Tax Invoice',
+        
+        // Printing & Barcode Settings
+        hardware_settings: 'Hardware & Printing Settings',
+        pos_printer: 'POS Printer (Thermal)',
+        invoice_printer: 'Invoice Printer (A4)',
+        silent_printing: 'Silent Direct Printing',
+        silent_printing_invoice: 'Silent Print for A4 Invoice',
+        pos_silent_print_desc: 'Print receipt immediately without showing OS dialog',
+        invoice_silent_print_desc: 'Print big invoice immediately without showing OS dialog',
+        barcode_settings: 'Barcode Scanner Settings',
+        enable_global_barcode: 'Enable Smart Barcode Listener',
+        enable_global_barcode_desc: 'Auto-scan barcode and add directly to cart from anywhere on POS screen',
+        none: 'None',
     }
 };
 

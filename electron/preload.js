@@ -191,7 +191,8 @@ contextBridge.exposeInMainWorld('api', {
 
     // Print
     print: {
-        invoice: (invoiceHtml, options) => ipcRenderer.invoke('print:invoice', invoiceHtml, options)
+        invoice: (invoiceHtml, options) => ipcRenderer.invoke('print:invoice', invoiceHtml, options),
+        getPrinters: () => ipcRenderer.invoke('print:getPrinters')
     },
 
     // Coupons

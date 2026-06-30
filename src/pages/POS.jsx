@@ -225,6 +225,7 @@ function POS() {
         }
     }, [selectedCustomer, payMethod]);
 
+
     const loadData = async () => {
         setLoading(true);
         try {
@@ -294,6 +295,79 @@ function POS() {
             }];
         });
     }, [allProducts, settings, t]);
+
+    const playBeep = () => {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // High pitch A5
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.1); // Beep for 100ms
+        } catch (e) {
+            console.error("Web Audio API error:", e);
+        }
+    };
+
+    // Global Barcode Listener
+    useEffect(() => {
+        const isBarcodeEnabled = settings.printing?.enable_global_barcode === 'yes';
+        if (!isBarcodeEnabled) return;
+
+        let buffer = '';
+        let lastKeyTime = Date.now();
+
+        const handleKeyDown = (e) => {
+            // Ignore modifiers
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            
+            const currentTime = Date.now();
+            const diff = currentTime - lastKeyTime;
+            lastKeyTime = currentTime;
+
+            // If it's Enter, check if we have a valid barcode in the buffer
+            if (e.key === 'Enter') {
+                if (buffer.length >= 3 && diff < 50) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const code = buffer.trim();
+                    buffer = '';
+                    
+                    // Look up product by code
+                    const prod = allProducts.find(p => p.code === code);
+                    if (prod) {
+                        addToCart(prod);
+                        playBeep();
+                        toast.success(`${t('added') || 'تمت إضافة'}: ${prod.name}`);
+                    } else {
+                        toast.error(`${t('product_not_found') || 'المنتج غير موجود'}: ${code}`);
+                    }
+                } else {
+                    buffer = ''; // Reset on slow enter or non-barcode enter
+                }
+                return;
+            }
+
+            // Accumulate printable characters
+            if (e.key.length === 1) {
+                if (diff < 40 || buffer === '') {
+                    buffer += e.key;
+                } else {
+                    buffer = e.key; // Reset if typed too slowly
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown, true); // Use capture phase to intercept input
+        return () => window.removeEventListener('keydown', handleKeyDown, true);
+    }, [allProducts, settings, addToCart, t]);
 
     const updateQty = (id, delta) => {
         setCart(prev => prev.map(i => {
@@ -547,6 +621,24 @@ function POS() {
                 clearCart();
                 await refreshStock(false); // refresh stock after sale
                 toast.success(`✓ ${t('sale_completed') || 'Sale completed'} - ${result.invoice_number}`);
+                
+                // Silent printing on checkout
+                if (settings.printing?.pos_silent_print === 'yes') {
+                    try {
+                        const html = generateReceiptHTML(receipt, settings, t);
+                        const paperSize = settings.invoice?.paper_size || 'thermal_80';
+                        const deviceName = settings.printing?.pos_printer || '';
+                        window.api.print.invoice(html, {
+                            paperSize,
+                            paperOrientation: 'portrait',
+                            deviceName,
+                            silent: true,
+                            invoiceType: 'pos'
+                        });
+                    } catch (pe) {
+                        console.error('Auto silent printing failed:', pe);
+                    }
+                }
             } else {
                 toast.error(result.error || t('error_checkout') || 'Error during checkout');
             }
@@ -562,9 +654,24 @@ function POS() {
         try {
             const freshSettings = await window.api.settings.getAll();
             setSettings(freshSettings || {});
-            const invoice = await window.api.invoices.getById(lastInvoiceId);
-            setPreviewInvoice(invoice);
-            setShowInvoicePreview(true);
+            
+            if (freshSettings.printing?.pos_silent_print === 'yes' && lastReceipt) {
+                const html = generateReceiptHTML(lastReceipt, freshSettings, t);
+                const paperSize = freshSettings.invoice?.paper_size || 'thermal_80';
+                const deviceName = freshSettings.printing?.pos_printer || '';
+                window.api.print.invoice(html, {
+                    paperSize,
+                    paperOrientation: 'portrait',
+                    deviceName,
+                    silent: true,
+                    invoiceType: 'pos'
+                });
+                toast.success(t('printing') || 'جاري الطباعة...');
+            } else {
+                const invoice = await window.api.invoices.getById(lastInvoiceId);
+                setPreviewInvoice(invoice);
+                setShowInvoicePreview(true);
+            }
         } catch (e) {
             console.error('Error opening print preview:', e);
         }

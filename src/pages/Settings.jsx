@@ -5,7 +5,7 @@ import {
     RefreshCw, Download, Upload, Eye, EyeOff, ChevronRight, X, Check,
     Home, Truck, Package, Wallet, Monitor, ShoppingCart, ShoppingBag, CreditCard,
     BookOpen, UserCheck, TrendingDown, Warehouse, Ticket, BarChart3, Clock, Calendar,
-    ArrowLeftRight, User, Key, Undo, RotateCcw
+    ArrowLeftRight, User, Key, Undo, RotateCcw, Barcode
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
@@ -298,6 +298,7 @@ export default function Settings() {
         { m: 'suppliers', l: t('suppliers') || 'Suppliers', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'products', l: t('products') || 'Products', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'sales_invoices', l: t('sales_invoices') || 'Sales Invoices', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'quotations', l: t('menu_quotations') || 'Quotations', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'sales_returns', l: t('sales_returns') || 'Sales Returns', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'purchase_invoices', l: t('purchase_invoices') || 'Purchase Invoices', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'purchase_returns', l: t('purchase_returns') || 'Purchase Returns', a: ['view', 'create', 'edit', 'delete'] },
@@ -337,6 +338,7 @@ export default function Settings() {
             suppliers: Truck,
             products: Package,
             sales_invoices: ShoppingCart,
+            quotations: FileText,
             sales_returns: Undo,
             purchase_invoices: ShoppingBag,
             purchase_returns: RotateCcw,
@@ -391,6 +393,16 @@ export default function Settings() {
     const [counts, setCounts] = useState({ products: 0, customers: 0, suppliers: 0, sales_invoices: 0, purchase_invoices: 0 });
 
     const [co, setCo] = useState({ company_name: '', company_address: '', company_phone: '', company_email: '', company_tax_number: '', company_logo: '' });
+    
+    // Hardware and printing configurations
+    const [printers, setPrinters] = useState([]);
+    const [printConf, setPrintConf] = useState({
+        pos_printer: '',
+        invoice_printer: '',
+        pos_silent_print: 'no',
+        invoice_silent_print: 'no',
+        enable_global_barcode: 'no'
+    });
     const [gen, setGen] = useState({
         currency: t('default_currency') || 'Kuwaiti Dinar', currency_symbol: t('currency_kd') || 'KD', tax_rate: '0', decimal_places: '3',
         allow_negative_stock: 'no', show_financial_summary: 'yes', show_low_stock_products: 'yes', show_customer_receivables: 'yes',
@@ -501,6 +513,18 @@ export default function Settings() {
                 });
             } catch (err) {
                 console.error("Failed to load diagnostic counts:", err);
+            }
+            // Load printing configurations
+            if (sd?.printing) {
+                setPrintConf(prev => ({ ...prev, ...sd.printing }));
+            }
+            if (window.api?.print?.getPrinters) {
+                try {
+                    const plist = await window.api.print.getPrinters();
+                    setPrinters(plist || []);
+                } catch (pe) {
+                    console.error("Error loading system printers:", pe);
+                }
             }
         } catch (e) { console.error(e); }
         setLoading(false);
@@ -968,6 +992,58 @@ export default function Settings() {
                                 <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving}
                                     onClick={() => saveSection('invoice', inv, t('saved_print_settings') || 'Print settings saved')}>
                                     <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save_print_settings') || 'Save Print Settings')}
+                                </button>
+                            </div>
+
+                            <div style={{ borderTop: '1px solid var(--border-light)', margin: '10px 0' }} />
+
+                            <Card title={t('hardware_settings') || 'إعدادات الأجهزة والطباعة'} icon={Printer}>
+                                <div style={gridTwo}>
+                                    <Fld label={t('pos_printer') || 'طابعة الكاشير (حرارية)'}>
+                                        <select style={inp} value={printConf.pos_printer || ''} onChange={e => setPrintConf(f => ({ ...f, pos_printer: e.target.value }))}>
+                                            <option value="">{t('none') || 'لا يوجد / طابعة افتراضية'}</option>
+                                            {printers.map(p => (
+                                                <option key={p.name} value={p.name}>{p.displayName || p.name}</option>
+                                            ))}
+                                        </select>
+                                    </Fld>
+                                    <Fld label={t('invoice_printer') || 'طابعة الفواتير (A4)'}>
+                                        <select style={inp} value={printConf.invoice_printer || ''} onChange={e => setPrintConf(f => ({ ...f, invoice_printer: e.target.value }))}>
+                                            <option value="">{t('none') || 'لا يوجد / طابعة افتراضية'}</option>
+                                            {printers.map(p => (
+                                                <option key={p.name} value={p.name}>{p.displayName || p.name}</option>
+                                            ))}
+                                        </select>
+                                    </Fld>
+                                </div>
+                                
+                                <TRow 
+                                    label={t('silent_printing') || 'الطباعة المباشرة الصامتة'} 
+                                    desc={t('pos_silent_print_desc') || 'طباعة الإيصال فوراً دون عرض نافذة النظام'} 
+                                    value={printConf.pos_silent_print} 
+                                    onChange={v => setPrintConf(f => ({ ...f, pos_silent_print: v }))} 
+                                />
+                                <TRow 
+                                    label={t('silent_printing_invoice') || 'الطباعة الصامتة للفاتورة كبيرة الحجم'} 
+                                    desc={t('invoice_silent_print_desc') || 'طباعة الفاتورة الكبيرة فوراً دون عرض نافذة النظام'} 
+                                    value={printConf.invoice_silent_print} 
+                                    onChange={v => setPrintConf(f => ({ ...f, invoice_silent_print: v }))} 
+                                />
+                            </Card>
+
+                            <Card title={t('barcode_settings') || 'إعدادات قارئ الباركود'} icon={Barcode}>
+                                <TRow 
+                                    label={t('enable_global_barcode') || 'تفعيل قارئ الباركود الذكي'} 
+                                    desc={t('enable_global_barcode_desc') || 'الاستماع التلقائي لمسح الباركود وإضافته مباشرة إلى السلة في أي جزء من شاشة المبيعات'} 
+                                    value={printConf.enable_global_barcode} 
+                                    onChange={v => setPrintConf(f => ({ ...f, enable_global_barcode: v }))} 
+                                />
+                            </Card>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+                                <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving}
+                                    onClick={() => saveSection('printing', printConf, t('savedSuccess') || 'Saved successfully')}>
+                                    <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
                                 </button>
                             </div>
                         </div>

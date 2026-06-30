@@ -520,7 +520,7 @@ class AppDatabase {
         // Default Permissions
         const permCount = this.get('SELECT COUNT(*) as count FROM permissions');
         if (permCount.count === 0) {
-            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'expenses', 'pos', 'database', 'financial_summary', 'warehouse', 'offers', 'sales_returns', 'purchase_returns'];
+            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'expenses', 'pos', 'database', 'financial_summary', 'warehouse', 'offers', 'sales_returns', 'purchase_returns', 'quotations'];
             for (const mod of modules) {
                 // Admin: full access to everything
                 this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', mod]);
@@ -627,7 +627,15 @@ class AppDatabase {
                     this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 0)", ['accountant', 'purchase_returns']);
                     this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 0, 0, 0, 0)", ['user', 'purchase_returns']);
                 }
-            } catch (e) { console.log('Returns permissions migration:', e.message); }
+
+                // Ensure quotations permission exists for existing databases
+                const adminQuot = this.get("SELECT id FROM permissions WHERE role='admin' AND module='quotations'");
+                if (!adminQuot) {
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 1)", ['admin', 'quotations']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 1, 0)", ['accountant', 'quotations']);
+                    this.run("INSERT OR IGNORE INTO permissions (role, module, can_view, can_create, can_edit, can_delete) VALUES (?, ?, 1, 1, 0, 0)", ['user', 'quotations']);
+                }
+            } catch (e) { console.log('Returns and quotations permissions migration:', e.message); }
         }
     }
 
@@ -1301,8 +1309,8 @@ class InvoicesRepo {
 
     create(inv) {
         try {
-            const count = this.db.get('SELECT COUNT(*) as count FROM invoices')?.count || 0;
-            const prefix = inv.type === 'sales' ? 'SL-' : 'PU-';
+            const count = this.db.get('SELECT COUNT(*) as count FROM invoices WHERE type = ?', [inv.type])?.count || 0;
+            const prefix = inv.type === 'sales' ? 'SL-' : (inv.type === 'purchase' ? 'PU-' : 'QT-');
             const num = inv.invoice_number || `${prefix}${String(count + 1).padStart(6, '0')}`;
 
             // Helper to convert undefined to null (sql.js cannot bind undefined)
@@ -1329,29 +1337,31 @@ class InvoicesRepo {
                     [invId, productId, description, quantity, unitPrice, discount, tax, total]
                 );
 
-                // Update product stock based on location
-                if (productId) {
+                // Update product stock based on location (skip for quotations)
+                if (productId && inv.type !== 'quotation') {
                     if (inv.type === 'sales') {
                         // Sales deduct from shop_stock
                         this.db.run('UPDATE products SET shop_stock = shop_stock - ?, stock_quantity = stock_quantity - ? WHERE id = ?', [quantity, quantity, productId]);
-                    } else {
+                    } else if (inv.type === 'purchase') {
                         // Purchases add to shop_stock
                         this.db.run('UPDATE products SET shop_stock = shop_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?', [quantity, quantity, productId]);
                     }
                 }
             }
 
-            // Update customer/supplier balance by remaining amount
+            // Update customer/supplier balance by remaining amount (skip for quotations)
             const remaining = (parseFloat(inv.total) || 0) - (parseFloat(inv.paid) || 0);
-            if (remaining > 0) {
+            if (remaining > 0 && inv.type !== 'quotation') {
                 if (inv.type === 'sales' && inv.customer_id) this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [remaining, inv.customer_id]);
                 else if (inv.type === 'purchase' && inv.supplier_id) this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [remaining, inv.supplier_id]);
             }
 
-            // Auto-create journal entry
-            const jeId = this._createInvoiceJournalEntry(inv, invId, num);
-            if (jeId) {
-                this.db.run('UPDATE invoices SET journal_entry_id = ? WHERE id = ?', [jeId, invId]);
+            // Auto-create journal entry (skip for quotations)
+            if (inv.type !== 'quotation') {
+                const jeId = this._createInvoiceJournalEntry(inv, invId, num);
+                if (jeId) {
+                    this.db.run('UPDATE invoices SET journal_entry_id = ? WHERE id = ?', [jeId, invId]);
+                }
             }
 
             return { success: true, id: invId, invoice_number: num };
@@ -1368,31 +1378,35 @@ class InvoicesRepo {
             const oldInvoice = this.getById(invId);
             if (!oldInvoice) return { success: false, error: 'Invoice not found' };
 
-            // 1. Reverse old stock changes (location-aware)
-            for (const oldItem of oldInvoice.items || []) {
-                if (oldItem.product_id) {
-                    if (oldInvoice.type === 'sales') {
-                        // Reverse sales: add back to shop_stock
-                        this.db.run('UPDATE products SET shop_stock = shop_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?', [oldItem.quantity, oldItem.quantity, oldItem.product_id]);
-                    } else {
-                        // Reverse purchase: remove from shop_stock
-                        this.db.run('UPDATE products SET shop_stock = shop_stock - ?, stock_quantity = stock_quantity - ? WHERE id = ?', [oldItem.quantity, oldItem.quantity, oldItem.product_id]);
+            // 1. Reverse old stock changes (location-aware, skip for quotations)
+            if (oldInvoice.type !== 'quotation') {
+                for (const oldItem of oldInvoice.items || []) {
+                    if (oldItem.product_id) {
+                        if (oldInvoice.type === 'sales') {
+                            // Reverse sales: add back to shop_stock
+                            this.db.run('UPDATE products SET shop_stock = shop_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?', [oldItem.quantity, oldItem.quantity, oldItem.product_id]);
+                        } else if (oldInvoice.type === 'purchase') {
+                            // Reverse purchase: remove from shop_stock
+                            this.db.run('UPDATE products SET shop_stock = shop_stock - ?, stock_quantity = stock_quantity - ? WHERE id = ?', [oldItem.quantity, oldItem.quantity, oldItem.product_id]);
+                        }
                     }
                 }
             }
 
-            // 2. Reverse old customer/supplier balance
-            const oldRemaining = (oldInvoice.total || 0) - (oldInvoice.paid || 0);
-            if (oldRemaining > 0) {
-                if (oldInvoice.type === 'sales' && oldInvoice.customer_id) {
-                    this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [oldRemaining, oldInvoice.customer_id]);
-                } else if (oldInvoice.type === 'purchase' && oldInvoice.supplier_id) {
-                    this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [oldRemaining, oldInvoice.supplier_id]);
+            // 2. Reverse old customer/supplier balance (skip for quotations)
+            if (oldInvoice.type !== 'quotation') {
+                const oldRemaining = (oldInvoice.total || 0) - (oldInvoice.paid || 0);
+                if (oldRemaining > 0) {
+                    if (oldInvoice.type === 'sales' && oldInvoice.customer_id) {
+                        this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [oldRemaining, oldInvoice.customer_id]);
+                    } else if (oldInvoice.type === 'purchase' && oldInvoice.supplier_id) {
+                        this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [oldRemaining, oldInvoice.supplier_id]);
+                    }
                 }
             }
 
-            // 3. Delete old journal entry (reverses account balances automatically)
-            if (oldInvoice.journal_entry_id) {
+            // 3. Delete old journal entry (reverses account balances automatically, skip for quotations)
+            if (oldInvoice.type !== 'quotation' && oldInvoice.journal_entry_id) {
                 this._deleteJournalEntry(oldInvoice.journal_entry_id);
             }
 
@@ -1417,29 +1431,33 @@ class InvoicesRepo {
                     [invId, productId, description, quantity, unitPrice, discount, tax, total]
                 );
 
-                // Apply new stock change (location-aware)
-                if (productId) {
+                // Apply new stock change (location-aware, skip for quotations)
+                if (productId && oldInvoice.type !== 'quotation') {
                     if (oldInvoice.type === 'sales') {
                         this.db.run('UPDATE products SET shop_stock = shop_stock - ?, stock_quantity = stock_quantity - ? WHERE id = ?', [quantity, quantity, productId]);
-                    } else {
+                    } else if (oldInvoice.type === 'purchase') {
                         this.db.run('UPDATE products SET shop_stock = shop_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?', [quantity, quantity, productId]);
                     }
                 }
             }
 
-            // 6. Apply new customer/supplier balance
-            const newRemaining = (parseFloat(inv.total) || 0) - (parseFloat(inv.paid) || 0);
-            if (newRemaining > 0) {
-                if (oldInvoice.type === 'sales' && inv.customer_id) {
-                    this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [newRemaining, inv.customer_id]);
-                } else if (oldInvoice.type === 'purchase' && inv.supplier_id) {
-                    this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [newRemaining, inv.supplier_id]);
+            // 6. Apply new customer/supplier balance (skip for quotations)
+            if (oldInvoice.type !== 'quotation') {
+                const newRemaining = (parseFloat(inv.total) || 0) - (parseFloat(inv.paid) || 0);
+                if (newRemaining > 0) {
+                    if (oldInvoice.type === 'sales' && inv.customer_id) {
+                        this.db.run('UPDATE customers SET balance = balance + ? WHERE id = ?', [newRemaining, inv.customer_id]);
+                    } else if (oldInvoice.type === 'purchase' && inv.supplier_id) {
+                        this.db.run('UPDATE suppliers SET balance = balance + ? WHERE id = ?', [newRemaining, inv.supplier_id]);
+                    }
                 }
             }
 
-            // 7. Create new journal entry
-            const jeId = this._createInvoiceJournalEntry({ ...inv, type: oldInvoice.type }, invId, oldInvoice.invoice_number);
-            this.db.run('UPDATE invoices SET journal_entry_id = ? WHERE id = ?', [jeId || null, invId]);
+            // 7. Create new journal entry (skip for quotations)
+            if (oldInvoice.type !== 'quotation') {
+                const jeId = this._createInvoiceJournalEntry({ ...inv, type: oldInvoice.type }, invId, oldInvoice.invoice_number);
+                this.db.run('UPDATE invoices SET journal_entry_id = ? WHERE id = ?', [jeId || null, invId]);
+            }
 
             return { success: true };
         } catch (e) {
@@ -1452,31 +1470,35 @@ class InvoicesRepo {
             const invoice = this.getById(id);
             if (!invoice) return { success: false, error: 'Invoice not found' };
 
-            // Reverse inventory changes (location-aware)
-            for (const item of invoice.items || []) {
-                if (item.product_id) {
-                    if (invoice.type === 'sales') {
-                        // Reverse sales: add back to shop_stock
-                        this.db.run('UPDATE products SET shop_stock = shop_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?', [item.quantity, item.quantity, item.product_id]);
-                    } else {
-                        // Reverse purchase: remove from shop_stock
-                        this.db.run('UPDATE products SET shop_stock = shop_stock - ?, stock_quantity = stock_quantity - ? WHERE id = ?', [item.quantity, item.quantity, item.product_id]);
+            // Reverse inventory changes (location-aware, skip for quotations)
+            if (invoice.type !== 'quotation') {
+                for (const item of invoice.items || []) {
+                    if (item.product_id) {
+                        if (invoice.type === 'sales') {
+                            // Reverse sales: add back to shop_stock
+                            this.db.run('UPDATE products SET shop_stock = shop_stock + ?, stock_quantity = stock_quantity + ? WHERE id = ?', [item.quantity, item.quantity, item.product_id]);
+                        } else if (invoice.type === 'purchase') {
+                            // Reverse purchase: remove from shop_stock
+                            this.db.run('UPDATE products SET shop_stock = shop_stock - ?, stock_quantity = stock_quantity - ? WHERE id = ?', [item.quantity, item.quantity, item.product_id]);
+                        }
                     }
                 }
             }
 
-            // Reverse balance changes
-            const remaining = (invoice.total || 0) - (invoice.paid || 0);
-            if (remaining > 0) {
-                if (invoice.type === 'sales' && invoice.customer_id) {
-                    this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [remaining, invoice.customer_id]);
-                } else if (invoice.type === 'purchase' && invoice.supplier_id) {
-                    this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [remaining, invoice.supplier_id]);
+            // Reverse balance changes (skip for quotations)
+            if (invoice.type !== 'quotation') {
+                const remaining = (invoice.total || 0) - (invoice.paid || 0);
+                if (remaining > 0) {
+                    if (invoice.type === 'sales' && invoice.customer_id) {
+                        this.db.run('UPDATE customers SET balance = balance - ? WHERE id = ?', [remaining, invoice.customer_id]);
+                    } else if (invoice.type === 'purchase' && invoice.supplier_id) {
+                        this.db.run('UPDATE suppliers SET balance = balance - ? WHERE id = ?', [remaining, invoice.supplier_id]);
+                    }
                 }
             }
 
-            // Delete linked journal entry (reverses account balances automatically)
-            if (invoice.journal_entry_id) {
+            // Delete linked journal entry (reverses account balances automatically, skip for quotations)
+            if (invoice.type !== 'quotation' && invoice.journal_entry_id) {
                 this._deleteJournalEntry(invoice.journal_entry_id);
             }
 

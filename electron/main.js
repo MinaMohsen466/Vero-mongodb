@@ -520,6 +520,16 @@ ipcMain.handle('dialog:saveFile', async (event, options) => {
 });
 
 // --- Print ---
+ipcMain.handle('print:getPrinters', async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return [];
+    try {
+        return await mainWindow.webContents.getPrintersAsync();
+    } catch (e) {
+        console.error('[print:getPrinters] Error fetching printers:', e);
+        return [];
+    }
+});
+
 ipcMain.handle('print:invoice', async (event, invoiceHtml, options = {}) => {
     const printWindow = new BrowserWindow({
         width: 800, height: 600, show: false,
@@ -534,8 +544,13 @@ ipcMain.handle('print:invoice', async (event, invoiceHtml, options = {}) => {
 
         if (!paperSize || !paperOrientation) {
             try {
-                const settings = db.settings.getAll();
-                const invoiceSettings = settings.invoice || {};
+                const settingsList = db.settings.getAll();
+                const invoiceSettings = {};
+                if (Array.isArray(settingsList)) {
+                    settingsList.forEach(s => {
+                        if (s.category === 'invoice') invoiceSettings[s.key] = s.value;
+                    });
+                }
                 if (!paperSize) paperSize = invoiceSettings.paper_size || 'A4';
                 if (!paperOrientation) paperOrientation = invoiceSettings.paper_orientation || 'portrait';
             } catch (e) {
@@ -564,13 +579,44 @@ ipcMain.handle('print:invoice', async (event, invoiceHtml, options = {}) => {
             ? { marginType: 'none' }
             : { marginType: 'default' };
 
+        // Determine silent print and printer device
+        let silent = false;
+        let deviceName = '';
+        if (options.deviceName) {
+            deviceName = options.deviceName;
+            silent = options.silent === true;
+        } else {
+            try {
+                const settingsList = db.settings.getAll();
+                const defaultPrinterKey = options.invoiceType === 'pos' ? 'pos_printer' : 'invoice_printer';
+                const isSilentKey = options.invoiceType === 'pos' ? 'pos_silent_print' : 'invoice_silent_print';
+                
+                if (Array.isArray(settingsList)) {
+                    const printerSetting = settingsList.find(s => s.key === defaultPrinterKey);
+                    const silentSetting = settingsList.find(s => s.key === isSilentKey);
+                    if (printerSetting && printerSetting.value) {
+                        deviceName = printerSetting.value;
+                    }
+                    if (silentSetting && silentSetting.value === 'yes') {
+                        silent = true;
+                    }
+                }
+            } catch (e) {
+                console.error('[print:invoice] Error loading fallback printing configurations:', e);
+            }
+        }
+
         const printOptions = {
-            silent: false,
+            silent: silent,
             printBackground: true,
             landscape: landscape,
             pageSize: pageSizeOption,
             margins: margins
         };
+
+        if (deviceName) {
+            printOptions.deviceName = deviceName;
+        }
 
         printWindow.webContents.print(printOptions, (success, errorType) => {
             printWindow.close();
