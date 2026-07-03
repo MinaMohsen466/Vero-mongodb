@@ -413,7 +413,12 @@ function SalesReturns() {
                                     <td>{ret.invoice_number || '-'}</td>
                                     <td>{ret.customer_name || '-'}</td>
                                     <td>{ret.date}</td>
-                                    <td>{formatCurrency(ret.total)}</td>
+                                    <td>
+                                        <div>{formatCurrency(ret.total)}</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                            ({t('approximate_quarter') || 'التقريب'}: {formatCurrency(Math.round(ret.total / 0.1) * 0.1)})
+                                        </div>
+                                    </td>
                                     <td>{ret.payment_method === 'bank' ? t('bank') || 'بنك' : ret.payment_method === 'credit' ? t('on_account') || 'على الحساب' : t('cash') || 'نقداً'}</td>
                                     <td>
                                         <div className="table-actions">
@@ -550,7 +555,12 @@ function SalesReturns() {
                             )}
                             <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', borderTop: '1px solid var(--border)', paddingTop: '8px', marginTop: '4px' }}>
                                 <span style={{ fontWeight: '700', fontSize: '1rem' }}>{t('total') || 'الإجمالي الصافي'}:</span>
-                                <span style={{ fontWeight: '700', fontSize: '1.15rem', color: 'var(--primary)' }}>{formatCurrency(selectedReturn.total)}</span>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                    <span style={{ fontWeight: '700', fontSize: '1.15rem', color: 'var(--primary)' }}>{formatCurrency(selectedReturn.total)}</span>
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                        ({t('approximate_quarter') || 'التقريب'}: {formatCurrency(Math.round(selectedReturn.total / 0.1) * 0.1)})
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -845,6 +855,9 @@ function SalesReturns() {
                                 <h3 style={{ margin: '4px 0 0 0', color: 'var(--primary)', fontSize: '1.6rem', fontWeight: '700' }}>
                                     {formatCurrency(currentTotal)}
                                 </h3>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                    ({t('approximate_quarter') || 'التقريب'}: {formatCurrency(Math.round(currentTotal / 0.1) * 0.1)})
+                                </div>
                             </div>
                         </div>
                         
