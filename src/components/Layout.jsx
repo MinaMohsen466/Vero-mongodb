@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../App';
 import appIcon from '../assets/icon.png';
 import UserProfilePanel from './UserProfilePanel';
@@ -8,87 +8,83 @@ import {
     Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight, ChevronDown, UserCheck, Menu, Monitor, Ticket, Tag, TrendingDown, Warehouse, Undo, RotateCcw
 } from 'lucide-react';
 
+const menuItems = [
+    { id: 'dashboard', labelKey: 'menu_dashboard', icon: Home, permModule: 'dashboard' },
+    { 
+        id: 'clients', 
+        labelKey: 'menu_section_clients', 
+        icon: Users,
+        type: 'group',
+        children: [
+            { id: 'customers', labelKey: 'menu_customers', icon: Users, permModule: 'customers' },
+            { id: 'suppliers', labelKey: 'menu_suppliers', icon: Truck, permModule: 'suppliers' },
+            { id: 'products', labelKey: 'menu_products', icon: Package, permModule: 'products' },
+        ]
+    },
+    {
+        id: 'accounts_group',
+        labelKey: 'menu_section_accounts',
+        icon: Building2,
+        type: 'group',
+        children: [
+            { id: 'accounts', labelKey: 'menu_chartOfAccounts', icon: Building2, permModule: 'chart_of_accounts' },
+            { id: 'cashbank', labelKey: 'menu_cashBank', icon: Wallet, permModule: 'cash_bank' },
+        ]
+    },
+    {
+        id: 'invoices_group',
+        labelKey: 'menu_section_invoices',
+        icon: ShoppingCart,
+        type: 'group',
+        children: [
+            { id: 'pos', labelKey: 'menu_pos', icon: Monitor, permModule: 'pos' },
+            { id: 'sales', labelKey: 'menu_sales', icon: ShoppingCart, permModule: 'sales_invoices' },
+            { id: 'sales_returns', labelKey: 'menu_sales_returns', icon: Undo, permModule: 'sales_returns' },
+            { id: 'purchases', labelKey: 'menu_purchases', icon: ShoppingBag, permModule: 'purchase_invoices' },
+            { id: 'purchase_returns', labelKey: 'menu_purchase_returns', icon: RotateCcw, permModule: 'purchase_returns' },
+        ]
+    },
+    {
+        id: 'financial_group',
+        labelKey: 'menu_section_financial',
+        icon: CreditCard,
+        type: 'group',
+        children: [
+            { id: 'vouchers', labelKey: 'menu_vouchers', icon: CreditCard, permModule: 'receipt_vouchers' },
+            { id: 'journal', labelKey: 'menu_journal', icon: BookOpen, permModule: 'journal_entries' },
+        ]
+    },
+    {
+        id: 'other_group',
+        labelKey: 'menu_section_other',
+        icon: Settings,
+        type: 'group',
+        children: [
+            { id: 'hr', labelKey: 'menu_hr', icon: UserCheck, permModule: 'hr' },
+            { id: 'expenses', labelKey: 'menu_expenses', icon: TrendingDown, permModule: 'expenses' },
+            { id: 'warehouse', labelKey: 'menu_warehouse', icon: Warehouse, permModule: 'warehouse' },
+            { id: 'offers', labelKey: 'offers_and_coupons', icon: Ticket, permModule: 'offers' },
+            { id: 'quotations', labelKey: 'menu_quotations', icon: FileText, permModule: 'quotations' },
+            { id: 'reports', labelKey: 'menu_reports', icon: BarChart3, permModule: 'reports' },
+            { id: 'settings', labelKey: 'menu_settings', icon: Settings, permModule: 'settings' },
+        ]
+    }
+];
+
 function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
     const { user, logout, theme, toggleTheme, t, language } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(currentPage === 'pos');
 
     useEffect(() => {
-        if (currentPage === 'pos') {
-            setSidebarCollapsed(true);
-        } else {
-            setSidebarCollapsed(false);
-        }
+        setSidebarCollapsed(currentPage === 'pos');
     }, [currentPage]);
-
-    const menuItems = [
-        { id: 'dashboard', labelKey: 'menu_dashboard', icon: Home, permModule: 'dashboard' },
-        { 
-            id: 'clients', 
-            labelKey: 'menu_section_clients', 
-            icon: Users,
-            type: 'group',
-            children: [
-                { id: 'customers', labelKey: 'menu_customers', icon: Users, permModule: 'customers' },
-                { id: 'suppliers', labelKey: 'menu_suppliers', icon: Truck, permModule: 'suppliers' },
-                { id: 'products', labelKey: 'menu_products', icon: Package, permModule: 'products' },
-            ]
-        },
-        {
-            id: 'accounts_group',
-            labelKey: 'menu_section_accounts',
-            icon: Building2,
-            type: 'group',
-            children: [
-                { id: 'accounts', labelKey: 'menu_chartOfAccounts', icon: Building2, permModule: 'chart_of_accounts' },
-                { id: 'cashbank', labelKey: 'menu_cashBank', icon: Wallet, permModule: 'cash_bank' },
-            ]
-        },
-        {
-            id: 'invoices_group',
-            labelKey: 'menu_section_invoices',
-            icon: ShoppingCart,
-            type: 'group',
-            children: [
-                { id: 'pos', labelKey: 'menu_pos', icon: Monitor, permModule: 'pos' },
-                { id: 'sales', labelKey: 'menu_sales', icon: ShoppingCart, permModule: 'sales_invoices' },
-                { id: 'sales_returns', labelKey: 'menu_sales_returns', icon: Undo, permModule: 'sales_returns' },
-                { id: 'purchases', labelKey: 'menu_purchases', icon: ShoppingBag, permModule: 'purchase_invoices' },
-                { id: 'purchase_returns', labelKey: 'menu_purchase_returns', icon: RotateCcw, permModule: 'purchase_returns' },
-            ]
-        },
-        {
-            id: 'financial_group',
-            labelKey: 'menu_section_financial',
-            icon: CreditCard,
-            type: 'group',
-            children: [
-                { id: 'vouchers', labelKey: 'menu_vouchers', icon: CreditCard, permModule: 'receipt_vouchers' },
-                { id: 'journal', labelKey: 'menu_journal', icon: BookOpen, permModule: 'journal_entries' },
-            ]
-        },
-        {
-            id: 'other_group',
-            labelKey: 'menu_section_other',
-            icon: Settings,
-            type: 'group',
-            children: [
-                { id: 'hr', labelKey: 'menu_hr', icon: UserCheck, permModule: 'hr' },
-                { id: 'expenses', labelKey: 'menu_expenses', icon: TrendingDown, permModule: 'expenses' },
-                { id: 'warehouse', labelKey: 'menu_warehouse', icon: Warehouse, permModule: 'warehouse' },
-                { id: 'offers', labelKey: 'offers_and_coupons', icon: Ticket, permModule: 'offers' },
-                { id: 'quotations', labelKey: 'menu_quotations', icon: FileText, permModule: 'quotations' },
-                { id: 'reports', labelKey: 'menu_reports', icon: BarChart3, permModule: 'reports' },
-                { id: 'settings', labelKey: 'menu_settings', icon: Settings, permModule: 'settings' },
-            ]
-        }
-    ];
 
     // Filter menu items based on user permissions
     const userPerms = user?.permissions || {};
     const isAdmin = user?.role === 'admin';
 
-    const filteredMenuItems = (() => {
+    const filteredMenuItems = useMemo(() => {
         const result = [];
         for (const item of menuItems) {
             if (item.type === 'group') {
@@ -108,7 +104,7 @@ function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
             }
         }
         return result;
-    })();
+    }, [userPerms, isAdmin]);
 
     const [expandedGroups, setExpandedGroups] = useState(() => {
         const initialStates = {};
@@ -219,7 +215,7 @@ function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
                                             }} 
                                         />
                                     </div>
-                                    {isExpanded && !sidebarCollapsed && (
+                                    {isExpanded && (
                                         <div className="nav-group-children">
                                             {item.children.map((child) => {
                                                 const ChildIcon = child.icon;

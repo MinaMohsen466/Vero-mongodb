@@ -76,12 +76,8 @@ function Reports() {
 
             if (activeReport === 'sales_summary') {
                 // Monthly sales chart + totals
-                const allInvoices = await window.api.invoices.getAll('sales');
-                const filtered = (allInvoices || []).filter(inv => {
-                    if (filters.start_date && inv.date < filters.start_date) return false;
-                    if (filters.end_date && inv.date > filters.end_date) return false;
-                    return true;
-                });
+                const reportRes = await window.api.reports.salesReport(filters.start_date, filters.end_date);
+                const filtered = reportRes.invoices || [];
                 // Group by month
                 const byMonth = {};
                 filtered.forEach(inv => {
@@ -97,18 +93,14 @@ function Reports() {
                     ...r,
                     label: (() => { const [y, m] = r.month.split('-'); return `${MONTHS_AR[parseInt(m) - 1]} ${y}`; })()
                 }));
-                const totalSales = filtered.reduce((s, i) => s + (i.total || 0), 0);
+                const totalSales = reportRes.total || 0;
                 const totalPaid = filtered.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0);
                 const totalPending = filtered.filter(i => i.status !== 'paid').reduce((s, i) => s + (i.total || 0), 0);
                 data = { type: 'sales_summary', chartData, totalSales, totalPaid, totalPending, count: filtered.length, invoices: filtered.slice(0, 50) };
 
             } else if (activeReport === 'purchases_summary') {
-                const allInvoices = await window.api.invoices.getAll('purchase');
-                const filtered = (allInvoices || []).filter(inv => {
-                    if (filters.start_date && inv.date < filters.start_date) return false;
-                    if (filters.end_date && inv.date > filters.end_date) return false;
-                    return true;
-                });
+                const reportRes = await window.api.reports.purchasesReport(filters.start_date, filters.end_date);
+                const filtered = reportRes.invoices || [];
                 const byMonth = {};
                 filtered.forEach(inv => {
                     const m = inv.date?.substring(0, 7);
@@ -121,94 +113,23 @@ function Reports() {
                     ...r,
                     label: (() => { const [y, m] = r.month.split('-'); return `${MONTHS_AR[parseInt(m) - 1]} ${y}`; })()
                 }));
-                const total = filtered.reduce((s, i) => s + (i.total || 0), 0);
+                const total = reportRes.total || 0;
                 data = { type: 'purchases_summary', chartData, total, count: filtered.length, invoices: filtered.slice(0, 50) };
 
             } else if (activeReport === 'profit_loss') {
-                const [sales, purchases, expensesRows, salaries, allProducts, allAccounts] = await Promise.all([
-                    window.api.invoices.getAll('sales'),
-                    window.api.invoices.getAll('purchase'),
-                    window.api.expenses.getAll(),
-                    window.api.salaries.getAll(),
-                    window.api.products.getAll(),
-                    window.api.accounts.getAll()
-                ]);
-                const filterFn = inv => {
-                    if (filters.start_date && inv.date < filters.start_date) return false;
-                    if (filters.end_date && inv.date > filters.end_date) return false;
-                    return true;
-                };
-                const dateInRange = date => {
-                    if (!date) return false;
-                    const d = String(date).substring(0, 10);
-                    if (filters.start_date && d < filters.start_date) return false;
-                    if (filters.end_date && d > filters.end_date) return false;
-                    return true;
-                };
-                const filteredSales = (sales || []).filter(filterFn);
-                const filteredPurchases = (purchases || []).filter(filterFn);
-                const filteredExpenses = (expensesRows || []).filter(ex => dateInRange(ex.date));
-                const salaryFallback = (salaries || []).filter(s => {
-                    const alreadyInExpenses = filteredExpenses.some(ex =>
-                        (ex.source_type === 'salary' && Number(ex.source_id) === Number(s.id)) ||
-                        ex.payment_number === s.payment_number
-                    );
-                    return !alreadyInExpenses && dateInRange(s.payment_date || s.created_at);
-                });
-                const totalExpensesAmt = filteredExpenses.reduce((sum, ex) => sum + (parseFloat(ex.amount) || 0), 0)
-                    + salaryFallback.reduce((sum, s) => sum + (parseFloat(s.net_salary) || 0), 0);
-                const totalSalesAmt = filteredSales.reduce((s, i) => s + (i.total || 0), 0);
-                const totalPurchasesAmt = filteredPurchases.reduce((s, i) => s + (i.total || 0), 0);
-                const activeProducts = (allProducts || []).filter(p => p.is_active);
-                // Ending Inventory (بضاعة آخر المدة) = current stock value
-                const endingInventory = activeProducts.reduce((s, p) => s + ((parseFloat(p.stock_quantity) || 0) * (parseFloat(p.purchase_price) || 0)), 0);
-                // Beginning Inventory (بضاعة أول المدة) = Ending Inventory + Purchases sold - Purchases bought
-                // Formula: Beginning Inventory = Ending Inventory - Purchases + COGS
-                // Since COGS = Beginning Inventory + Purchases - Ending Inventory
-                // We approximate: Beginning Inventory = Ending Inventory + (Sales cost) - Purchases
-                // But correctly: Beginning Inventory = Ending Inventory - Total Purchases + Cost of goods sold during the period
-                // The correct relation is: Beginning Inventory + Purchases = COGS + Ending Inventory
-                // So: Beginning Inventory = COGS + Ending Inventory - Purchases
-                // But we don't know COGS independently. In a periodic inventory system:
-                // Beginning Inventory is the ending inventory from the previous period.
-                // For now, we calculate: COGS = Total Purchases + Beginning Inventory - Ending Inventory
-                // Since we don't track beginning inventory separately, we set it to 0 for the first period
-                // The user's equation: Total Sales + Ending Inventory = Total Purchases + Beginning Inventory + Expenses
-                // Rearranging: Profit/Loss = (Total Sales + Ending Inventory) - (Total Purchases + Beginning Inventory + Expenses)
-                const beginningInventory = 0; // Will be 0 unless user sets it; in a periodic system this would be previous period's ending
-                const cogs = totalPurchasesAmt + beginningInventory - endingInventory;
-                const grossProfit = totalSalesAmt - cogs;
-                // The equation: Total Sales + Ending Inventory = Total Purchases + Beginning Inventory + Expenses + Net Profit
-                // So: Net Profit = (Total Sales + Ending Inventory) - (Total Purchases + Beginning Inventory + Expenses)
-                const rightSide = totalPurchasesAmt + beginningInventory + totalExpensesAmt;
-                const leftSide = totalSalesAmt + endingInventory;
-                const netProfit = leftSide - rightSide;
-                // Calculate cash & bank balances (codes 111=Cash, 112=Bank)
-                const cashAccounts = (allAccounts || []).filter(a => a.code === '111' || a.code?.startsWith('111.'));
-                const bankAccounts = (allAccounts || []).filter(a => a.code === '112' || a.code?.startsWith('112.'));
-                const cashBalance = cashAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
-                const bankBalance = bankAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
-                const cashBankBalance = cashBalance + bankBalance;
-                const lowStock = activeProducts.filter(p => (p.stock_quantity || 0) <= 5);
-                // Monthly both
-                const byMonth = {};
-                filteredSales.forEach(inv => {
-                    const m = inv.date?.substring(0, 7);
-                    if (!m) return;
-                    byMonth[m] = byMonth[m] || { month: m, label: '', sales: 0, purchases: 0, profit: 0 };
-                    byMonth[m]['sales'] += inv.total || 0;
-                });
-                filteredPurchases.forEach(inv => {
-                    const m = inv.date?.substring(0, 7);
-                    if (!m) return;
-                    byMonth[m] = byMonth[m] || { month: m, label: '', sales: 0, purchases: 0, profit: 0 };
-                    byMonth[m]['purchases'] += inv.total || 0;
-                });
-                const chartData = Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month)).map(r => {
+                const reportRes = await window.api.reports.profitLoss(filters.start_date, filters.end_date);
+                const chartData = (reportRes.chartData || []).map(r => {
                     const [y, m] = r.month.split('-');
-                    return { ...r, label: `${MONTHS_AR[parseInt(m) - 1]}`, profit: r['sales'] - r['purchases'] };
+                    return {
+                        ...r,
+                        label: `${MONTHS_AR[parseInt(m) - 1]} ${y}`
+                    };
                 });
-                data = { type: 'profit_loss', totalSales: totalSalesAmt, totalPurchases: totalPurchasesAmt, totalExpenses: totalExpensesAmt, cogs, grossProfit, profit: netProfit, chartData, products: activeProducts, endingInventory, beginningInventory, lowStock, cashBankBalance, cashBalance, bankBalance, leftSide, rightSide };
+                data = {
+                    type: 'profit_loss',
+                    ...reportRes,
+                    chartData
+                };
 
             } else if (activeReport === 'customer_statement') {
                 if (!filters.customer_id) { setLoading(false); return; }
@@ -262,68 +183,10 @@ function Reports() {
                 const tb = await window.api.reports.trialBalance(filters.end_date);
                 data = { type: 'trial_balance', ...tb };
             } else if (activeReport === 'detailed_inventory') {
-                const [sales, purchases, allProducts] = await Promise.all([
-                    window.api.invoices.getAll('sales'),
-                    window.api.invoices.getAll('purchase'),
-                    window.api.products.getAll()
-                ]);
-                const filterFn = inv => {
-                    if (filters.start_date && inv.date < filters.start_date) return false;
-                    if (filters.end_date && inv.date > filters.end_date) return false;
-                    return true;
-                };
-                const filteredSales = (sales || []).filter(filterFn);
-                const filteredPurchases = (purchases || []).filter(filterFn);
-
-                const salesQtyMap = {};
-                filteredSales.forEach(inv => {
-                    if (inv.items && Array.isArray(inv.items)) {
-                        inv.items.forEach(item => {
-                            if (item.product_id) {
-                                salesQtyMap[item.product_id] = (salesQtyMap[item.product_id] || 0) + (parseFloat(item.quantity) || 0);
-                            }
-                        });
-                    }
-                });
-
-                const purchaseQtyMap = {};
-                filteredPurchases.forEach(inv => {
-                    if (inv.items && Array.isArray(inv.items)) {
-                        inv.items.forEach(item => {
-                            if (item.product_id) {
-                                purchaseQtyMap[item.product_id] = (purchaseQtyMap[item.product_id] || 0) + (parseFloat(item.quantity) || 0);
-                            }
-                        });
-                    }
-                });
-
-                const productsData = (allProducts || []).map(p => {
-                    const qtySold = salesQtyMap[p.id] || 0;
-                    const qtyPurchased = purchaseQtyMap[p.id] || 0;
-                    const cogs = qtySold * (parseFloat(p.purchase_price) || 0);
-                    const stockValue = (parseFloat(p.stock_quantity) || 0) * (parseFloat(p.purchase_price) || 0);
-                    return {
-                        ...p,
-                        qtySold,
-                        qtyPurchased,
-                        cogs,
-                        stockValue,
-                        status: (parseFloat(p.stock_quantity) || 0) <= 0 ? 'out' : (parseFloat(p.stock_quantity) || 0) <= 5 ? 'low' : 'safe'
-                    };
-                });
-
-                const totalValue = productsData.reduce((sum, p) => sum + p.stockValue, 0);
-                const totalCogs = productsData.reduce((sum, p) => sum + p.cogs, 0);
-                const totalQtySold = productsData.reduce((sum, p) => sum + p.qtySold, 0);
-                const totalQtyPurchased = productsData.reduce((sum, p) => sum + p.qtyPurchased, 0);
-
+                const reportRes = await window.api.reports.detailedInventory(filters.start_date, filters.end_date);
                 data = {
                     type: 'detailed_inventory',
-                    products: productsData,
-                    totalValue,
-                    totalCogs,
-                    totalQtySold,
-                    totalQtyPurchased
+                    ...reportRes
                 };
 
             } else if (activeReport === 'aging_report') {

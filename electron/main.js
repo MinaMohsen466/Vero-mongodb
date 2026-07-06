@@ -393,6 +393,8 @@ ipcMain.handle('reports:accountStatement', async (event, { accountId, startDate,
 ipcMain.handle('reports:trialBalance', async (event, { date }) => db.reports.trialBalance(date));
 ipcMain.handle('reports:salesReport', async (event, { startDate, endDate }) => db.reports.salesReport(startDate, endDate));
 ipcMain.handle('reports:purchasesReport', async (event, { startDate, endDate }) => db.reports.purchasesReport(startDate, endDate));
+ipcMain.handle('reports:profitLoss', async (event, { startDate, endDate }) => db.reports.profitLoss(startDate, endDate));
+ipcMain.handle('reports:detailedInventory', async (event, { startDate, endDate }) => db.reports.detailedInventory(startDate, endDate));
 
 // --- Offers & Coupons ---
 ipcMain.handle('coupons:getAll', async () => db.coupons.getAll());

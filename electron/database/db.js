@@ -1896,6 +1896,167 @@ class ReportsRepo {
         const invoices = this.db.all(sql, params);
         return { invoices, total: invoices.reduce((s, i) => s + i.total, 0), count: invoices.length };
     }
+    profitLoss(startDate, endDate) {
+        // 1. Calculate Total Sales
+        let salesSql = "SELECT COALESCE(SUM(total), 0) as total FROM invoices WHERE type='sales'";
+        const salesParams = [];
+        if (startDate) { salesSql += " AND date >= ?"; salesParams.push(startDate); }
+        if (endDate) { salesSql += " AND date <= ?"; salesParams.push(endDate); }
+        const totalSalesAmt = this.db.get(salesSql, salesParams).total || 0;
+
+        // 2. Calculate Total Purchases
+        let purchasesSql = "SELECT COALESCE(SUM(total), 0) as total FROM invoices WHERE type='purchase'";
+        const purchasesParams = [];
+        if (startDate) { purchasesSql += " AND date >= ?"; purchasesParams.push(startDate); }
+        if (endDate) { purchasesSql += " AND date <= ?"; purchasesParams.push(endDate); }
+        const totalPurchasesAmt = this.db.get(purchasesSql, purchasesParams).total || 0;
+
+        // 3. Calculate Expenses (includes fallback salaries)
+        const totalExpensesAmt = this.db.expenses.getTotal(startDate, endDate);
+
+        // 4. Calculate Inventory values
+        const activeProducts = this.db.all("SELECT id, name, code, category, stock_quantity, purchase_price FROM products WHERE is_active=1");
+        const endingInventory = activeProducts.reduce((s, p) => s + ((parseFloat(p.stock_quantity) || 0) * (parseFloat(p.purchase_price) || 0)), 0);
+        const beginningInventory = 0; // standard fallback
+        
+        const cogs = totalPurchasesAmt + beginningInventory - endingInventory;
+        const grossProfit = totalSalesAmt - cogs;
+        const rightSide = totalPurchasesAmt + beginningInventory + totalExpensesAmt;
+        const leftSide = totalSalesAmt + endingInventory;
+        const netProfit = leftSide - rightSide;
+
+        // 5. Calculate Low Stock
+        const lowStock = activeProducts.filter(p => (p.stock_quantity || 0) <= 5);
+
+        // 6. Calculate monthly data for chart
+        let monthlySalesSql = "SELECT substr(date, 1, 7) as month, SUM(total) as total FROM invoices WHERE type='sales'";
+        const monthlySalesParams = [];
+        if (startDate) { monthlySalesSql += " AND date >= ?"; monthlySalesParams.push(startDate); }
+        if (endDate) { monthlySalesSql += " AND date <= ?"; monthlySalesParams.push(endDate); }
+        monthlySalesSql += " GROUP BY substr(date, 1, 7)";
+        const monthlySales = this.db.all(monthlySalesSql, monthlySalesParams);
+
+        let monthlyPurchasesSql = "SELECT substr(date, 1, 7) as month, SUM(total) as total FROM invoices WHERE type='purchase'";
+        const monthlyPurchasesParams = [];
+        if (startDate) { monthlyPurchasesSql += " AND date >= ?"; monthlyPurchasesParams.push(startDate); }
+        if (endDate) { monthlyPurchasesSql += " AND date <= ?"; monthlyPurchasesParams.push(endDate); }
+        monthlyPurchasesSql += " GROUP BY substr(date, 1, 7)";
+        const monthlyPurchases = this.db.all(monthlyPurchasesSql, monthlyPurchasesParams);
+
+        const byMonth = {};
+        monthlySales.forEach(r => {
+            if (!r.month) return;
+            byMonth[r.month] = { month: r.month, label: '', sales: r.total || 0, purchases: 0, profit: 0 };
+        });
+        monthlyPurchases.forEach(r => {
+            if (!r.month) return;
+            byMonth[r.month] = byMonth[r.month] || { month: r.month, label: '', sales: 0, purchases: 0, profit: 0 };
+            byMonth[r.month].purchases = r.total || 0;
+        });
+
+        const MONTHS_AR = [
+            'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+            'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+        ];
+
+        const chartData = Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month)).map(r => {
+            const [y, m] = r.month.split('-');
+            return {
+                ...r,
+                label: MONTHS_AR[parseInt(m) - 1] || r.month,
+                profit: r.sales - r.purchases
+            };
+        });
+
+        // 7. Get Cash & Bank balance
+        const allAccounts = this.db.all("SELECT code, balance FROM accounts");
+        const cashAccounts = allAccounts.filter(a => a.code === '111' || a.code?.startsWith('111.'));
+        const bankAccounts = allAccounts.filter(a => a.code === '112' || a.code?.startsWith('112.'));
+        const cashBalance = cashAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+        const bankBalance = bankAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+        const cashBankBalance = cashBalance + bankBalance;
+
+        return {
+            totalSales: totalSalesAmt,
+            totalPurchases: totalPurchasesAmt,
+            totalExpenses: totalExpensesAmt,
+            cogs,
+            grossProfit,
+            profit: netProfit,
+            chartData,
+            products: activeProducts,
+            endingInventory,
+            beginningInventory,
+            lowStock,
+            cashBankBalance,
+            cashBalance,
+            bankBalance,
+            leftSide,
+            rightSide
+        };
+    }
+    detailedInventory(startDate, endDate) {
+        // Query products with computed sold and purchased quantities in the date range
+        let sql = `
+            SELECT 
+                p.*,
+                COALESCE((
+                    SELECT SUM(ii.quantity) 
+                    FROM invoice_items ii 
+                    JOIN invoices i ON ii.invoice_id = i.id 
+                    WHERE ii.product_id = p.id AND i.type = 'sales'
+        `;
+        const params = [];
+        if (startDate) { sql += " AND i.date >= ?"; params.push(startDate); }
+        if (endDate) { sql += " AND i.date <= ?"; params.push(endDate); }
+        sql += `
+                ), 0) as qtySold,
+                COALESCE((
+                    SELECT SUM(ii.quantity) 
+                    FROM invoice_items ii 
+                    JOIN invoices i ON ii.invoice_id = i.id 
+                    WHERE ii.product_id = p.id AND i.type = 'purchase'
+        `;
+        if (startDate) { sql += " AND i.date >= ?"; params.push(startDate); }
+        if (endDate) { sql += " AND i.date <= ?"; params.push(endDate); }
+        sql += `
+                ), 0) as qtyPurchased
+            FROM products p
+            WHERE p.is_active = 1
+        `;
+
+        const products = this.db.all(sql, [...params, ...params]);
+        
+        const productsData = products.map(p => {
+            const qtySold = parseFloat(p.qtySold) || 0;
+            const qtyPurchased = parseFloat(p.qtyPurchased) || 0;
+            const purchasePrice = parseFloat(p.purchase_price) || 0;
+            const stockQty = parseFloat(p.stock_quantity) || 0;
+            const cogs = qtySold * purchasePrice;
+            const stockValue = stockQty * purchasePrice;
+            return {
+                ...p,
+                qtySold,
+                qtyPurchased,
+                cogs,
+                stockValue,
+                status: stockQty <= 0 ? 'out' : stockQty <= 5 ? 'low' : 'safe'
+            };
+        });
+
+        const totalValue = productsData.reduce((sum, p) => sum + p.stockValue, 0);
+        const totalCogs = productsData.reduce((sum, p) => sum + p.cogs, 0);
+        const totalQtySold = productsData.reduce((sum, p) => sum + p.qtySold, 0);
+        const totalQtyPurchased = productsData.reduce((sum, p) => sum + p.qtyPurchased, 0);
+
+        return {
+            products: productsData,
+            totalValue,
+            totalCogs,
+            totalQtySold,
+            totalQtyPurchased
+        };
+    }
 }
 
 class SettingsRepo {

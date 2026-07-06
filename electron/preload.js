@@ -104,7 +104,11 @@ contextBridge.exposeInMainWorld('api', {
         salesReport: (startDate, endDate) =>
             ipcRenderer.invoke('reports:salesReport', { startDate, endDate }),
         purchasesReport: (startDate, endDate) =>
-            ipcRenderer.invoke('reports:purchasesReport', { startDate, endDate })
+            ipcRenderer.invoke('reports:purchasesReport', { startDate, endDate }),
+        profitLoss: (startDate, endDate) =>
+            ipcRenderer.invoke('reports:profitLoss', { startDate, endDate }),
+        detailedInventory: (startDate, endDate) =>
+            ipcRenderer.invoke('reports:detailedInventory', { startDate, endDate })
     },
 
     // Settings
