@@ -877,10 +877,22 @@ function Products() {
                                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowCustomUnit(false); setFormData({ ...formData, unit: t('prod_piece') || 'قطعة' }); }}>{t('cancel') || 'إلغاء'}</button>
                                 </div>
                             ) : (
-                                <select className="form-select" value={formData.unit} onChange={(e) => handleUnitChange(e.target.value)} style={{ height: '40px' }}>
-                                    {units.map(u => <option key={u} value={u}>{u}</option>)}
-                                    <option value="__custom__">{t('prod_customUnit') || "+ وحدة مخصصة..."}</option>
-                                </select>
+                                <SearchableSelect
+                                    options={[
+                                        { value: '__custom__', label: t('prod_customUnit') || "+ وحدة مخصصة..." },
+                                        ...units.map(u => ({ value: u, label: u }))
+                                    ]}
+                                    value={formData.unit}
+                                    onChange={(val) => {
+                                        if (val === '__custom__') {
+                                            setShowCustomUnit(true);
+                                        } else {
+                                            handleUnitChange(val);
+                                        }
+                                    }}
+                                    placeholder={t('prod_unit') || "الوحدة"}
+                                    emptyLabel={t('prod_unit') || "الوحدة"}
+                                />
                             )}
                         </div>
 
@@ -896,41 +908,42 @@ function Products() {
 
                         {/* بطاقة الأسعار والمخزون */}
                         <div style={{ 
-                            background: 'var(--bg-secondary)', 
+                            background: 'var(--surface)', 
                             border: '1px solid var(--border)', 
                             borderRadius: '12px', 
                             padding: '14px',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '8px'
+                            gap: '8px',
+                            '--input-bg': 'var(--surface)'
                         }}>
                             <div style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', paddingBottom: '4px', marginBottom: '2px' }}>
-                                📊 {t('invoice_details') || 'التسعير والمخزون'}
+                                📊 {t('prod_pricingAndStock') || 'التسعير والمخزون'}
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px 12px' }}>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_dozenPrice') || 'سعر الدرزن'}</label>
-                                    <input type="number" className="form-input" value={formData.dozen_price} onChange={(e) => handleDozenPriceChange(e.target.value)} step="any" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <input type="number" className="form-input" value={formData.dozen_price} onChange={(e) => handleDozenPriceChange(e.target.value)} step="any" min="0" style={{ height: '40px' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_dozenQty') || 'الكمية في الدرزن'}</label>
-                                    <input type="number" className="form-input" value={formData.dozen_qty} onChange={(e) => handleDozenQtyChange(e.target.value)} step="any" min="1" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <input type="number" className="form-input" value={formData.dozen_qty} onChange={(e) => handleDozenQtyChange(e.target.value)} step="any" min="1" style={{ height: '40px' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_purchasePrice')} *</label>
-                                    <input type="number" className="form-input" value={formData.purchase_price} onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value, dozen_price: '', dozen_qty: '' })} step="any" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <input type="number" className="form-input" value={formData.purchase_price} onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value, dozen_price: '', dozen_qty: '' })} step="any" min="0" style={{ height: '40px' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_salePrice')}</label>
-                                    <input type="number" className="form-input" value={formData.sale_price} onChange={(e) => setFormData({ ...formData, sale_price: e.target.value })} step="any" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <input type="number" className="form-input" value={formData.sale_price} onChange={(e) => setFormData({ ...formData, sale_price: e.target.value })} step="any" min="0" style={{ height: '40px' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_stock') || 'مخزون المحل'}</label>
-                                    <input type="number" className="form-input" value={formData.shop_stock} onChange={(e) => setFormData({ ...formData, shop_stock: e.target.value })} min="0" step="any" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <input type="number" className="form-input" value={formData.shop_stock} onChange={(e) => setFormData({ ...formData, shop_stock: e.target.value })} min="0" step="any" style={{ height: '40px' }} />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>{t('prod_minStock')}</label>
-                                    <input type="number" className="form-input" value={formData.min_stock} onChange={(e) => setFormData({ ...formData, min_stock: e.target.value })} step="any" min="0" style={{ height: '38px', fontSize: '0.85rem' }} />
+                                    <input type="number" className="form-input" value={formData.min_stock} onChange={(e) => setFormData({ ...formData, min_stock: e.target.value })} step="any" min="0" style={{ height: '40px' }} />
                                 </div>
                             </div>
                         </div>

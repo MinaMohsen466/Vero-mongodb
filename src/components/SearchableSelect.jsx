@@ -69,19 +69,19 @@ function SearchableSelect({ options = [], value, onChange, placeholder, emptyLab
     };
 
     return (
-        <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
+        <div ref={containerRef} className={`searchable-select-container ${open ? 'open' : ''}`} style={{ position: 'relative', width: '100%' }}>
             {/* Trigger button */}
             <div
                 onClick={handleTriggerClick}
                 style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 12px', borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border)', borderRadius: '8px',
+                    padding: '8px 12px', borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border)', borderRadius: 'var(--radius-lg)',
                     background: disabled ? 'var(--bg-secondary)' : 'var(--bg-primary)',
                     cursor: disabled ? 'not-allowed' : 'pointer', minHeight: '42px',
                     color: selectedOption ? 'var(--text-primary)' : 'var(--text-muted)',
                     opacity: disabled ? 0.6 : 1,
                     transition: 'border-color 0.2s',
-                    ...(open ? { borderColor: 'var(--primary)', boxShadow: '0 0 0 3px rgba(59,130,246,0.1)' } : {}),
+                    ...(open ? { borderColor: 'var(--primary)' } : {}),
                     userSelect: 'none',
                 }}
             >
