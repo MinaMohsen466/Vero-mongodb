@@ -19,6 +19,14 @@ function OffersAndCoupons() {
     const [formData, setFormData] = useState({});
     const [settings, setSettings] = useState({});
 
+    const productOptions = useMemo(() => {
+        return products.map(p => ({ value: String(p.id), label: p.name, subLabel: p.code }));
+    }, [products]);
+
+    const categoryOptions = useMemo(() => {
+        return categories.map(c => ({ value: c, label: c }));
+    }, [categories]);
+
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
@@ -334,7 +342,7 @@ const OfferForm = React.memo(({ activeTab, formData, setFormData, categories, pr
                         <div className="form-group">
                             <label className="form-label">{t('target_category') || 'Category'} *</label>
                             <SearchableSelect
-                                options={categories.map(c => ({ value: c, label: c }))}
+                                options={categoryOptions}
                                 value={formData.target_id || ''}
                                 onChange={val => setFormData({ ...formData, target_id: val })}
                                 placeholder={t('select') || 'اختر...'}
@@ -345,7 +353,7 @@ const OfferForm = React.memo(({ activeTab, formData, setFormData, categories, pr
                         <div className="form-group">
                             <label className="form-label">{t('target_product') || 'Product'} *</label>
                             <SearchableSelect
-                                options={products.map(p => ({ value: String(p.id), label: p.name, subLabel: p.code }))}
+                                options={productOptions}
                                 value={formData.target_id ? String(formData.target_id) : ''}
                                 onChange={val => setFormData({ ...formData, target_id: val })}
                                 placeholder={t('select_product') || 'اختر منتجاً...'}

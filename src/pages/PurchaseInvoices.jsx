@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Eye, Trash2, Search, ShoppingBag, Printer, X, Edit, Download } from 'lucide-react';
 import Modal from '../components/Modal';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
@@ -46,6 +46,18 @@ function PurchaseInvoices() {
 
     const [formData, setFormData] = useState(emptyForm());
     const searchInputRef = React.useRef(null);
+
+    const productOptions = useMemo(() => {
+        return products.map(p => ({ value: String(p.id), label: p.name, subLabel: p.code }));
+    }, [products]);
+
+    const supplierOptions = useMemo(() => {
+        return [...suppliers].sort((a, b) => a.code === 'SUPP-CASH' ? -1 : b.code === 'SUPP-CASH' ? 1 : 0).map(s => ({ value: String(s.id), label: s.name }));
+    }, [suppliers]);
+
+    const supplierFilterOptions = useMemo(() => {
+        return suppliers.map(s => ({ value: String(s.id), label: s.name }));
+    }, [suppliers]);
 
     useShortcuts({
         Save: (e) => {
@@ -501,7 +513,7 @@ function PurchaseInvoices() {
                 </select>
                 <div style={{ width: '200px' }}>
                     <SearchableSelect
-                        options={suppliers.map(s => ({ value: String(s.id), label: s.name }))}
+                        options={supplierFilterOptions}
                         value={supplierFilter}
                         onChange={setSupplierFilter}
                         placeholder={t('all') || "All Suppliers"}
@@ -609,7 +621,7 @@ function PurchaseInvoices() {
                             <div className="form-group" style={{ marginBottom: 0 }}>
                                 <label className="form-label" style={{ fontWeight: '600' }}>{t('pinv_supplier')}</label>
                                 <SearchableSelect
-                                    options={[...suppliers].sort((a, b) => a.code === 'SUPP-CASH' ? -1 : b.code === 'SUPP-CASH' ? 1 : 0).map(s => ({ value: String(s.id), label: s.name }))}
+                                    options={supplierOptions}
                                     value={formData.supplier_id ? String(formData.supplier_id) : ''}
                                     onChange={(val) => {
                                         const selected = suppliers.find(s => String(s.id) === String(val));
@@ -699,7 +711,7 @@ function PurchaseInvoices() {
                                         <tr key={index}>
                                             <td style={{ minWidth: '200px' }}>
                                                 <SearchableSelect
-                                                    options={products.map(p => ({ value: String(p.id), label: p.name, subLabel: p.code }))}
+                                                    options={productOptions}
                                                     value={item.product_id ? String(item.product_id) : ''}
                                                     onChange={(val) => handleProductChange(index, val)}
                                                     placeholder={t('inv_selectProduct')}

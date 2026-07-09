@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Search, Package, Image as ImageIcon, BarChart2, TrendingUp, TrendingDown, X, Calendar, RefreshCw, Upload, Download } from 'lucide-react';
 import Modal from '../components/Modal';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
@@ -32,7 +32,15 @@ function Products() {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
     const [showModal, setShowModal] = useState(false);
+
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, 150);
+        return () => clearTimeout(handler);
+    }, [searchQuery]);
     const [editingProduct, setEditingProduct] = useState(null);
     const [showCustomUnit, setShowCustomUnit] = useState(false);
     const [categoryFilter, setCategoryFilter] = useState('');
@@ -69,7 +77,7 @@ function Products() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, categoryFilter]);
+    }, [debouncedSearchQuery, categoryFilter]);
 
     const handleExportProducts = async () => {
         if (!products || products.length === 0) {
@@ -560,19 +568,26 @@ function Products() {
         }
     };
 
-    const categories = [...new Set(products.map(p => p.category).filter(Boolean))];
-    const filteredProducts = products.filter(p =>
-        (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.code?.includes(searchQuery)) &&
-        (!categoryFilter || p.category === categoryFilter)
-    ).sort((a, b) => (a.code || '').localeCompare((b.code || ''), undefined, {numeric: true, sensitivity: 'base'}));
+    const categories = useMemo(() => {
+        return [...new Set(products.map(p => p.category).filter(Boolean))];
+    }, [products]);
+
+    const filteredProducts = useMemo(() => {
+        return products.filter(p =>
+            (p.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) || p.code?.includes(debouncedSearchQuery)) &&
+            (!categoryFilter || p.category === categoryFilter)
+        ).sort((a, b) => (a.code || '').localeCompare((b.code || ''), undefined, {numeric: true, sensitivity: 'base'}));
+    }, [products, debouncedSearchQuery, categoryFilter]);
 
     const totalItems = filteredProducts.length;
     const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
     const activePage = Math.min(currentPage, totalPages);
-    const displayedProducts = filteredProducts.slice(
-        (activePage - 1) * itemsPerPage,
-        activePage * itemsPerPage
-    );
+    const displayedProducts = useMemo(() => {
+        return filteredProducts.slice(
+            (activePage - 1) * itemsPerPage,
+            activePage * itemsPerPage
+        );
+    }, [filteredProducts, activePage, itemsPerPage]);
 
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
 

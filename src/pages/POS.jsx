@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Printer, X, Check, Package, User, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuth, isColorUnit } from '../App';
@@ -121,10 +121,29 @@ function POS() {
 
     // UI
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
     const [searchFocused, setSearchFocused] = useState(false);
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [suppliers, setSuppliers] = useState([]);
     const [supplierFilter, setSupplierFilter] = useState('all');
+
+    // Infinite scroll pagination for products grid
+    const [visibleCount, setVisibleCount] = useState(100);
+    const gridContainerRef = useRef(null);
+
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, 150);
+        return () => clearTimeout(handler);
+    }, [searchQuery]);
+
+    useEffect(() => {
+        setVisibleCount(100);
+        if (gridContainerRef.current) {
+            gridContainerRef.current.scrollTop = 0;
+        }
+    }, [debouncedSearchQuery, categoryFilter, supplierFilter]);
     const [showPayModal, setShowPayModal] = useState(false);
     const [payMethod, setPayMethod] = useState('cash');
     const [amountPaid, setAmountPaid] = useState('');
@@ -236,7 +255,18 @@ function POS() {
                 window.api.offers.getActive(),
                 window.api.suppliers.getAll()
             ]);
-            const active = (prods || []).filter(p => p.is_active);
+            const active = (prods || []).filter(p => p.is_active).map(p => {
+                let parsedSuppliers = [];
+                try {
+                    parsedSuppliers = JSON.parse(p.supplier_ids || '[]');
+                } catch (e) {
+                    parsedSuppliers = p.supplier_id ? [String(p.supplier_id)] : [];
+                }
+                return {
+                    ...p,
+                    _parsedSuppliers: Array.isArray(parsedSuppliers) ? parsedSuppliers.map(String) : []
+                };
+            });
             setAllProducts(active);
             setProducts(active);
             setCustomers(custs || []);
@@ -256,7 +286,18 @@ function POS() {
         if (showIndicator) setRefreshing(true);
         try {
             const prods = await window.api.products.getAllSortedBySales();
-            const active = (prods || []).filter(p => p.is_active);
+            const active = (prods || []).filter(p => p.is_active).map(p => {
+                let parsedSuppliers = [];
+                try {
+                    parsedSuppliers = JSON.parse(p.supplier_ids || '[]');
+                } catch (e) {
+                    parsedSuppliers = p.supplier_id ? [String(p.supplier_id)] : [];
+                }
+                return {
+                    ...p,
+                    _parsedSuppliers: Array.isArray(parsedSuppliers) ? parsedSuppliers.map(String) : []
+                };
+            });
             setAllProducts(active);
             setProducts(active);
             // Update cart stock info
@@ -453,34 +494,35 @@ function POS() {
     const total = subtotal - discountAmount;
     const change = parseFloat(amountPaid) - total;
 
-    const categories = ['all', ...new Set(products.map(p => p.category).filter(Boolean))];
+    const categories = useMemo(() => {
+        return ['all', ...new Set(products.map(p => p.category).filter(Boolean))];
+    }, [products]);
 
-    const filtered = products.filter(p => {
-        const matchSearch = p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            p.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            p.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            p.category?.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchCat = categoryFilter === 'all' || p.category === categoryFilter;
-        
-        let matchSupp = false;
-        if (supplierFilter === 'all') {
-            matchSupp = true;
-        } else {
-            try {
-                const ids = JSON.parse(p.supplier_ids || '[]');
-                if (Array.isArray(ids)) {
-                    matchSupp = ids.map(String).includes(String(supplierFilter));
-                }
-            } catch (e) {
-                matchSupp = String(p.supplier_id) === String(supplierFilter);
+    const filtered = useMemo(() => {
+        return products.filter(p => {
+            const matchSearch = p.name?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+                p.code?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+                p.description?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+                p.category?.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+            const matchCat = categoryFilter === 'all' || p.category === categoryFilter;
+            
+            let matchSupp = false;
+            if (supplierFilter === 'all') {
+                matchSupp = true;
+            } else {
+                matchSupp = p._parsedSuppliers?.includes(String(supplierFilter)) || String(p.supplier_id) === String(supplierFilter);
             }
-            if (!matchSupp && p.supplier_id) {
-                matchSupp = String(p.supplier_id) === String(supplierFilter);
-            }
+
+            return matchSearch && matchCat && matchSupp;
+        });
+    }, [products, debouncedSearchQuery, categoryFilter, supplierFilter]);
+
+    const handleScroll = (e) => {
+        const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+        if (scrollHeight - scrollTop - clientHeight < 100) {
+            setVisibleCount(prev => Math.min(filtered.length, prev + 100));
         }
-
-        return matchSearch && matchCat && matchSupp;
-    });
+    };
 
     const formatCurrency = (v) => {
         const decimals = parseInt(settings.general?.decimal_places || '3');
@@ -770,19 +812,23 @@ function POS() {
                         />
                     </div>
                 </div>                {/* Products Grid */}
-                <div style={{
-                    flex: 1, overflowY: 'auto',
-                    display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-                    gap: '12px', alignContent: 'start',
-                    paddingTop: '12px',
-                    paddingRight: '6px',
-                }}>
+                <div 
+                    ref={gridContainerRef}
+                    onScroll={handleScroll}
+                    style={{
+                        flex: 1, overflowY: 'auto',
+                        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                        gap: '12px', alignContent: 'start',
+                        paddingTop: '12px',
+                        paddingRight: '6px',
+                    }}
+                >
                     {filtered.length === 0 ? (
                         <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
                             <Package size={48} style={{ opacity: 0.3, marginBottom: '12px' }} />
                             <p>{t('no_products') || 'No Products'}</p>
                         </div>
-                    ) : filtered.map((product, i) => {
+                    ) : filtered.slice(0, visibleCount).map((product, i) => {
                         const outOfStock = product.shop_stock <= 0;
                         const color = COLORS[i % COLORS.length];
                         const inCart = cart.find(c => c.id === product.id);

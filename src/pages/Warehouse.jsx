@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../App';
 import Modal from '../components/Modal';
 import SearchableSelect from '../components/SearchableSelect';
@@ -157,14 +157,25 @@ export default function Warehouse() {
     }, []);
 
     // Filter products
-    const filteredProducts = products.filter(p => {
-        const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-                             (p.code || '').toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesCategory = !categoryFilter || p.category === categoryFilter;
-        return matchesSearch && matchesCategory;
-    });
+    const filteredProducts = useMemo(() => {
+        return products.filter(p => {
+            const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                 (p.code || '').toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesCategory = !categoryFilter || p.category === categoryFilter;
+            return matchesSearch && matchesCategory;
+        });
+    }, [products, searchQuery, categoryFilter]);
 
-    const categories = [...new Set(products.map(p => p.category).filter(Boolean))];
+    const categories = useMemo(() => {
+        return [...new Set(products.map(p => p.category).filter(Boolean))];
+    }, [products]);
+
+    const productOptions = useMemo(() => {
+        return products.map(p => ({
+            value: String(p.id),
+            label: `${p.name} (${p.code})`
+        }));
+    }, [products]);
 
     // Access permissions
     const canCreateTransfer = user?.role === 'admin' || user?.permissions?.warehouse?.can_create;
@@ -666,10 +677,7 @@ export default function Warehouse() {
                             <div className="form-group" style={{ flex: 2, minWidth: '280px', marginBottom: 0 }}>
                                 <label className="form-label" style={{ fontSize: '0.78rem' }}>{t('product') || 'المنتج'}</label>
                                 <SearchableSelect
-                                    options={availableProductsForTransfer.map(p => ({
-                                        value: String(p.id),
-                                        label: `${p.name} (${p.code})`
-                                    }))}
+                                    options={productOptions}
                                     value={selectedProductId}
                                     onChange={(val) => {
                                         setSelectedProductId(val);
@@ -896,10 +904,7 @@ export default function Warehouse() {
                     <div className="form-group">
                         <label className="form-label">{t('product') || 'المنتج'} *</label>
                         <SearchableSelect
-                            options={products.map(p => ({
-                                value: String(p.id),
-                                label: `${p.name} (${p.code})`
-                            }))}
+                            options={productOptions}
                             value={inflowProductId}
                             onChange={(val) => setInflowProductId(val)}
                             placeholder={t('select_product') || 'اختر صنفاً للمستودع...'}

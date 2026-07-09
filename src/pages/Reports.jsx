@@ -22,6 +22,7 @@ function Reports() {
     const [suppliers, setSuppliers] = useState([]);
     const [accounts, setAccounts] = useState([]);
     const [products, setProducts] = useState([]);
+    const [categories, setCategories] = useState([]);
     const [settings, setSettings] = useState({});
     const [reportData, setReportData] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -51,6 +52,8 @@ function Reports() {
             setSuppliers(s || []);
             setAccounts(a || []);
             setProducts(p || []);
+            const cats = [...new Set((p || []).map(pr => pr.category).filter(Boolean))];
+            setCategories(cats);
             setSettings(st || {});
         });
     }, []);
@@ -936,7 +939,6 @@ function Reports() {
                                             return matchesSearch && matchesCategory && matchesStock;
                                         });
                                         const filteredEndingInventory = filteredPlProducts.reduce((sum, p) => sum + ((parseFloat(p.stock_quantity) || 0) * (parseFloat(p.purchase_price) || 0)), 0);
-                                        const categories = [...new Set(products.map(pr => pr.category).filter(Boolean))];
 
                                         if (reportData.products?.length === 0) return null;
 

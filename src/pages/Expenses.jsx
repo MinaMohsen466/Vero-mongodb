@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../App';
 import Modal from '../components/Modal';
 import {
@@ -123,25 +123,32 @@ export default function Expenses() {
     }, []);
 
     // ── Filtered list ─────────────────────────────────────────────
-    const filtered = expenses.filter(ex => {
-        if (filterCategory !== 'all' && ex.category !== filterCategory) return false;
-        if (filterFrom && ex.date < filterFrom) return false;
-        if (filterTo && ex.date > filterTo) return false;
-        if (search) {
-            const q = search.toLowerCase();
-            if (!ex.description?.toLowerCase().includes(q) &&
-                !ex.payment_number?.toLowerCase().includes(q) &&
-                !getCategoryLabel(ex.category, isAr ? 'ar' : 'en').toLowerCase().includes(q)) return false;
-        }
-        return true;
-    });
+    const filtered = useMemo(() => {
+        return expenses.filter(ex => {
+            if (filterCategory !== 'all' && ex.category !== filterCategory) return false;
+            if (filterFrom && ex.date < filterFrom) return false;
+            if (filterTo && ex.date > filterTo) return false;
+            if (search) {
+                const q = search.toLowerCase();
+                if (!ex.description?.toLowerCase().includes(q) &&
+                    !ex.payment_number?.toLowerCase().includes(q) &&
+                    !getCategoryLabel(ex.category, isAr ? 'ar' : 'en').toLowerCase().includes(q)) return false;
+            }
+            return true;
+        });
+    }, [expenses, filterCategory, filterFrom, filterTo, search, isAr]);
 
     // ── Summary ────────────────────────────────────────────────────
-    const totalAll = filtered.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-    const byCategory = CATEGORIES.map(cat => ({
-        ...cat,
-        total: filtered.filter(e => e.category === cat.id).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
-    }));
+    const totalAll = useMemo(() => {
+        return filtered.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    }, [filtered]);
+
+    const byCategory = useMemo(() => {
+        return CATEGORIES.map(cat => ({
+            ...cat,
+            total: filtered.filter(e => e.category === cat.id).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+        }));
+    }, [filtered]);
 
     // ── Add expense ────────────────────────────────────────────────
     const openAdd = () => {

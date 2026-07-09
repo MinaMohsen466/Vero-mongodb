@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Eye, Trash2, BookOpen, X } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
@@ -19,6 +19,10 @@ function JournalEntries() {
         description: '', reference: '',
         lines: [{ account_id: '', debit: 0, credit: 0, description: '' }, { account_id: '', debit: 0, credit: 0, description: '' }]
     });
+
+    const accountOptions = useMemo(() => {
+        return accounts.map(a => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>);
+    }, [accounts]);
 
     useShortcuts({
         Save: (e) => {
@@ -176,7 +180,7 @@ function JournalEntries() {
                         <tbody>
                             {formData.lines.map((line, i) => (
                                 <tr key={i}>
-                                    <td><select className="form-select" value={line.account_id} onChange={(e) => handleLineChange(i, 'account_id', e.target.value)}><option value="">{t('select_account') || 'Select Account'}</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}</select></td>
+                                    <td><select className="form-select" value={line.account_id} onChange={(e) => handleLineChange(i, 'account_id', e.target.value)}><option value="">{t('select_account') || 'Select Account'}</option>{accountOptions}</select></td>
                                     <td><input type="number" className="form-input" value={line.debit} onChange={(e) => handleLineChange(i, 'debit', e.target.value)} step="0.250" /></td>
                                     <td><input type="number" className="form-input" value={line.credit} onChange={(e) => handleLineChange(i, 'credit', e.target.value)} step="0.250" /></td>
                                     <td><input type="text" className="form-input" value={line.description} onChange={(e) => handleLineChange(i, 'description', e.target.value)} /></td>

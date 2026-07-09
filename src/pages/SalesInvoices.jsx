@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Eye, Trash2, Search, ShoppingCart, Printer, X, Edit, Download } from 'lucide-react';
 import Modal from '../components/Modal';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
@@ -50,6 +50,18 @@ function SalesInvoices() {
 
     const [formData, setFormData] = useState(emptyForm());
     const searchInputRef = React.useRef(null);
+
+    const productOptions = useMemo(() => {
+        return products.map(p => ({ value: String(p.id), label: `${p.name} (${p.shop_stock || 0})`, subLabel: p.code }));
+    }, [products]);
+
+    const customerOptions = useMemo(() => {
+        return [...customers].sort((a, b) => a.code === 'CUST-CASH' ? -1 : b.code === 'CUST-CASH' ? 1 : 0).map(c => ({ value: String(c.id), label: c.name }));
+    }, [customers]);
+
+    const customerFilterOptions = useMemo(() => {
+        return customers.map(c => ({ value: String(c.id), label: c.name }));
+    }, [customers]);
 
     useShortcuts({
         Save: (e) => {
@@ -599,7 +611,7 @@ function SalesInvoices() {
                 {/* Customer Filter */}
                 <div style={{ width: '200px' }}>
                     <SearchableSelect
-                        options={customers.map(c => ({ value: String(c.id), label: c.name }))}
+                        options={customerFilterOptions}
                         value={customerFilter}
                         onChange={setCustomerFilter}
                         placeholder={t('all') || "All Customers"}
@@ -700,7 +712,7 @@ function SalesInvoices() {
                             <div className="form-group" style={{ marginBottom: 0 }}>
                                 <label className="form-label" style={{ fontWeight: '600' }}>{t('sinv_customer')}</label>
                                 <SearchableSelect
-                                    options={[...customers].sort((a, b) => a.code === 'CUST-CASH' ? -1 : b.code === 'CUST-CASH' ? 1 : 0).map(c => ({ value: String(c.id), label: c.name }))}
+                                    options={customerOptions}
                                     value={formData.customer_id ? String(formData.customer_id) : ''}
                                     onChange={(val) => {
                                         const selected = customers.find(c => String(c.id) === String(val));
@@ -790,7 +802,7 @@ function SalesInvoices() {
                                             <tr key={index}>
                                                 <td style={{ minWidth: '200px' }}>
                                                     <SearchableSelect
-                                                        options={products.map(p => ({ value: String(p.id), label: `${p.name} (${p.shop_stock || 0})`, subLabel: p.code }))}
+                                                        options={productOptions}
                                                         value={item.product_id ? String(item.product_id) : ''}
                                                         onChange={(val) => handleProductChange(index, val)}
                                                         placeholder={t('inv_selectProduct')}

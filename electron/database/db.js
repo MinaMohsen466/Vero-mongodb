@@ -167,6 +167,18 @@ class AppDatabase {
       CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, user_name TEXT NOT NULL, action TEXT NOT NULL, module TEXT NOT NULL, entity_id INTEGER, entity_ref TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS returns (id INTEGER PRIMARY KEY AUTOINCREMENT, return_number TEXT UNIQUE NOT NULL, invoice_id INTEGER, type TEXT NOT NULL, customer_id INTEGER, supplier_id INTEGER, date TEXT NOT NULL, subtotal REAL DEFAULT 0, discount REAL DEFAULT 0, total REAL DEFAULT 0, refunded_amount REAL DEFAULT 0, payment_method TEXT DEFAULT 'cash', payment_account_id INTEGER, notes TEXT, journal_entry_id INTEGER, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (invoice_id) REFERENCES invoices(id));
       CREATE TABLE IF NOT EXISTS return_items (id INTEGER PRIMARY KEY AUTOINCREMENT, return_id INTEGER NOT NULL, product_id INTEGER, description TEXT, quantity REAL NOT NULL, unit_price REAL NOT NULL, total REAL NOT NULL, FOREIGN KEY (return_id) REFERENCES returns(id) ON DELETE CASCADE, FOREIGN KEY (product_id) REFERENCES products(id));
+
+      CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id ON invoice_items(invoice_id);
+      CREATE INDEX IF NOT EXISTS idx_invoice_items_product_id ON invoice_items(product_id);
+      CREATE INDEX IF NOT EXISTS idx_invoices_customer_id ON invoices(customer_id);
+      CREATE INDEX IF NOT EXISTS idx_invoices_supplier_id ON invoices(supplier_id);
+      CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices(date);
+      CREATE INDEX IF NOT EXISTS idx_invoices_type ON invoices(type);
+      CREATE INDEX IF NOT EXISTS idx_journal_entry_lines_entry_id ON journal_entry_lines(entry_id);
+      CREATE INDEX IF NOT EXISTS idx_journal_entry_lines_account_id ON journal_entry_lines(account_id);
+      CREATE INDEX IF NOT EXISTS idx_journal_entries_date ON journal_entries(date);
+      CREATE INDEX IF NOT EXISTS idx_vouchers_date ON vouchers(date);
+      CREATE INDEX IF NOT EXISTS idx_vouchers_type ON vouchers(type);
     `);
 
         /// Migration for existing databases - add missing columns

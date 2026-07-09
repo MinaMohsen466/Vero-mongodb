@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Wallet, Building, Plus, RefreshCw, ArrowDownCircle, ArrowUpCircle, Calendar, Clock, ChevronDown } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
@@ -141,9 +141,17 @@ function CashBank() {
         return new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + symbol;
     };
 
-    const totalBalance = accounts.reduce((sum, a) => sum + (a.balance || 0), 0);
-    const totalCash = accounts.filter(a => a.code === '111' || a.code?.startsWith('111.')).reduce((sum, a) => sum + (a.balance || 0), 0);
-    const totalBank = accounts.filter(a => a.code === '112' || a.code?.startsWith('112.')).reduce((sum, a) => sum + (a.balance || 0), 0);
+    const totalBalance = useMemo(() => {
+        return accounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+    }, [accounts]);
+
+    const totalCash = useMemo(() => {
+        return accounts.filter(a => a.code === '111' || a.code?.startsWith('111.')).reduce((sum, a) => sum + (a.balance || 0), 0);
+    }, [accounts]);
+
+    const totalBank = useMemo(() => {
+        return accounts.filter(a => a.code === '112' || a.code?.startsWith('112.')).reduce((sum, a) => sum + (a.balance || 0), 0);
+    }, [accounts]);
 
     const openModal = (type) => {
         setModalType(type);
@@ -214,9 +222,11 @@ function CashBank() {
         setSaving(false);
     };
 
-    const filteredTransactions = selectedAccount
-        ? transactions.filter(tx => tx.account_id === selectedAccount)
-        : transactions;
+    const filteredTransactions = useMemo(() => {
+        return selectedAccount
+            ? transactions.filter(tx => tx.account_id === selectedAccount)
+            : transactions;
+    }, [transactions, selectedAccount]);
 
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
 

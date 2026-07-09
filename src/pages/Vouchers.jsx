@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Search, CreditCard, ArrowDownCircle, ArrowUpCircle, Edit } from 'lucide-react';
 import Modal from '../components/Modal';
 import SearchableSelect from '../components/SearchableSelect';
@@ -278,29 +278,41 @@ function Vouchers() {
         setInvoiceSearch('');
     };
 
-    const filteredVouchers = vouchers.filter(v => {
-        if (v.type !== activeTab) return false;
-        if (!searchQuery) return true;
-        const q = searchQuery.toLowerCase();
-        return (
-            v.voucher_number?.toLowerCase().includes(q) ||
-            v.customer_name?.toLowerCase().includes(q) ||
-            v.supplier_name?.toLowerCase().includes(q) ||
-            String(v.amount).includes(q)
-        );
-    });
+    const filteredVouchers = useMemo(() => {
+        return vouchers.filter(v => {
+            if (v.type !== activeTab) return false;
+            if (!searchQuery) return true;
+            const q = searchQuery.toLowerCase();
+            return (
+                v.voucher_number?.toLowerCase().includes(q) ||
+                v.customer_name?.toLowerCase().includes(q) ||
+                v.supplier_name?.toLowerCase().includes(q) ||
+                String(v.amount).includes(q)
+            );
+        });
+    }, [vouchers, activeTab, searchQuery]);
 
     // Filter invoices by search
-    const filteredInvoices = pendingInvoices.filter(inv => {
-        if (!invoiceSearch) return true;
-        const q = invoiceSearch.toLowerCase();
-        return (
-            inv.invoice_number?.toLowerCase().includes(q) ||
-            String(inv.total).includes(q)
-        );
-    });
+    const filteredInvoices = useMemo(() => {
+        return pendingInvoices.filter(inv => {
+            if (!invoiceSearch) return true;
+            const q = invoiceSearch.toLowerCase();
+            return (
+                inv.invoice_number?.toLowerCase().includes(q) ||
+                String(inv.total).includes(q)
+            );
+        });
+    }, [pendingInvoices, invoiceSearch]);
 
     const formatCurrency = (amount) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (t('currency_kd') || 'KD');
+
+    const customerOptions = useMemo(() => {
+        return customers.filter(c => c.code !== 'CUST-CASH').map(c => ({ value: String(c.id), label: `${c.name} (${formatCurrency(c.balance)})` }));
+    }, [customers, t]);
+
+    const supplierOptions = useMemo(() => {
+        return suppliers.filter(s => s.code !== 'SUPP-CASH').map(s => ({ value: String(s.id), label: `${s.name} (${formatCurrency(s.balance)})` }));
+    }, [suppliers, t]);
 
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
 
@@ -463,7 +475,7 @@ function Vouchers() {
                             <label className="form-label">{partyType === 'customer' ? (t('dash_customer') || 'العميل') : (t('dash_supplier') || 'المورد')}</label>
                             {partyType === 'customer' ? (
                                 <SearchableSelect
-                                    options={customers.filter(c => c.code !== 'CUST-CASH').map(c => ({ value: String(c.id), label: `${c.name} (${formatCurrency(c.balance)})` }))}
+                                    options={customerOptions}
                                     value={formData.customer_id ? String(formData.customer_id) : ''}
                                     onChange={(val) => handleCustomerChange({ target: { value: val } })}
                                     placeholder={t('vouch_selectCustomer')}
@@ -472,7 +484,7 @@ function Vouchers() {
                                 />
                             ) : (
                                 <SearchableSelect
-                                    options={suppliers.filter(s => s.code !== 'SUPP-CASH').map(s => ({ value: String(s.id), label: `${s.name} (${formatCurrency(s.balance)})` }))}
+                                    options={supplierOptions}
                                     value={formData.supplier_id ? String(formData.supplier_id) : ''}
                                     onChange={(val) => handleSupplierChange({ target: { value: val } })}
                                     placeholder={t('vouch_selectSupplier')}
