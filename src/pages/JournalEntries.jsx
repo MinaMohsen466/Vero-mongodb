@@ -14,6 +14,7 @@ function JournalEntries() {
     const [showModal, setShowModal] = useState(false);
     const [showViewModal, setShowViewModal] = useState(false);
     const [selectedEntry, setSelectedEntry] = useState(null);
+    const [visibleEntriesCount, setVisibleEntriesCount] = useState(50);
     const [formData, setFormData] = useState({
         date: new Date().toISOString().split('T')[0],
         description: '', reference: '',
@@ -42,6 +43,10 @@ function JournalEntries() {
     });
 
     useEffect(() => { loadData(); }, []);
+
+    useEffect(() => {
+        setVisibleEntriesCount(50);
+    }, [entries.length]);
 
     const loadData = async () => {
         try {
@@ -136,32 +141,46 @@ function JournalEntries() {
                     {entries.length === 0 ? (
                         <div className="empty-state"><BookOpen size={48} /><h3>{t('no_journal_entries') || 'No Journal Entries'}</h3></div>
                     ) : (
-                        <table>
-                            <thead><tr><th>{t('entry_number') || 'Entry No.'}</th><th>{t('date') || 'Date'}</th><th>{t('description') || 'Description'}</th><th>{t('acc_debit') || 'Debit'}</th><th>{t('acc_credit') || 'Credit'}</th><th>{t('actions') || 'Actions'}</th></tr></thead>
-                            <tbody>
-                                {entries.map(entry => {
-                                    const debit = entry.lines?.reduce((sum, l) => sum + (l.debit || 0), 0) || 0;
-                                    const credit = entry.lines?.reduce((sum, l) => sum + (l.credit || 0), 0) || 0;
-                                    return (
-                                        <tr key={entry.id}>
-                                            <td className="font-bold">{entry.entry_number}</td>
-                                            <td>{new Date(entry.date).toLocaleDateString('en-GB')}</td>
-                                            <td>{entry.description || '-'}</td>
-                                            <td>{formatCurrency(debit)}</td>
-                                            <td>{formatCurrency(credit)}</td>
-                                            <td><div className="table-actions">
-                                                {user?.permissions?.journal_entries?.can_view && (
-                                                    <button className="btn btn-ghost btn-sm" onClick={() => viewEntry(entry)}><Eye size={16} /></button>
-                                                )}
-                                                {user?.permissions?.journal_entries?.can_delete && (
-                                                    <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(entry.id)}><Trash2 size={16} /></button>
-                                                )}
-                                            </div></td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                        <>
+                            <table>
+                                <thead><tr><th>{t('entry_number') || 'Entry No.'}</th><th>{t('date') || 'Date'}</th><th>{t('description') || 'Description'}</th><th>{t('acc_debit') || 'Debit'}</th><th>{t('acc_credit') || 'Credit'}</th><th>{t('actions') || 'Actions'}</th></tr></thead>
+                                <tbody>
+                                    {entries.slice(0, visibleEntriesCount).map(entry => {
+                                        const debit = entry.lines?.reduce((sum, l) => sum + (l.debit || 0), 0) || 0;
+                                        const credit = entry.lines?.reduce((sum, l) => sum + (l.credit || 0), 0) || 0;
+                                        return (
+                                            <tr key={entry.id}>
+                                                <td className="font-bold">{entry.entry_number}</td>
+                                                <td>{new Date(entry.date).toLocaleDateString('en-GB')}</td>
+                                                <td>{entry.description || '-'}</td>
+                                                <td>{formatCurrency(debit)}</td>
+                                                <td>{formatCurrency(credit)}</td>
+                                                <td><div className="table-actions">
+                                                    {user?.permissions?.journal_entries?.can_view && (
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => viewEntry(entry)}><Eye size={16} /></button>
+                                                    )}
+                                                    {user?.permissions?.journal_entries?.can_delete && (
+                                                        <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(entry.id)}><Trash2 size={16} /></button>
+                                                    )}
+                                                </div></td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                            {entries.length > visibleEntriesCount && (
+                                <div style={{ textAlign: 'center', padding: '16px', borderTop: '1px solid var(--border)', background: 'var(--bg-primary)' }}>
+                                    <button 
+                                        type="button"
+                                        className="btn btn-secondary" 
+                                        onClick={() => setVisibleEntriesCount(prev => prev + 50)}
+                                        style={{ fontSize: '0.85rem', padding: '8px 16px' }}
+                                    >
+                                        {t('load_more') || 'تحميل المزيد'}
+                                    </button>
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             </div>

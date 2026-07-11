@@ -61,6 +61,7 @@ export default function Expenses() {
     const [accounts, setAccounts] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [visibleExpensesCount, setVisibleExpensesCount] = useState(50);
 
     // Filter state
     const [filterCategory, setFilterCategory] = useState('all');
@@ -121,6 +122,10 @@ export default function Expenses() {
         load();
         loadAccounts();
     }, []);
+
+    useEffect(() => {
+        setVisibleExpensesCount(50);
+    }, [filterCategory, filterFrom, filterTo, search]);
 
     // ── Filtered list ─────────────────────────────────────────────
     const filtered = useMemo(() => {
@@ -364,7 +369,7 @@ export default function Expenses() {
                                         </div>
                                     </td>
                                 </tr>
-                            ) : filtered.map((ex, idx) => {
+                            ) : filtered.slice(0, visibleExpensesCount).map((ex, idx) => {
                                 const cat = getCategoryInfo(ex.category);
                                 const Icon = cat.icon;
                                 return (
@@ -478,6 +483,18 @@ export default function Expenses() {
                         )}
                     </table>
                 </div>
+                {filtered.length > visibleExpensesCount && (
+                    <div style={{ textAlign: 'center', padding: '16px', borderTop: '1px solid var(--border)', background: 'var(--bg-primary)' }}>
+                        <button 
+                            type="button"
+                            className="btn btn-secondary" 
+                            onClick={() => setVisibleExpensesCount(prev => prev + 50)}
+                            style={{ fontSize: '0.85rem', padding: '8px 16px' }}
+                        >
+                            {isAr ? 'تحميل المزيد' : 'Load More'}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* ── Add Modal ── */}

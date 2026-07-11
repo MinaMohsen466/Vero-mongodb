@@ -40,6 +40,7 @@ function SalesInvoices() {
     const [activeOffers, setActiveOffers] = useState([]);
     const [couponCode, setCouponCode] = useState('');
     const [appliedCoupon, setAppliedCoupon] = useState(null);
+    const [visibleInvoicesCount, setVisibleInvoicesCount] = useState(50);
 
     const emptyForm = () => ({
         customer_id: '', date: new Date().toISOString().split('T')[0], due_date: '', notes: '',
@@ -84,6 +85,10 @@ function SalesInvoices() {
     });
 
     useEffect(() => { loadData(); }, []);
+
+    useEffect(() => {
+        setVisibleInvoicesCount(50);
+    }, [searchQuery, statusFilter, customerFilter, dateFrom, dateTo]);
 
     useEffect(() => {
         const savedDraft = localStorage.getItem('sales_invoice_draft');
@@ -647,7 +652,7 @@ function SalesInvoices() {
                             <table>
                                 <thead><tr><th>{t('inv_number')}</th><th>{t('sinv_customer')}</th><th>{t('date')}</th><th>{t('total')}</th><th>{t('status')}</th><th>{t('actions')}</th></tr></thead>
                                 <tbody>
-                                    {filteredInvoices.map(inv => (
+                                    {filteredInvoices.slice(0, visibleInvoicesCount).map(inv => (
                                         <tr key={inv.id}>
                                             <td className="font-bold">{inv.invoice_number}</td>
                                             <td>{inv.customer_name || '-'}</td>
@@ -693,6 +698,18 @@ function SalesInvoices() {
                                     ))}
                                 </tbody>
                             </table>
+                            {filteredInvoices.length > visibleInvoicesCount && (
+                                <div style={{ textAlign: 'center', padding: '16px', borderTop: '1px solid var(--border)', background: 'var(--bg-primary)' }}>
+                                    <button 
+                                        type="button"
+                                        className="btn btn-secondary" 
+                                        onClick={() => setVisibleInvoicesCount(prev => prev + 50)}
+                                        style={{ fontSize: '0.85rem', padding: '8px 16px' }}
+                                    >
+                                        {t('load_more') || 'تحميل المزيد'}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

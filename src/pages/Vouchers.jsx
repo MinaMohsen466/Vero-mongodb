@@ -20,6 +20,7 @@ function Vouchers() {
     const [editingId, setEditingId] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [partyType, setPartyType] = useState('customer');
+    const [visibleVouchersCount, setVisibleVouchersCount] = useState(50);
     const [formData, setFormData] = useState({
         type: 'receipt', date: new Date().toISOString().split('T')[0],
         amount: 0, customer_id: '', supplier_id: '',
@@ -47,6 +48,10 @@ function Vouchers() {
     });
 
     useEffect(() => { loadData(); }, []);
+
+    useEffect(() => {
+        setVisibleVouchersCount(50);
+    }, [activeTab, searchQuery]);
 
     const loadData = async () => {
         try {
@@ -369,7 +374,7 @@ function Vouchers() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredVouchers.map(voucher => (
+                                    {filteredVouchers.slice(0, visibleVouchersCount).map(voucher => (
                                         <tr key={voucher.id}>
                                             <td className="font-bold">{voucher.voucher_number}</td>
                                             <td>{new Date(voucher.date).toLocaleDateString('en-GB')}</td>
@@ -401,6 +406,18 @@ function Vouchers() {
                                     ))}
                                 </tbody>
                             </table>
+                            {filteredVouchers.length > visibleVouchersCount && (
+                                <div style={{ textAlign: 'center', padding: '16px', borderTop: '1px solid var(--border)', background: 'var(--bg-primary)' }}>
+                                    <button 
+                                        type="button"
+                                        className="btn btn-secondary" 
+                                        onClick={() => setVisibleVouchersCount(prev => prev + 50)}
+                                        style={{ fontSize: '0.85rem', padding: '8px 16px' }}
+                                    >
+                                        {t('load_more') || 'تحميل المزيد'}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

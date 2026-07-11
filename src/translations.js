@@ -1566,8 +1566,10 @@ const translations = {
         enable_global_barcode: 'تفعيل قارئ الباركود الذكي',
         enable_global_barcode_desc: 'الاستماع التلقائي لمسح الباركود وإضافته مباشرة إلى السلة في أي جزء من شاشة المبيعات',
         none: 'لا يوجد',
+        load_more: 'تحميل المزيد',
     },
     en: {
+        load_more: 'Load More',
 
         // App
         appName: 'Accounting System',

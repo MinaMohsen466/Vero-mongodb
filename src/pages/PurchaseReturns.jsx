@@ -20,6 +20,7 @@ function PurchaseReturns() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [selectedInvoice, setSelectedInvoice] = useState(null);
+    const [visibleReturnsCount, setVisibleReturnsCount] = useState(50);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -47,6 +48,10 @@ function PurchaseReturns() {
             loadData();
         }
     }, [canView]);
+
+    useEffect(() => {
+        setVisibleReturnsCount(50);
+    }, [searchQuery, supplierFilter]);
 
     const loadData = async () => {
         setLoading(true);
@@ -407,7 +412,7 @@ function PurchaseReturns() {
                                 </td>
                             </tr>
                         ) : (
-                            filteredReturns.map(ret => (
+                            filteredReturns.slice(0, visibleReturnsCount).map(ret => (
                                 <tr key={ret.id}>
                                     <td><strong>{ret.return_number}</strong></td>
                                     <td>{ret.invoice_number || '-'}</td>
@@ -437,6 +442,18 @@ function PurchaseReturns() {
                         )}
                     </tbody>
                 </table>
+                {filteredReturns.length > visibleReturnsCount && (
+                    <div style={{ textAlign: 'center', padding: '16px', borderTop: '1px solid var(--border)', background: 'var(--bg-primary)' }}>
+                        <button 
+                            type="button"
+                            className="btn btn-secondary" 
+                            onClick={() => setVisibleReturnsCount(prev => prev + 50)}
+                            style={{ fontSize: '0.85rem', padding: '8px 16px' }}
+                        >
+                            {t('load_more') || 'تحميل المزيد'}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* View Modal */}

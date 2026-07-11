@@ -100,6 +100,7 @@ function CustomerSearch({ customers, value, onChange }) {
 
 // ─── Main POS Component ───────────────────────────────────────────────────────
 function POS() {
+    const ITEMS_PER_PAGE = 50;
     const { user, t } = useAuth();
     window.t = t; // Expose t to global for CustomerSearch to use it easily without prop drilling
     const [products, setProducts] = useState([]);
@@ -128,7 +129,7 @@ function POS() {
     const [supplierFilter, setSupplierFilter] = useState('all');
 
     // Infinite scroll pagination for products grid
-    const [visibleCount, setVisibleCount] = useState(100);
+    const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
     const gridContainerRef = useRef(null);
 
     useEffect(() => {
@@ -139,7 +140,7 @@ function POS() {
     }, [searchQuery]);
 
     useEffect(() => {
-        setVisibleCount(100);
+        setVisibleCount(ITEMS_PER_PAGE);
         if (gridContainerRef.current) {
             gridContainerRef.current.scrollTop = 0;
         }
@@ -520,7 +521,7 @@ function POS() {
     const handleScroll = (e) => {
         const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
         if (scrollHeight - scrollTop - clientHeight < 100) {
-            setVisibleCount(prev => Math.min(filtered.length, prev + 100));
+            setVisibleCount(prev => Math.min(filtered.length, prev + ITEMS_PER_PAGE));
         }
     };
 
@@ -725,7 +726,7 @@ function POS() {
         <div style={{ display: 'flex', height: 'calc(100vh - 116px)', gap: '0', overflow: 'hidden', background: 'var(--bg-secondary)', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
 
             {/* ── Left: Products ─────────────────────────────────────────── */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '10px 10px 10px 10px', gap: '8px' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '16px', gap: '12px' }}>
 
                 {/* Search + Filter Area */}
                 {/* Search + Filter Area */}
@@ -819,8 +820,7 @@ function POS() {
                         flex: 1, overflowY: 'auto',
                         display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
                         gap: '12px', alignContent: 'start',
-                        paddingTop: '12px',
-                        paddingRight: '6px',
+                        padding: '12px 8px',
                     }}
                 >
                     {filtered.length === 0 ? (
