@@ -156,12 +156,12 @@ function POS() {
     const [showInvoicePreview, setShowInvoicePreview] = useState(false);
     const [previewInvoice, setPreviewInvoice] = useState(null);
     const [visiblePurchasePrices, setVisiblePurchasePrices] = useState({});
-    const togglePurchasePrice = (productId) => {
+    const togglePurchasePrice = useCallback((productId) => {
         setVisiblePurchasePrices(prev => ({
             ...prev,
             [productId]: !prev[productId]
         }));
-    };
+    }, []);
 
     // Add customer
     const [showAddCustomer, setShowAddCustomer] = useState(false);
@@ -525,11 +525,11 @@ function POS() {
         }
     };
 
-    const formatCurrency = (v) => {
+    const formatCurrency = useCallback((v) => {
         const decimals = parseInt(settings.general?.decimal_places || '3');
         return new Intl.NumberFormat('en-GB', { minimumFractionDigits: decimals }).format(v || 0) +
             ' ' + (settings.general?.currency_symbol || (t('currency_kd') || 'KD'));
-    };
+    }, [settings.general?.decimal_places, settings.general?.currency_symbol, t]);
 
     const openPayModal = () => {
         if (cart.length === 0) { toast.error(t('cart_empty') || 'Cart is empty'); return; }
@@ -829,121 +829,23 @@ function POS() {
                             <p>{t('no_products') || 'No Products'}</p>
                         </div>
                     ) : filtered.slice(0, visibleCount).map((product, i) => {
-                        const outOfStock = product.shop_stock <= 0;
-                        const color = COLORS[i % COLORS.length];
                         const inCart = cart.find(c => c.id === product.id);
                         return (
-                            <div
+                            <ProductCard
                                 key={product.id}
-                                onClick={() => !outOfStock && addToCart(product)}
-                                style={{
-                                    background: outOfStock ? 'var(--bg-secondary)' : 'var(--bg-primary)',
-                                    border: inCart ? `2px solid ${color}` : '1px solid var(--border)',
-                                    borderRadius: '12px', padding: '10px',
-                                    cursor: outOfStock ? 'not-allowed' : 'pointer',
-                                    opacity: outOfStock ? 0.55 : 1,
-                                    transition: 'all 0.15s',
-                                    display: 'flex', alignItems: 'center', gap: '12px',
-                                    position: 'relative', userSelect: 'none',
-                                    overflow: 'visible', /* prevent badge clipping */
-                                    boxShadow: inCart ? `0 4px 16px ${color}33` : 'var(--shadow)'
-                                }}
-                                onMouseEnter={e => { if (!outOfStock) e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                                onMouseLeave={e => { e.currentTarget.style.transform = 'none'; }}
-                            >
-                                {/* Cart Badge */}
-                                {inCart && (
-                                    <div style={{
-                                        position: 'absolute', top: '-11px', right: '-11px',
-                                        background: color, color: 'white',
-                                        minWidth: '24px', height: '24px', borderRadius: '12px',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontSize: '0.75rem', fontWeight: 800, lineHeight: 1,
-                                        padding: '0 6px',
-                                        boxShadow: `0 2px 8px ${color}88`,
-                                        border: '2.5px solid var(--bg-primary)',
-                                        zIndex: 10,
-                                        pointerEvents: 'none'
-                                    }}>
-                                        {inCart.qty}
-                                    </div>
-                                )}
-                                
-                                {/* Absolute positioned image to force it strictly onto the left in both RTL and LTR without interfering with DOM flow direction */}
-                                <div style={{ 
-                                    width: '85px', height: '85px', flexShrink: 0, position: 'absolute', left: '10px', top: '10px',
-                                    background: 'var(--bg-primary)', borderRadius: '8px'
-                                }}>
-                                    {product.image ? (
-                                        <div style={{
-                                            width: '100%', height: '100%', borderRadius: '8px', overflow: 'hidden',
-                                            border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                        }}>
-                                            <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                        </div>
-                                    ) : (
-                                        <div style={{
-                                            width: '100%', height: '100%', borderRadius: '8px',
-                                            background: `${color}15`, display: 'flex',
-                                            alignItems: 'center', justifyContent: 'center', color,
-                                            border: '1px solid transparent'
-                                        }}>
-                                            <Package size={32} style={{ opacity: 0.7 }} />
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div style={{ 
-                                    display: 'flex', flexDirection: 'column', flex: 1, 
-                                    minHeight: '85px', justifyContent: 'center', paddingLeft: '95px', textAlign: 'start' 
-                                }}>
-                                    <p style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', margin: '0 0 6px 0', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.name}</p>
-                                    
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 6px 0' }}>
-                                        <span style={{ fontWeight: 800, color, fontSize: '0.95rem' }}>{formatCurrency(product.sale_price)}</span>
-                                        {settings.general?.show_purchase_price_in_pos === 'yes' && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    togglePurchasePrice(product.id);
-                                                }}
-                                                style={{
-                                                    background: 'var(--bg-secondary)',
-                                                    border: '1px solid var(--border)',
-                                                    borderRadius: '50%',
-                                                    width: '24px',
-                                                    height: '24px',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    cursor: 'pointer',
-                                                    color: visiblePurchasePrices[product.id] ? 'var(--primary)' : 'var(--text-muted)',
-                                                    transition: 'all 0.2s',
-                                                    boxShadow: 'var(--shadow-sm)'
-                                                }}
-                                                onMouseEnter={e => { e.currentTarget.style.background = 'var(--border-light)'; }}
-                                                onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-secondary)'; }}
-                                                title={t('purchase_price_label') || 'سعر الشراء'}
-                                            >
-                                                {visiblePurchasePrices[product.id] ? <EyeOff size={13} /> : <Eye size={13} />}
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    {visiblePurchasePrices[product.id] && (
-                                        <p style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0 0 6px 0' }}>
-                                            {t('purchase_price_label') || 'سعر الشراء'}: <span style={{ color: '#ef4444' }}>{formatCurrency(product.purchase_price)}</span>
-                                        </p>
-                                    )}
-                                    <div>
-                                        {outOfStock ? (
-                                            <span style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 600 }}>✗ {t('out_of_stock') || 'Out of Stock'}</span>
-                                        ) : (
-                                            <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 600 }}>{t('in_stock') || 'In Stock'}: {product.shop_stock}</span>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
+                                product={product}
+                                color={COLORS[i % COLORS.length]}
+                                inCartQty={inCart ? inCart.qty : 0}
+                                onAddToCart={addToCart}
+                                showPurchasePriceInPOS={settings.general?.show_purchase_price_in_pos === 'yes'}
+                                showPurchasePriceDetail={!!visiblePurchasePrices[product.id]}
+                                onTogglePurchasePrice={togglePurchasePrice}
+                                formattedSalePrice={formatCurrency(product.sale_price)}
+                                formattedPurchasePrice={formatCurrency(product.purchase_price)}
+                                outOfStockLabel={t('out_of_stock') || 'Out of Stock'}
+                                inStockLabel={t('in_stock') || 'In Stock'}
+                                purchasePriceLabel={t('purchase_price_label') || 'سعر الشراء'}
+                            />
                         );
                     })}
                 </div>
@@ -1465,6 +1367,135 @@ function POS() {
         </div>
     );
 }
+
+const ProductCard = React.memo(function ProductCard({
+    product,
+    color,
+    inCartQty,
+    onAddToCart,
+    showPurchasePriceInPOS,
+    showPurchasePriceDetail,
+    onTogglePurchasePrice,
+    formattedSalePrice,
+    formattedPurchasePrice,
+    outOfStockLabel,
+    inStockLabel,
+    purchasePriceLabel
+}) {
+    const outOfStock = product.shop_stock <= 0;
+    return (
+        <div
+            onClick={() => !outOfStock && onAddToCart(product)}
+            style={{
+                background: outOfStock ? 'var(--bg-secondary)' : 'var(--bg-primary)',
+                border: inCartQty > 0 ? `2px solid ${color}` : '1px solid var(--border)',
+                borderRadius: '12px', padding: '10px',
+                cursor: outOfStock ? 'not-allowed' : 'pointer',
+                opacity: outOfStock ? 0.55 : 1,
+                transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: '12px',
+                position: 'relative', userSelect: 'none',
+                overflow: 'visible', /* prevent badge clipping */
+                boxShadow: inCartQty > 0 ? `0 4px 16px ${color}33` : 'var(--shadow)'
+            }}
+            onMouseEnter={e => { if (!outOfStock) e.currentTarget.style.transform = 'translateY(-2px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; }}
+        >
+            {/* Cart Badge */}
+            {inCartQty > 0 && (
+                <div style={{
+                    position: 'absolute', top: '-11px', right: '-11px',
+                    background: color, color: 'white',
+                    minWidth: '24px', height: '24px', borderRadius: '12px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '0.75rem', fontWeight: 800, lineHeight: 1,
+                    padding: '0 6px',
+                    boxShadow: `0 2px 8px ${color}88`,
+                    border: '2.5px solid var(--bg-primary)',
+                    zIndex: 10,
+                    pointerEvents: 'none'
+                }}>
+                    {inCartQty}
+                </div>
+            )}
+            
+            {/* Absolute positioned image to force it strictly onto the left in both RTL and LTR without interfering with DOM flow direction */}
+            <div style={{ 
+                width: '85px', height: '85px', flexShrink: 0, position: 'absolute', left: '10px', top: '10px',
+                background: 'var(--bg-primary)', borderRadius: '8px'
+            }}>
+                {product.image ? (
+                    <div style={{
+                        width: '100%', height: '100%', borderRadius: '8px', overflow: 'hidden',
+                        border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    </div>
+                ) : (
+                    <div style={{
+                        width: '100%', height: '100%', borderRadius: '8px',
+                        background: `${color}15`, display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', color,
+                        border: '1px solid transparent'
+                    }}>
+                        <Package size={32} style={{ opacity: 0.7 }} />
+                    </div>
+                )}
+            </div>
+
+            <div style={{ 
+                display: 'flex', flexDirection: 'column', flex: 1, 
+                minHeight: '85px', justifyContent: 'center', paddingLeft: '95px', textAlign: 'start' 
+            }}>
+                <p style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', margin: '0 0 6px 0', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.name}</p>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 6px 0' }}>
+                    <span style={{ fontWeight: 800, color, fontSize: '0.95rem' }}>{formattedSalePrice}</span>
+                    {showPurchasePriceInPOS && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onTogglePurchasePrice(product.id);
+                            }}
+                            style={{
+                                background: 'var(--bg-secondary)',
+                                border: '1px solid var(--border)',
+                                borderRadius: '50%',
+                                width: '24px',
+                                height: '24px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                color: showPurchasePriceDetail ? 'var(--primary)' : 'var(--text-muted)',
+                                transition: 'all 0.2s',
+                                boxShadow: 'var(--shadow-sm)'
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'var(--border-light)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-secondary)'; }}
+                            title={purchasePriceLabel}
+                        >
+                            {showPurchasePriceDetail ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                    )}
+                </div>
+
+                {showPurchasePriceDetail && (
+                    <p style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0 0 6px 0' }}>
+                        {purchasePriceLabel}: <span style={{ color: '#ef4444' }}>{formattedPurchasePrice}</span>
+                    </p>
+                )}
+                <div>
+                    {outOfStock ? (
+                        <span style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 600 }}>✗ {outOfStockLabel}</span>
+                    ) : (
+                        <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 600 }}>{inStockLabel}: {product.shop_stock}</span>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+});
 
 function generateReceiptHTML(receipt, settings, t) {
     const T = t || window.t || (k => k);
