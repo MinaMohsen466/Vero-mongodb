@@ -37,9 +37,16 @@ class AdminConfig {
     }
 
     /**
-     * Get backup encryption key
+     * Get backup encryption key (Fixed key for universal portability)
      */
     getBackupKey() {
+        return crypto.createHash('sha256').update('VeroDB_Secure_Backup_Fixed_Key_Phrase_2026').digest('hex');
+    }
+
+    /**
+     * Get legacy backup key for restoring older backups
+     */
+    getLegacyBackupKey() {
         try {
             if (fs.existsSync(this.configFile)) {
                 const config = JSON.parse(fs.readFileSync(this.configFile, 'utf8'));

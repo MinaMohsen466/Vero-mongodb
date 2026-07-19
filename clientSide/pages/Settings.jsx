@@ -400,6 +400,7 @@ export default function Settings() {
         deleteContacts: false,
         deleteSettingsAndUsers: false
     });
+    const [isResetting, setIsResetting] = useState(false);
     const upUserIdRef = useRef(null); // tracks which user we're loading for (prevents race conditions)
     const dropRef = useRef(null);
 
@@ -660,9 +661,15 @@ export default function Settings() {
         const r = await window.api.dialog.openFile({ properties: ['openFile'], filters: [{ name: 'DB', extensions: ['db'] }] });
         if (!r.canceled && r.filePaths[0]) {
             if (confirm(t('restore_confirm') || 'Current data will be replaced. Are you sure?')) {
+                setIsResetting(true);
                 const res = await window.api.settings.restore(r.filePaths[0]);
-                if (res?.success) { toast.success(t('restored_success') || 'Restored successfully'); window.location.reload(); }
-                else toast.error(t('failed') || 'Failed');
+                if (res?.success) { 
+                    toast.success(t('restored_success') || 'Restored successfully'); 
+                    window.location.reload(); 
+                } else {
+                    setIsResetting(false);
+                    toast.error((t('failed') || 'Failed') + ': ' + (res?.error || ''));
+                }
             }
         }
     };
@@ -700,6 +707,7 @@ export default function Settings() {
 
         setPwdModalOpen(false);
         if (pwdAction === 'resetApp') {
+            setIsResetting(true);
             const res = await window.api.settings?.resetApp?.(resetOptions);
             if (res && res.success) {
                 toast.success(t('savedSuccess') || 'Data reset successfully');
@@ -709,6 +717,7 @@ export default function Settings() {
                     window.location.reload();
                 }
             } else {
+                setIsResetting(false);
                 toast.error(res?.error || t('errorOccurred') || 'An error occurred during reset');
             }
         } else if (pwdAction === 'deleteAllProducts') {
@@ -1893,6 +1902,47 @@ export default function Settings() {
                     </Modal>
                 );
             })()}
+
+            {isResetting && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(15, 23, 42, 0.7)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    zIndex: 99999,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 16,
+                    color: '#fff',
+                    fontFamily: 'Cairo, sans-serif'
+                }}>
+                    <div style={{
+                        width: 50,
+                        height: 50,
+                        borderRadius: '50%',
+                        border: '3px solid rgba(255, 255, 255, 0.1)',
+                        borderTopColor: 'var(--primary, #2563eb)',
+                        animation: 'spin 1.5s linear infinite'
+                    }} />
+                    <style dangerouslySetInnerHTML={{__html: `
+                        @keyframes spin {
+                            to { transform: rotate(360deg); }
+                        }
+                    `}} />
+                    <div style={{ fontSize: '1.2rem', fontWeight: 700, textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+                        {t('resetting_app_loading') || 'جاري تهيئة قاعدة البيانات وبدء شركة جديدة...'}
+                    </div>
+                    <div style={{ fontSize: '.9rem', color: 'rgba(255, 255, 255, 0.7)', fontWeight: 500 }}>
+                        {t('please_wait') || 'يرجى الانتظار، لا تقم بإغلاق التطبيق'}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

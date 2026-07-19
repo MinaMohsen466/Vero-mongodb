@@ -651,15 +651,57 @@ class AppDatabase {
             }
             let rawData = fs.readFileSync(filePath, 'utf8');
             
-            if (!rawData.trim().startsWith('{')) {
-                const backupKey = this.adminConfig?.getBackupKey();
-                if (!backupKey) {
-                    return { success: false, error: 'مفتاح التشفير غير متوفر لقراءة ملف النسخة الاحتياطية' };
+            let backupData;
+            if (rawData.trim().startsWith('{')) {
+                backupData = JSON.parse(rawData);
+            } else {
+                // Determine potential keys to decrypt the backup file:
+                // 1. Current fixed backup key
+                const fixedKey = this.adminConfig?.getBackupKey();
+                
+                // 2. Legacy backup key from config (could contain old random key)
+                const legacyKey = this.adminConfig?.getLegacyBackupKey ? this.adminConfig.getLegacyBackupKey() : null;
+                
+                // 3. Hash of the current admin password
+                const currentPasswordKey = this.adminConfig ? crypto.createHash('sha256').update(this.adminConfig.getAdminPassword()).digest('hex') : null;
+                
+                // 4. Hash of the default admin password 'Vero123*'
+                const defaultPasswordKey = crypto.createHash('sha256').update('Vero123*').digest('hex');
+                
+                // 5. Hash of manager default keyword
+                const managerPasswordKey = crypto.createHash('sha256').update('manager').digest('hex');
+                
+                const candidateKeys = [
+                    fixedKey,
+                    legacyKey,
+                    currentPasswordKey,
+                    defaultPasswordKey,
+                    managerPasswordKey
+                ].filter((k, i, self) => k && self.indexOf(k) === i); // Unique keys only
+                
+                let decryptedText = null;
+                
+                for (const key of candidateKeys) {
+                    try {
+                        decryptedText = decryptData(rawData, key);
+                        // Validate if it is valid JSON
+                        JSON.parse(decryptedText);
+                        // If it succeeded, we got the right key!
+                        break;
+                    } catch (err) {
+                        decryptedText = null;
+                    }
                 }
-                rawData = decryptData(rawData, backupKey);
+                
+                if (!decryptedText) {
+                    return { 
+                        success: false, 
+                        error: 'فشل فك تشفير ملف النسخة الاحتياطية. قد يكون الملف مشفراً بمفتاح آخر أو تالفاً.' 
+                    };
+                }
+                backupData = JSON.parse(decryptedText);
             }
             
-            const backupData = JSON.parse(rawData);
             for (const [name, model] of Object.entries(collections)) {
                 if (backupData[name]) {
                     await model.deleteMany({});
@@ -668,7 +710,7 @@ class AppDatabase {
                     }
                 }
             }
-            this.cache.clear(); // Clear cache so the newly restored data is fetched on subsequent reads
+            this.cache.clearAll(); // Clear cache so the newly restored data is fetched on subsequent reads
             return { success: true, message: 'تم استعادة النسخة الاحتياطية بنجاح' };
         } catch (e) {
             console.error('[DB] Restore error:', e);
@@ -795,7 +837,7 @@ class AppDatabase {
         }
         
         if (this.cache) {
-            this.cache.clear();
+            this.cache.clearAll();
         }
         return { success: true };
     }
