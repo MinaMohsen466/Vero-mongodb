@@ -5,7 +5,7 @@ import InvoicePrintPreview from '../components/InvoicePrintPreview';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
 import { useShortcuts } from '../hooks/useShortcuts';
-import * as XLSX from 'xlsx-js-style';
+import * as XLSX from 'xlsx/dist/xlsx.full.min.js';
 import SearchableSelect from '../components/SearchableSelect';
 
 const parseExcelNumber = (val) => {
@@ -227,7 +227,7 @@ function Products() {
                     return row[realIdx];
                 };
 
-                let successCount = 0;
+                const productsToImport = [];
                 
                 for (let i = 1; i < rows.length; i++) {
                     const values = rows[i];
@@ -274,13 +274,21 @@ function Products() {
                     };
 
                     if (productData.name) {
-                        await window.api.products.create(productData);
-                        successCount++;
+                        productsToImport.push(productData);
                     }
                 }
                 
-                toast.success(successCount + ' ' + (t('savedSuccess')));
-                loadProducts();
+                if (productsToImport.length > 0) {
+                    const result = await window.api.products.bulkCreate(productsToImport);
+                    if (result && result.success) {
+                        toast.success(productsToImport.length + ' ' + (t('savedSuccess')));
+                        loadProducts();
+                    } else {
+                        toast.error(result?.error || t('errorOccurred'));
+                    }
+                } else {
+                    toast.error(t('errorOccurred') || 'No products found to import');
+                }
             } catch (error) {
                 console.error('Import error:', error);
                 toast.error(t('errorOccurred'));
@@ -637,11 +645,13 @@ function Products() {
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    {user?.permissions?.products?.can_create && (
+                    {user?.permissions?.products_export?.can_view && (
+                        <button className="btn btn-secondary" onClick={handleExportProducts} title={t('prod_export')}>
+                            <Download size={18} /> {t('prod_export')}
+                        </button>
+                    )}
+                    {user?.permissions?.products_import?.can_view && (
                         <>
-                            <button className="btn btn-secondary" onClick={handleExportProducts} title={t('prod_export')}>
-                                <Download size={18} /> {t('prod_export')}
-                            </button>
                             <input type="file" accept=".xlsx,.xls,.csv" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImportProducts} />
                             <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} title={t('prod_import')}>
                                 <Upload size={18} /> {t('prod_import')}

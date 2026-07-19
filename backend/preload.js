@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld('api', {
         getAllSortedBySales: () => ipcRenderer.invoke('products:getAllSortedBySales'),
         getSyncData: (lastSyncTime) => ipcRenderer.invoke('products:getSyncData', lastSyncTime),
         create: (product) => ipcRenderer.invoke('products:create', product),
+        bulkCreate: (products) => ipcRenderer.invoke('products:bulkCreate', products),
         update: (product) => ipcRenderer.invoke('products:update', product),
         delete: (id) => ipcRenderer.invoke('products:delete', id),
         deleteAll: () => ipcRenderer.invoke('products:deleteAll'),
@@ -123,7 +124,7 @@ contextBridge.exposeInMainWorld('api', {
         getDbSize: () => ipcRenderer.invoke('settings:getDbSize'),
         changeDbPath: (newFolderPath) => ipcRenderer.invoke('settings:changeDbPath', newFolderPath),
         restore: (filePath) => ipcRenderer.invoke('settings:restore', filePath),
-        resetApp: () => ipcRenderer.invoke('settings:resetApp'),
+        resetApp: (options) => ipcRenderer.invoke('settings:resetApp', options),
         optimizeDb: () => ipcRenderer.invoke('settings:optimizeDb')
     },
 

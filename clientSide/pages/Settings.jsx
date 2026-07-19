@@ -288,7 +288,8 @@ function LiveInvoicePreview({ inv, co, logoPreview, t }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Settings() {
-    const { user, updateUser, t, theme } = useAuth();
+    const auth = useAuth() || {};
+    const { user, updateUser, t = (k) => k, theme } = auth;
 
     const roleName = r => r === 'admin' ? (t('admin_role') || 'Admin') : r === 'accountant' ? (t('accountant_role') || 'Accountant') : (t('user_role') || 'User');
 
@@ -297,6 +298,8 @@ export default function Settings() {
         { m: 'customers', l: t('customers') || 'Customers', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'suppliers', l: t('suppliers') || 'Suppliers', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'products', l: t('products') || 'Products', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'products_import', l: t('products_import') || 'استيراد المنتجات (إكسل)', a: ['view'] },
+        { m: 'products_export', l: t('products_export') || 'تصدير المنتجات (إكسل)', a: ['view'] },
         { m: 'sales_invoices', l: t('sales_invoices') || 'Sales Invoices', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'quotations', l: t('menu_quotations') || 'Quotations', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'sales_returns', l: t('sales_returns') || 'Sales Returns', a: ['view', 'create', 'edit', 'delete'] },
@@ -387,6 +390,16 @@ export default function Settings() {
     const [selRole, setSelRole] = useState('accountant'); // selected role in role mode
     const [backupPath, setBackupPath] = useState(null);
     const [backupLastTime, setBackupLastTime] = useState(null);
+    const [pwdModalOpen, setPwdModalOpen] = useState(false);
+    const [pwdAction, setPwdAction] = useState(null); // 'resetApp' | 'deleteAllProducts'
+    const [pwdValue, setPwdValue] = useState('');
+    const [confirmPhraseValue, setConfirmPhraseValue] = useState('');
+    const [resetOptions, setResetOptions] = useState({
+        deleteTransactions: true,
+        deleteProducts: false,
+        deleteContacts: false,
+        deleteSettingsAndUsers: false
+    });
     const upUserIdRef = useRef(null); // tracks which user we're loading for (prevents race conditions)
     const dropRef = useRef(null);
 
@@ -653,13 +666,52 @@ export default function Settings() {
             }
         }
     };
-    const resetApp = async () => {
-        if (confirm(t('reset_app_warning') || '⚠️ Delete all data permanently?') && confirm(t('reset_app_confirm') || 'Second confirmation: Cannot be undone!'))
-            await window.api.settings?.resetApp?.();
+    const triggerResetApp = () => {
+        setPwdAction('resetApp');
+        setPwdValue('');
+        setConfirmPhraseValue('');
+        setResetOptions({
+            deleteTransactions: true,
+            deleteProducts: false,
+            deleteContacts: false,
+            deleteSettingsAndUsers: false
+        });
+        setPwdModalOpen(true);
     };
 
-    const handleDeleteAll = async () => {
-        if (confirm(t('prod_deleteAllConfirm') || 'Are you sure you want to delete all products from the database? This action cannot be undone!')) {
+    const triggerDeleteAllProducts = () => {
+        setPwdAction('deleteAllProducts');
+        setPwdValue('');
+        setConfirmPhraseValue('');
+        setPwdModalOpen(true);
+    };
+
+    const handlePasswordSubmit = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        
+        const expectedPhrase = pwdAction === 'deleteAllProducts'
+            ? 'حذف كافة المنتجات'
+            : (resetOptions.deleteSettingsAndUsers ? 'تصفير كافة البيانات' : 'تصفير جزئي للبيانات');
+
+        if (confirmPhraseValue !== expectedPhrase) {
+            toast.error(t('phrase_mismatch_error') || 'عبارة التأكيد غير مطابقة!');
+            return;
+        }
+
+        setPwdModalOpen(false);
+        if (pwdAction === 'resetApp') {
+            const res = await window.api.settings?.resetApp?.(resetOptions);
+            if (res && res.success) {
+                toast.success(t('savedSuccess') || 'Data reset successfully');
+                if (res.relaunch) {
+                    // Handled automatically by main process relaunch
+                } else {
+                    window.location.reload();
+                }
+            } else {
+                toast.error(res?.error || t('errorOccurred') || 'An error occurred during reset');
+            }
+        } else if (pwdAction === 'deleteAllProducts') {
             try {
                 const result = await window.api.products.deleteAll();
                 if (result && result.success) {
@@ -1648,7 +1700,7 @@ export default function Settings() {
                             <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.7 }}>
                                 {t('prod_deleteAllConfirm') || 'هل أنت متأكد من حذف جميع المنتجات من قاعدة البيانات؟ لا يمكن التراجع عن هذه الخطوة!'}
                             </p>
-                            <button style={{ ...btnStyle, background: 'var(--danger)', color: '#fff' }} onClick={handleDeleteAll}>
+                            <button style={{ ...btnStyle, background: 'var(--danger)', color: '#fff' }} onClick={triggerDeleteAllProducts}>
                                 <Trash2 size={14} /> {t('prod_deleteAll') || 'حذف كل المنتجات'}
                             </button>
                         </Card>
@@ -1658,7 +1710,7 @@ export default function Settings() {
                         <span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{t('danger') || 'Danger'}</span>
                     }>
                         <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: t('reset_app_desc') || 'Resetting will <strong>permanently delete all data</strong>. This cannot be undone.' }} />
-                        <button style={{ ...btnStyle, background: 'var(--danger)', color: '#fff' }} onClick={resetApp}>
+                        <button style={{ ...btnStyle, background: 'var(--danger)', color: '#fff' }} onClick={triggerResetApp}>
                             <AlertTriangle size={14} /> {t('reset_app') || 'Reset App'}
                         </button>
                     </Card>
@@ -1705,6 +1757,142 @@ export default function Settings() {
                     </div>
                 </Modal>
             )}
+
+            {/* ── Password Verification Modal ─────────────────────────────────────── */}
+            {pwdModalOpen && (() => {
+                const expectedPhrase = pwdAction === 'deleteAllProducts' ? 'حذف كافة المنتجات' : (resetOptions.deleteSettingsAndUsers ? 'تصفير كافة البيانات' : 'تصفير جزئي للبيانات');
+                const isPhraseMatched = confirmPhraseValue === expectedPhrase;
+                return (
+                    <Modal isOpen={pwdModalOpen} onClose={() => setPwdModalOpen(false)} title={pwdAction === 'resetApp' ? (t('reset_app') || 'إعادة ضبط التطبيق') : (t('prod_deleteAll') || 'حذف كل المنتجات')}>
+                        <form onSubmit={e => e.preventDefault()}>
+                            <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.7 }}>
+                                {pwdAction === 'resetApp'
+                                    ? (t('reset_app_warning') || '⚠️ تحذير: سيتم حذف كافة البيانات المسجلة نهائياً ولا يمكن التراجع عن ذلك!')
+                                    : (t('prod_deleteAllConfirm') || 'هل أنت متأكد من حذف جميع المنتجات من قاعدة البيانات؟ لا يمكن التراجع عن هذه الخطوة!')}
+                            </p>
+                            {pwdAction === 'resetApp' && (
+                                <div style={{ 
+                                    marginBottom: 16, 
+                                    padding: 12, 
+                                    background: 'var(--bg-secondary)', 
+                                    borderRadius: 8, 
+                                    border: '1px solid var(--border)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 10
+                                }}>
+                                    <label style={{ fontSize: '.875rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+                                        {t('select_reset_options') || 'اختر البيانات التي تريد تصفيرها وحذفها:'}
+                                    </label>
+                                    
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: '.85rem', color: 'var(--text-primary)' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={resetOptions.deleteTransactions}
+                                            onChange={e => setResetOptions(prev => ({ ...prev, deleteTransactions: e.target.checked }))}
+                                            disabled={resetOptions.deleteSettingsAndUsers}
+                                        />
+                                        <span>{t('delete_transactions') || 'حذف المعاملات المالية (الفواتير، السندات، القيود اليومية، والمصروفات)'}</span>
+                                    </label>
+
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: '.85rem', color: 'var(--text-primary)' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={resetOptions.deleteProducts}
+                                            onChange={e => setResetOptions(prev => ({ ...prev, deleteProducts: e.target.checked }))}
+                                            disabled={resetOptions.deleteSettingsAndUsers}
+                                        />
+                                        <span>{t('delete_products_list') || 'حذف قائمة المنتجات والمخزون والعروض'}</span>
+                                    </label>
+
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: '.85rem', color: 'var(--text-primary)' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={resetOptions.deleteContacts}
+                                            onChange={e => setResetOptions(prev => ({ ...prev, deleteContacts: e.target.checked }))}
+                                            disabled={resetOptions.deleteSettingsAndUsers}
+                                        />
+                                        <span>{t('delete_contacts_list') || 'حذف قائمة العملاء والموردين'}</span>
+                                    </label>
+
+                                    <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '4px 0' }} />
+
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: '.85rem', color: 'var(--danger)', fontWeight: 600 }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={resetOptions.deleteSettingsAndUsers}
+                                            onChange={e => {
+                                                const val = e.target.checked;
+                                                setResetOptions(prev => ({
+                                                    ...prev,
+                                                    deleteSettingsAndUsers: val,
+                                                    deleteTransactions: val ? true : prev.deleteTransactions,
+                                                    deleteProducts: val ? true : prev.deleteProducts,
+                                                    deleteContacts: val ? true : prev.deleteContacts
+                                                }));
+                                            }}
+                                        />
+                                        <span>{t('delete_settings_and_users') || 'حذف إعدادات الشركة وحسابات المستخدمين (ضبط مصنع كامل للبرنامج)'}</span>
+                                    </label>
+                                </div>
+                            )}
+                            <div style={{ marginBottom: 16, padding: 12, background: 'rgba(239, 68, 68, 0.05)', borderRadius: 8, border: '1px dashed var(--danger)' }}>
+                                <p style={{ fontSize: '.85rem', color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.5 }}>
+                                    {t('write_phrase_to_confirm') || 'يرجى كتابة العبارة التالية للتأكيد:'}
+                                    <strong style={{ color: 'var(--danger)', marginRight: 6, marginLeft: 6, fontSize: '.95rem', userSelect: 'all', background: 'rgba(239, 68, 68, 0.1)', padding: '2px 8px', borderRadius: 4 }}>
+                                        {expectedPhrase}
+                                    </strong>
+                                </p>
+                                <input
+                                    className="form-input"
+                                    type="text"
+                                    value={confirmPhraseValue}
+                                    onChange={e => setConfirmPhraseValue(e.target.value)}
+                                    placeholder={expectedPhrase}
+                                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8 }}
+                                    autoFocus
+                                    required
+                                />
+                                <span style={{ display: 'block', fontSize: '.72rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                                    * {t('copy_paste_hint') || 'يمكنك تحديد ونسخ النص الأحمر أعلاه ولصقه هنا لتسهيل العملية.'}
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 20 }}>
+                                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-start' }}>
+                                    <button 
+                                        className="btn btn-primary" 
+                                        style={{ 
+                                            background: isPhraseMatched ? 'var(--danger)' : 'var(--border)', 
+                                            color: isPhraseMatched ? '#fff' : 'var(--text-muted)', 
+                                            border: 'none',
+                                            cursor: isPhraseMatched ? 'pointer' : 'not-allowed',
+                                            transition: 'all 0.2s'
+                                        }} 
+                                        type="button"
+                                        onClick={() => {
+                                            if (!isPhraseMatched) {
+                                                toast.error(t('phrase_mismatch_error') || 'الرجاء كتابة عبارة التأكيد بشكل صحيح أولاً');
+                                            } else {
+                                                toast.success(t('double_click_required') || 'اضغط مرتين متتاليتين (Double Click) لتأكيد الحذف');
+                                            }
+                                        }}
+                                        onDoubleClick={handlePasswordSubmit}
+                                        disabled={!isPhraseMatched}
+                                    >
+                                        <AlertTriangle size={14} /> {t('confirm_delete') || 'تأكيد الحذف النهائي'}
+                                    </button>
+                                    <button className="btn btn-secondary" type="button" onClick={() => setPwdModalOpen(false)}>
+                                        {t('cancel') || 'إلغاء'}
+                                    </button>
+                                </div>
+                                <span style={{ fontSize: '.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                                    ⚠️ {t('double_click_hint') || 'ملاحظة: يجب الضغط مرتين متتاليتين (Double Click) على زر التأكيد للتنفيذ.'}
+                                </span>
+                            </div>
+                        </form>
+                    </Modal>
+                );
+            })()}
         </div>
     );
 }

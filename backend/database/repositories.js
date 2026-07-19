@@ -416,6 +416,65 @@ class ProductsRepo {
         return result;
     }
 
+    async bulkCreate(productsArray) {
+        try {
+            if (!Array.isArray(productsArray) || productsArray.length === 0) {
+                return { success: true, count: 0 };
+            }
+
+            const sequenceDocument = await Counter.findByIdAndUpdate(
+                'products',
+                { $inc: { seq: productsArray.length } },
+                { new: true, upsert: true }
+            );
+            let nextId = sequenceDocument.seq - productsArray.length + 1;
+
+            const lastDoc = await Product.findOne().sort({ id: -1 }).lean();
+            let nextNumVal = 1;
+            if (lastDoc && lastDoc.code) {
+                const match = lastDoc.code.match(/P(\d+)$/i);
+                if (match) {
+                    nextNumVal = parseInt(match[1], 10) + 1;
+                }
+            }
+
+            const docsToInsert = [];
+            for (const p of productsArray) {
+                const code = p.code || `P${String(nextNumVal++).padStart(4, '0')}`;
+                const warehouseStock = parseFloat(p.warehouse_stock) || 0;
+                const shopStock = parseFloat(p.shop_stock) || 0;
+                const totalStock = warehouseStock + shopStock;
+
+                docsToInsert.push({
+                    id: nextId++,
+                    code,
+                    name: p.name,
+                    description: p.description || '',
+                    unit: p.unit || 'قطعة',
+                    category: p.category || '',
+                    purchase_price: p.purchase_price || 0,
+                    sale_price: p.sale_price || 0,
+                    stock_quantity: totalStock,
+                    min_stock: p.min_stock || 0,
+                    image: p.image || null,
+                    supplier_id: p.supplier_id !== undefined ? p.supplier_id : null,
+                    supplier_ids: Array.isArray(p.supplier_ids) ? p.supplier_ids : [],
+                    warehouse_stock: warehouseStock,
+                    shop_stock: shopStock,
+                    dozen_price: p.dozen_price || 0,
+                    dozen_qty: p.dozen_qty || 1,
+                    is_active: p.is_active !== undefined ? p.is_active : true
+                });
+            }
+
+            await Product.insertMany(docsToInsert);
+            return { success: true, count: docsToInsert.length };
+        } catch (e) {
+            console.error('Bulk create error:', e);
+            return { success: false, error: e.message };
+        }
+    }
+
     async create(p) {
         try {
             const lastDoc = await Product.findOne().sort({ id: -1 }).lean();

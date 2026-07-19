@@ -342,6 +342,7 @@ class AppDatabase {
                                 methodName.startsWith('set') || 
                                 methodName.startsWith('clear') || 
                                 methodName.startsWith('increment') || 
+                                methodName.startsWith('bulk') || 
                                 methodName.startsWith('runSetup');
 
                 const isRead = !isWrite && methodName !== 'constructor' && typeof repo[methodName] === 'function';
@@ -558,6 +559,32 @@ class AppDatabase {
             }
         }
 
+        // Self-healing migration: Seed products_import and products_export permissions if missing
+        try {
+            const roles = ['admin', 'accountant', 'user'];
+            const newModules = ['products_import', 'products_export'];
+            for (const role of roles) {
+                for (const mod of newModules) {
+                    const exists = await Permission.findOne({ role, module: mod });
+                    if (!exists) {
+                        const nextId = await getNextSequenceValue('permissions');
+                        const canView = role === 'admin' || role === 'accountant';
+                        await Permission.create({
+                            id: nextId,
+                            role,
+                            module: mod,
+                            can_view: canView,
+                            can_create: canView,
+                            can_edit: false,
+                            can_delete: false
+                        });
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[DB] Error migrating import/export permissions:', e);
+        }
+
         // Self-healing migration: Recalculate paid amounts for all invoices to heal any out-of-sync states
         try {
             const InvoiceModel = collections.invoices || models.Invoice;
@@ -641,6 +668,7 @@ class AppDatabase {
                     }
                 }
             }
+            this.cache.clear(); // Clear cache so the newly restored data is fetched on subsequent reads
             return { success: true, message: 'تم استعادة النسخة الاحتياطية بنجاح' };
         } catch (e) {
             console.error('[DB] Restore error:', e);
@@ -703,11 +731,72 @@ class AppDatabase {
         return { success: true };
     }
 
-    async resetApp() {
-        for (const model of Object.values(collections)) {
-            await model.deleteMany({});
+    async resetApp(options = {}) {
+        const isFullReset = !options || Object.keys(options).length === 0 || options.deleteSettingsAndUsers;
+
+        if (isFullReset) {
+            for (const model of Object.values(collections)) {
+                await model.deleteMany({});
+            }
+            await this.seedDefaultData();
+        } else {
+            // Selective reset
+            if (options.deleteTransactions) {
+                const txModels = [
+                    collections.invoices,
+                    collections.vouchers,
+                    collections.journal_entries,
+                    collections.salary_payments,
+                    collections.employee_leaves,
+                    collections.employee_deductions,
+                    collections.expenses,
+                    collections.returns,
+                    collections.stock_transfers,
+                    collections.installment_payments,
+                    collections.installment_plans,
+                    collections.activity_log,
+                    collections.deleted_records
+                ].filter(Boolean);
+                for (const model of txModels) {
+                    await model.deleteMany({});
+                }
+                if (collections.counters) {
+                    await collections.counters.deleteMany({ name: { $in: ['invoices', 'vouchers', 'journal_entries', 'salary_payments', 'expenses', 'returns', 'stock_transfers', 'installment_plans'] } });
+                }
+                if (collections.accounts) {
+                    await collections.accounts.updateMany({}, { $set: { balance: 0, initial_balance: 0 } });
+                }
+            }
+            if (options.deleteProducts) {
+                const prodModels = [
+                    collections.products,
+                    collections.coupons,
+                    collections.offers
+                ].filter(Boolean);
+                for (const model of prodModels) {
+                    await model.deleteMany({});
+                }
+                if (collections.counters) {
+                    await collections.counters.deleteMany({ name: { $in: ['products', 'offers', 'coupons'] } });
+                }
+            }
+            if (options.deleteContacts) {
+                const contactModels = [
+                    collections.customers,
+                    collections.suppliers
+                ].filter(Boolean);
+                for (const model of contactModels) {
+                    await model.deleteMany({});
+                }
+                if (collections.counters) {
+                    await collections.counters.deleteMany({ name: { $in: ['customers', 'suppliers'] } });
+                }
+            }
         }
-        await this.seedDefaultData();
+        
+        if (this.cache) {
+            this.cache.clear();
+        }
         return { success: true };
     }
 }

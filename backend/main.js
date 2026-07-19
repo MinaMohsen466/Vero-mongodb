@@ -192,6 +192,11 @@ ipcMain.handle('products:create', async (event, product) => {
     if (result.success) await logActivity('create', 'products', result.id, product.name, product);
     return result;
 });
+ipcMain.handle('products:bulkCreate', async (event, products) => {
+    const result = await db.products.bulkCreate(products);
+    if (result.success) await logActivity('create', 'products', 0, `bulk_create_${result.count}`, { count: result.count });
+    return result;
+});
 ipcMain.handle('products:update', async (event, product) => {
     const result = await db.products.update(product);
     if (result.success) await logActivity('update', 'products', product.id, product.name, product);
@@ -469,17 +474,20 @@ ipcMain.handle('settings:getDbSize', async () => {
 });
 
 // Reset application (delete all data)
-ipcMain.handle('settings:resetApp', async () => {
+ipcMain.handle('settings:resetApp', async (event, options) => {
     try {
         if (db.resetApp) {
-            await db.resetApp();
+            await db.resetApp(options);
         } else {
             const dbFilePath = db.getDbPath ? await db.getDbPath() : null;
             if (dbFilePath && fs.existsSync(dbFilePath)) fs.unlinkSync(dbFilePath);
         }
-        app.relaunch();
-        app.exit(0);
-        return { success: true };
+        const isFullReset = !options || Object.keys(options).length === 0 || options.deleteSettingsAndUsers;
+        if (isFullReset) {
+            app.relaunch();
+            app.exit(0);
+        }
+        return { success: true, relaunch: isFullReset };
     } catch (e) {
         console.error('[settings:resetApp] Error:', e);
         return { success: false, error: e.message };
