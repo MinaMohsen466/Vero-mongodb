@@ -192,7 +192,7 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
             : '';
 
         const infoStandard = showCompanyInfo ? `
-            <div style="font-size: ${fonts.body}; line-height: 1.5; color: #1f2937; text-align: ${alignLeft}; display: flex; flex-direction: column; gap: 3px;">
+            <div style="font-size: ${fonts.body}; line-height: 1.5; color: #1f2937; text-align: ${logoPosition === 'center' ? 'center' : alignLeft}; display: flex; flex-direction: column; gap: 3px; ${logoPosition === 'center' ? 'align-items: center;' : ''}">
               <h3 style="font-size: 18px; font-weight: 800; margin: 0; color: #111827; max-width: 250px; overflow-wrap: break-word; line-height: 1.3;">${companyName}</h3>
               ${companyPhone ? `<div style="white-space: nowrap; font-size: 13px; color: #4b5563; margin-top: 2px;"><strong>${t('phone') || 'تلفون'}:</strong> <span dir="ltr">${companyPhone}</span></div>` : ''}
               ${companyEmail ? `<div style="white-space: nowrap; font-size: 13px; color: #4b5563;"><strong>${t('email') || 'البريد الإلكتروني'}:</strong> ${companyEmail}</div>` : ''}
@@ -216,8 +216,17 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
             <div style="white-space: nowrap;"><strong>${t('due_date') || 'صالح حتى'}:</strong> ${new Date(invoice.due_date).toLocaleDateString(isRtl ? 'ar-KW' : 'en-GB')}</div>
         ` : '';
 
+        const layoutDirection = isRtl 
+            ? (logoPosition === 'left' ? 'row-reverse' : 'row') 
+            : (logoPosition === 'right' ? 'row-reverse' : 'row');
+
+        const detailsAlign = logoPosition === 'left' ? 'right' : 'left';
+        const detailsFlexAlign = isRtl 
+            ? (logoPosition === 'left' ? 'flex-start' : 'flex-end') 
+            : (logoPosition === 'left' ? 'flex-end' : 'flex-start');
+
         const invoiceDetailsStandard = `
-            <div style="font-size: ${fonts.body}; line-height: 1.6; color: #1f2937; text-align: ${alignRight}; white-space: nowrap; display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
+            <div style="font-size: ${fonts.body}; line-height: 1.6; color: #1f2937; text-align: ${detailsAlign}; white-space: nowrap; display: flex; flex-direction: column; gap: 4px; align-items: ${detailsFlexAlign};">
                 <div style="white-space: nowrap;"><strong>${numberLabel}:</strong> <span style="font-family: monospace; font-size: 13px; font-weight: 700; color: #111827;">${invoice.invoice_number}</span></div>
                 <div style="white-space: nowrap;"><strong>${t('date') || 'التاريخ'}:</strong> ${combinedDateTime}</div>
                 ${dueDateHtml}
@@ -244,17 +253,51 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
                     <h2 style="font-size: 15px; font-weight: 700; margin: 0 0 8px 0; color: #000; text-align: center;">${invoiceTitle}</h2>
                     ${invoiceDetailsThermal}
                 </div>`;
+        } else if (logoPosition === 'center') {
+            headerHtml = `
+                <div style="display: flex; flex-direction: column; align-items: center; width: 100%; border-bottom: 2px solid #9ca3af; padding-bottom: 15px; margin-bottom: 20px;">
+                    <!-- Centered Logo -->
+                    ${logo ? `<div style="margin-bottom: 10px; display: flex; justify-content: center; width: 100%;">${logo}</div>` : ''}
+                    
+                    <!-- Centered Company Info -->
+                    <div style="width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
+                        ${infoStandard}
+                    </div>
+                    
+                    <!-- Divider line -->
+                    <div style="margin: 15px 0 10px 0; border-top: 1px solid #e5e7eb; width: 100%;"></div>
+                    
+                    <!-- Details row below -->
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%; flex-direction: ${isRtl ? 'row-reverse' : 'row'};">
+                        <!-- Left side details (Client details) -->
+                        <div style="font-size: ${fonts.body}; line-height: 1.6; color: #1f2937; text-align: ${isRtl ? 'right' : 'left'};">
+                            <strong>${clientLabel}:</strong> ${clientName}
+                        </div>
+                        
+                        <!-- Center: Invoice Title -->
+                        <div style="text-align: center;">
+                            <h2 style="font-size: ${fonts.title}; font-weight: 800; margin: 0; color: #111827; letter-spacing: -0.5px;">${invoiceTitle}</h2>
+                        </div>
+                        
+                        <!-- Right side details (Inv number & date) -->
+                        <div style="font-size: ${fonts.body}; line-height: 1.6; color: #1f2937; text-align: ${isRtl ? 'left' : 'right'}; display: flex; flex-direction: column; gap: 4px; align-items: ${isRtl ? 'flex-start' : 'flex-end'};">
+                            <div style="white-space: nowrap;"><strong>${numberLabel}:</strong> <span style="font-family: monospace; font-size: 13px; font-weight: 700; color: #111827;">${invoice.invoice_number}</span></div>
+                            <div style="white-space: nowrap;"><strong>${t('date') || 'التاريخ'}:</strong> ${combinedDateTime}</div>
+                            ${dueDateHtml}
+                        </div>
+                    </div>
+                </div>`;
         } else {
             headerHtml = `
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%; border-bottom: 2px solid #9ca3af; padding-bottom: 15px; margin-bottom: 20px;">
+                <div style="display: flex; flex-direction: ${layoutDirection}; justify-content: space-between; align-items: flex-start; width: 100%; border-bottom: 2px solid #9ca3af; padding-bottom: 15px; margin-bottom: 20px;">
                     <!-- Column 1 (Left/Right Group): Company logo & info side-by-side -->
-                    <div style="display: flex; align-items: flex-start; gap: 14px; flex: 1.5; text-align: ${alignLeft};">
+                    <div style="display: flex; flex-direction: ${layoutDirection}; align-items: flex-start; gap: 14px; flex: 1.5; text-align: ${alignLeft};">
                         ${logo ? `<div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center;">${logo}</div>` : ''}
                         ${infoStandard}
                     </div>
                     
                     <!-- Column 2 (Opposite Group): Invoice details -->
-                    <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end; text-align: ${alignRight}; flex: 1;">
+                    <div style="display: flex; flex-direction: column; gap: 4px; align-items: ${detailsFlexAlign}; text-align: ${detailsAlign}; flex: 1;">
                         <h2 style="font-size: ${fonts.title}; font-weight: 800; margin: 0 0 6px 0; color: #111827; white-space: nowrap; letter-spacing: -0.5px;">${invoiceTitle}</h2>
                         ${invoiceDetailsStandard}
                     </div>
@@ -445,7 +488,7 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
         ) : null;
 
         const CompanyInfoStandard = showCompanyInfo ? (
-            <div style={{ fontSize: bodyFontSizeNum, lineHeight: 1.5, color: '#1f2937', textAlign: isRtl ? 'right' : 'left', display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
+            <div style={{ fontSize: bodyFontSizeNum, lineHeight: 1.5, color: '#1f2937', textAlign: logoPosition === 'center' ? 'center' : (isRtl ? 'right' : 'left'), display: 'flex', flexDirection: 'column', gap: 3, alignItems: logoPosition === 'center' ? 'center' : 'flex-start' }}>
                 <h3 style={{ fontSize: 18, fontWeight: 800, margin: '0 0 2px 0', color: '#111827', maxWidth: 250, overflowWrap: 'break-word', lineHeight: 1.3 }}>{companyName}</h3>
                 {companyPhone && <div style={{ whiteSpace: 'nowrap', fontSize: 13, color: '#4b5563' }}><strong>{t('phone') || 'تلفون'}:</strong> <span dir="ltr">{companyPhone}</span></div>}
                 {companyEmail && <div style={{ whiteSpace: 'nowrap', fontSize: 13, color: '#4b5563' }}><strong>{t('email') || 'البريد الإلكتروني'}:</strong> {companyEmail}</div>}
@@ -468,8 +511,17 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
 
         const numberLabel = type === 'quotation' ? (t('quotation_number') || 'رقم عرض السعر') : (t('inv_number') || 'رقم الفاتورة');
 
+        const layoutDirection = isRtl 
+            ? (logoPosition === 'left' ? 'row-reverse' : 'row') 
+            : (logoPosition === 'right' ? 'row-reverse' : 'row');
+
+        const detailsAlign = logoPosition === 'left' ? 'right' : 'left';
+        const detailsFlexAlign = isRtl 
+            ? (logoPosition === 'left' ? 'flex-start' : 'flex-end') 
+            : (logoPosition === 'left' ? 'flex-end' : 'flex-start');
+
         const InvoiceDetailsStandard = (
-            <div style={{ fontSize: bodyFontSizeNum, lineHeight: 1.6, color: '#1f2937', textAlign: isRtl ? 'left' : 'right', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+            <div style={{ fontSize: bodyFontSizeNum, lineHeight: 1.6, color: '#1f2937', textAlign: detailsAlign, display: 'flex', flexDirection: 'column', gap: 4, alignItems: detailsFlexAlign }}>
                 <div style={{ whiteSpace: 'nowrap' }}><strong>{numberLabel}:</strong> <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#111827' }}>{invoice.invoice_number}</span></div>
                 <div style={{ whiteSpace: 'nowrap' }}><strong>{t('date') || 'التاريخ'}:</strong> {combinedDateTime}</div>
                 {type === 'quotation' && invoice.due_date && (
@@ -504,13 +556,58 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
                     </div>
                 </div>
             );
+        } else if (logoPosition === 'center') {
+            return (
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    width: '100%',
+                    borderBottom: '2px solid #9ca3af',
+                    paddingBottom: 15,
+                    marginBottom: 20,
+                    textAlign: 'center'
+                }}>
+                    {/* Centered Logo */}
+                    {LogoComponent && <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center', width: '100%' }}>{LogoComponent}</div>}
+                    
+                    {/* Centered Company Info */}
+                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                        {CompanyInfoStandard}
+                    </div>
+                    
+                    {/* Divider line */}
+                    <div style={{ margin: '15px 0 10px 0', borderTop: '1px solid #e5e7eb', width: '100%' }}></div>
+                    
+                    {/* Details row below */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', flexDirection: isRtl ? 'row-reverse' : 'row' }}>
+                        {/* Left side details (Client details) */}
+                        <div style={{ fontSize: bodyFontSizeNum, lineHeight: 1.6, color: '#1f2937', textAlign: isRtl ? 'right' : 'left' }}>
+                            <strong>{clientLabel}:</strong> {clientName}
+                        </div>
+                        
+                        {/* Center: Invoice Title */}
+                        <div style={{ textAlign: 'center' }}>
+                            <h2 style={{ fontSize: titleFontSizeNum, fontWeight: 800, margin: 0, color: '#111827', letterSpacing: '-0.5px' }}>{invoiceTitle}</h2>
+                        </div>
+                        
+                        {/* Right side details (Inv number & date) */}
+                        <div style={{ fontSize: bodyFontSizeNum, lineHeight: 1.6, color: '#1f2937', textAlign: isRtl ? 'left' : 'right', display: 'flex', flexDirection: 'column', gap: 4, alignItems: isRtl ? 'flex-start' : 'flex-end' }}>
+                            <div style={{ whiteSpace: 'nowrap' }}><strong>{numberLabel}:</strong> <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#111827' }}>{invoice.invoice_number}</span></div>
+                            <div style={{ whiteSpace: 'nowrap' }}><strong>{t('date') || 'التاريخ'}:</strong> {combinedDateTime}</div>
+                            {type === 'quotation' && invoice.due_date && (
+                                <div style={{ whiteSpace: 'nowrap' }}><strong>{t('due_date') || 'صالح حتى'}:</strong> {new Date(invoice.due_date).toLocaleDateString(isRtl ? 'ar-KW' : 'en-GB')}</div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
         }
-
-        const flexDir = isRtl ? 'row-reverse' : 'row';
 
         return (
             <div style={{
                 display: 'flex',
+                flexDirection: layoutDirection,
                 justifyContent: 'space-between',
                 alignItems: 'flex-start',
                 width: '100%',
@@ -521,6 +618,7 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
                 {/* Left Column: Logo & Company Info group side-by-side */}
                 <div style={{
                     display: 'flex',
+                    flexDirection: layoutDirection,
                     alignItems: 'flex-start',
                     gap: 14,
                     flex: 1.5
@@ -534,12 +632,12 @@ body{font-family:'Cairo','Arial',sans-serif;background:white;color:#222;font-siz
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 4,
-                    alignItems: 'flex-end',
-                    textAlign: isRtl ? 'left' : 'right',
+                    alignItems: detailsFlexAlign,
+                    textAlign: detailsAlign,
                     flex: 1
                 }}>
                     <h2 style={{ fontSize: titleFontSizeNum, fontWeight: 800, margin: '0 0 6px 0', color: '#111827', whiteSpace: 'nowrap', letterSpacing: '-0.5px' }}>{invoiceTitle}</h2>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: isRtl ? 'flex-start' : 'flex-end', textAlign: isRtl ? 'left' : 'right' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: detailsFlexAlign, textAlign: detailsAlign }}>
                         {InvoiceDetailsStandard}
                     </div>
                 </div>

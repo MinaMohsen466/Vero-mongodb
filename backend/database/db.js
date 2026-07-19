@@ -389,7 +389,8 @@ class AppDatabase {
             ['tax_rate', '0', 'tax'], ['theme', 'light', 'appearance'],
             ['invoice_title_sales', 'فاتورة مبيعات', 'invoice'], ['invoice_title_purchase', 'فاتورة مشتريات', 'invoice'],
             ['invoice_footer', 'شكراً لتعاملكم معنا', 'invoice'], ['invoice_terms', '', 'invoice'], ['show_logo', 'yes', 'invoice'], ['show_company_info', 'yes', 'invoice'],
-            ['paper_size', 'A4', 'invoice'], ['paper_orientation', 'portrait', 'invoice']
+            ['paper_size', 'A4', 'invoice'], ['paper_orientation', 'portrait', 'invoice'],
+            ['logo_position', 'center', 'invoice'], ['logo_size', 'medium', 'invoice']
         ];
         for (const [key, value, category] of settings) {
             const exists = await Setting.findOne({ key });
