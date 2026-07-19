@@ -161,8 +161,25 @@ class AppDatabase {
 
         // Load environment variables from .env if it exists
         try {
-            const envPath = path.join(process.cwd(), '.env');
-            if (fs.existsSync(envPath)) {
+            const pathsToSearch = [];
+            if (process.execPath) {
+                pathsToSearch.push(path.join(path.dirname(process.execPath), '.env'));
+            }
+            if (app && typeof app.getAppPath === 'function') {
+                pathsToSearch.push(path.join(app.getAppPath(), '.env'));
+            }
+            pathsToSearch.push(path.join(process.cwd(), '.env'));
+
+            let envPath = null;
+            for (const p of pathsToSearch) {
+                if (fs.existsSync(p)) {
+                    envPath = p;
+                    break;
+                }
+            }
+
+            if (envPath) {
+                console.log('[DB] Loading environment variables from:', envPath);
                 const envContent = fs.readFileSync(envPath, 'utf8');
                 envContent.split('\n').forEach(line => {
                     const trimmed = line.trim();
@@ -175,6 +192,8 @@ class AppDatabase {
                         }
                     }
                 });
+            } else {
+                console.log('[DB] No .env file found in searched paths:', pathsToSearch);
             }
         } catch (e) {
             console.error('[DB] Error loading .env:', e);
