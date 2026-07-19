@@ -22,9 +22,31 @@ class AdminConfig {
             this.saveConfig({
                 adminPassword: this.defaultAdminPassword,
                 createdAt: new Date().toISOString(),
-                protected: false
+                protected: false,
+                backupKey: crypto.randomBytes(32).toString('hex')
             });
+        } else {
+            try {
+                const config = JSON.parse(fs.readFileSync(this.configFile, 'utf8'));
+                if (!config.backupKey) {
+                    config.backupKey = crypto.randomBytes(32).toString('hex');
+                    this.saveConfig(config);
+                }
+            } catch (e) {}
         }
+    }
+
+    /**
+     * Get backup encryption key
+     */
+    getBackupKey() {
+        try {
+            if (fs.existsSync(this.configFile)) {
+                const config = JSON.parse(fs.readFileSync(this.configFile, 'utf8'));
+                return config.backupKey || crypto.createHash('sha256').update(this.getAdminPassword()).digest('hex');
+            }
+        } catch (e) {}
+        return crypto.createHash('sha256').update(this.defaultAdminPassword).digest('hex');
     }
 
     /**

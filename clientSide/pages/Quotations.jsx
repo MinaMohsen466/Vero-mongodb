@@ -9,6 +9,11 @@ import { useShortcuts } from '../hooks/useShortcuts';
 
 const parseDbDate = (dbDate) => {
     if (!dbDate) return new Date();
+    if (dbDate instanceof Date) return dbDate;
+    if (typeof dbDate !== 'string') {
+        const d = new Date(dbDate);
+        return isNaN(d.getTime()) ? new Date() : d;
+    }
     if (dbDate.includes('Z') || dbDate.includes('+') || (dbDate.includes('-') && dbDate.includes(':') && dbDate.includes('T'))) {
         return new Date(dbDate);
     }

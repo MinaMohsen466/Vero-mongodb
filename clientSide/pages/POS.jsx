@@ -4,6 +4,7 @@ import { toast } from 'react-hot-toast';
 import { useAuth, isColorUnit } from '../App';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
 import SearchableSelect from '../components/SearchableSelect';
+import { getCachedProducts, saveCachedProducts, deleteCachedProducts, clearCachedProducts } from '../utils/posCache';
 
 const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#3B82F6', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#06B6D4'];
 
@@ -246,30 +247,117 @@ function POS() {
     }, [selectedCustomer, payMethod]);
 
 
+    const mapProducts = (prodsList) => {
+        return (prodsList || []).filter(p => p.is_active).map(p => {
+            let parsedSuppliers = [];
+            try {
+                parsedSuppliers = typeof p.supplier_ids === 'string' ? JSON.parse(p.supplier_ids) : p.supplier_ids;
+            } catch (e) {
+                parsedSuppliers = p.supplier_id ? [String(p.supplier_id)] : [];
+            }
+            return {
+                ...p,
+                _parsedSuppliers: Array.isArray(parsedSuppliers) ? parsedSuppliers.map(String) : []
+            };
+        });
+    };
+
+    const syncProducts = async (forceUpdateState = false) => {
+        try {
+            const currentDbSig = localStorage.getItem('last_products_sync_db_sig') || '';
+            const lastSync = forceUpdateState ? '' : (localStorage.getItem('last_products_sync_time') || '');
+            const syncResult = await window.api.products.getSyncData(lastSync);
+            
+            let currentActive = null;
+            if (syncResult && syncResult.success) {
+                const { changes, deleted, syncTime, dbSignature } = syncResult;
+                
+                // If database signature changed, clear cache and force full sync!
+                if (dbSignature && dbSignature !== currentDbSig) {
+                    console.log('Database signature changed! Clearing POS cache for full sync...');
+                    await clearCachedProducts();
+                    localStorage.setItem('last_products_sync_db_sig', dbSignature);
+                    localStorage.removeItem('last_products_sync_time');
+                    
+                    // Run sync again with empty sync time to pull all products from the new DB
+                    const fullSyncResult = await window.api.products.getSyncData('');
+                    if (fullSyncResult && fullSyncResult.success) {
+                        await saveCachedProducts(fullSyncResult.changes || []);
+                        localStorage.setItem('last_products_sync_time', fullSyncResult.syncTime);
+                    }
+                    
+                    // Reload and render
+                    const cached = await getCachedProducts();
+                    const active = mapProducts(cached);
+                    setAllProducts(active);
+                    setProducts(active);
+                    return active;
+                }
+                
+                let didChange = false;
+                if (changes && changes.length > 0) {
+                    await saveCachedProducts(changes);
+                    didChange = true;
+                }
+                if (deleted && deleted.length > 0) {
+                    await deleteCachedProducts(deleted);
+                    didChange = true;
+                }
+                
+                localStorage.setItem('last_products_sync_time', syncTime);
+                
+                if (didChange || forceUpdateState || !lastSync) {
+                    const cached = await getCachedProducts();
+                    const sorted = [...cached].sort((a, b) => {
+                        const totalSoldA = a.total_sold || 0;
+                        const totalSoldB = b.total_sold || 0;
+                        if (totalSoldB !== totalSoldA) {
+                            return totalSoldB - totalSoldA;
+                        }
+                        return (a.name || '').localeCompare(b.name || '');
+                    });
+                    currentActive = mapProducts(sorted);
+                    setAllProducts(currentActive);
+                    setProducts(currentActive);
+                }
+            }
+            return currentActive;
+        } catch (e) {
+            console.error('Error syncing products:', e);
+            return null;
+        }
+    };
+
     const loadData = async () => {
         setLoading(true);
         try {
-            const [prods, custs, sett, offers, supps] = await Promise.all([
-                window.api.products.getAllSortedBySales(),
+            // 1. Fetch from local cache first for instant render
+            const cached = await getCachedProducts();
+            let cacheEmpty = true;
+            if (cached && cached.length > 0) {
+                cacheEmpty = false;
+                const sorted = [...cached].sort((a, b) => {
+                    const totalSoldA = a.total_sold || 0;
+                    const totalSoldB = b.total_sold || 0;
+                    if (totalSoldB !== totalSoldA) {
+                        return totalSoldB - totalSoldA;
+                    }
+                    return (a.name || '').localeCompare(b.name || '');
+                });
+                const active = mapProducts(sorted);
+                setAllProducts(active);
+                setProducts(active);
+                setLoading(false); // Render immediately
+            }
+
+            // 2. Fetch other essential lookups
+            const [custs, sett, offers, supps] = await Promise.all([
                 window.api.customers.getAll(),
                 window.api.settings.getAll(),
                 window.api.offers.getActive(),
                 window.api.suppliers.getAll()
             ]);
-            const active = (prods || []).filter(p => p.is_active).map(p => {
-                let parsedSuppliers = [];
-                try {
-                    parsedSuppliers = JSON.parse(p.supplier_ids || '[]');
-                } catch (e) {
-                    parsedSuppliers = p.supplier_id ? [String(p.supplier_id)] : [];
-                }
-                return {
-                    ...p,
-                    _parsedSuppliers: Array.isArray(parsedSuppliers) ? parsedSuppliers.map(String) : []
-                };
-            });
-            setAllProducts(active);
-            setProducts(active);
+            
             setCustomers(custs || []);
             const defaultCust = (custs || []).find(c => c.code === 'CUST-CASH');
             if (defaultCust) {
@@ -278,36 +366,32 @@ function POS() {
             setSettings(sett || {});
             setActiveOffers(offers || []);
             setSuppliers(supps || []);
-        } catch (e) { console.error(e); }
-        setLoading(false);
+
+            // 3. Sync products in the background
+            await syncProducts(cacheEmpty);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    // Refresh only stock values (light refresh)
     const refreshStock = async (showIndicator = true) => {
         if (showIndicator) setRefreshing(true);
         try {
-            const prods = await window.api.products.getAllSortedBySales();
-            const active = (prods || []).filter(p => p.is_active).map(p => {
-                let parsedSuppliers = [];
-                try {
-                    parsedSuppliers = JSON.parse(p.supplier_ids || '[]');
-                } catch (e) {
-                    parsedSuppliers = p.supplier_id ? [String(p.supplier_id)] : [];
-                }
-                return {
-                    ...p,
-                    _parsedSuppliers: Array.isArray(parsedSuppliers) ? parsedSuppliers.map(String) : []
-                };
-            });
-            setAllProducts(active);
-            setProducts(active);
-            // Update cart stock info
-            setCart(prev => prev.map(item => {
-                const updated = active.find(p => p.id === item.id);
-                return updated ? { ...item, stock: updated.shop_stock } : item;
-            }));
-        } catch (e) { console.error(e); }
-        if (showIndicator) setRefreshing(false);
+            const active = await syncProducts(true);
+            if (active) {
+                // Update cart stock info
+                setCart(prev => prev.map(item => {
+                    const updated = active.find(p => p.id === item.id);
+                    return updated ? { ...item, stock: updated.shop_stock } : item;
+                }));
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            if (showIndicator) setRefreshing(false);
+        }
     };
 
     const addToCart = useCallback((product) => {

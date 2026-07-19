@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('api', {
     products: {
         getAll: () => ipcRenderer.invoke('products:getAll'),
         getAllSortedBySales: () => ipcRenderer.invoke('products:getAllSortedBySales'),
+        getSyncData: (lastSyncTime) => ipcRenderer.invoke('products:getSyncData', lastSyncTime),
         create: (product) => ipcRenderer.invoke('products:create', product),
         update: (product) => ipcRenderer.invoke('products:update', product),
         delete: (id) => ipcRenderer.invoke('products:delete', id),

@@ -1,0 +1,556 @@
+const mongoose = require('mongoose');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+
+// Load models & helper functions
+const models = require('./models');
+const { getNextSequenceValue, syncSequence, User, Customer, Supplier, Account, Setting, Permission } = models;
+
+// Load repositories
+const repos = require('./repositories');
+const {
+    UsersRepo, CustomersRepo, SuppliersRepo, AccountsRepo, ProductsRepo,
+    InvoicesRepo, VouchersRepo, JournalRepo, ReportsRepo, SettingsRepo,
+    PermissionsRepo, EmployeesRepo, SalaryRepo, LeavesRepo, DeductionsRepo,
+    ExpensesRepo, SystemRepo, CouponsRepo, OffersRepo, ActivityLogRepo,
+    StockTransfersRepo, ReturnsRepo
+} = repos;
+
+// Password security helpers
+function hashPassword(password) {
+    if (!password) return '';
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    return `pbkdf2$${salt}$${hash}`;
+}
+function verifyPassword(password, storedPassword) {
+    if (!storedPassword || !password) return false;
+    if (storedPassword.startsWith('pbkdf2$')) {
+        const parts = storedPassword.split('$');
+        if (parts.length === 3) {
+            const salt = parts[1];
+            const originalHash = parts[2];
+            const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+            return hash === originalHash;
+        }
+    }
+    return password === storedPassword;
+}
+
+// Backup encryption helpers
+function encryptData(text, keyHex) {
+    const key = Buffer.from(keyHex, 'hex');
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return `${iv.toString('hex')}:${encrypted}`;
+}
+
+function decryptData(encryptedText, keyHex) {
+    const key = Buffer.from(keyHex, 'hex');
+    const parts = encryptedText.split(':');
+    if (parts.length !== 2) throw new Error('Invalid encrypted backup format');
+    const iv = Buffer.from(parts[0], 'hex');
+    const encrypted = parts[1];
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+}
+
+// Global plugin to trigger automatic backup on database modifications
+function autoBackupPlugin(schema) {
+    const trigger = () => {
+        if (typeof dbInstance !== 'undefined' && dbInstance) {
+            dbInstance.triggerAutoBackup();
+        }
+    };
+    schema.post('save', trigger);
+    schema.post('updateOne', trigger);
+    schema.post('updateMany', trigger);
+    schema.post('deleteOne', trigger);
+    schema.post('deleteMany', trigger);
+    schema.post('findOneAndUpdate', trigger);
+    schema.post('findOneAndDelete', trigger);
+}
+mongoose.plugin(autoBackupPlugin);
+
+// Explicit collections mapping for backup/restore
+const collections = {
+    counters: models.Counter,
+    users: models.User,
+    permissions: models.Permission,
+    user_permissions: models.UserPermission,
+    customers: models.Customer,
+    suppliers: models.Supplier,
+    accounts: models.Account,
+    products: models.Product,
+    invoices: models.Invoice,
+    vouchers: models.Voucher,
+    journal_entries: models.JournalEntry,
+    settings: models.Setting,
+    employees: models.Employee,
+    employee_leaves: models.EmployeeLeave,
+    employee_deductions: models.EmployeeDeduction,
+    salary_payments: models.SalaryPayment,
+    expenses: models.Expense,
+    coupons: models.Coupon,
+    offers: models.Offer,
+    activity_log: models.ActivityLog,
+    returns: models.Return,
+    stock_transfers: models.StockTransfer,
+    installment_plans: models.InstallmentPlan,
+    installment_payments: models.InstallmentPayment,
+    deleted_records: models.DeletedRecord
+};
+
+class AppDatabase {
+    constructor() {
+        this.app = null;
+        this.configPath = null;
+        this.adminConfig = null;
+        this.lastAutoBackupTime = 0;
+    }
+
+    setAdminConfig(adminConfig) {
+        this.adminConfig = adminConfig;
+    }
+
+    async triggerAutoBackup() {
+        try {
+            const now = Date.now();
+            // Throttle to run at most once every 5 minutes (300,000 ms)
+            if (now - this.lastAutoBackupTime < 300000) {
+                return;
+            }
+
+            if (fs.existsSync(this.configPath)) {
+                const config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+                if (config.backupPath) {
+                    console.log('[DB] Triggering background automatic backup...');
+                    this.lastAutoBackupTime = now;
+
+                    // Run backup in background asynchronously (do not await)
+                    this.backupToPath(config.backupPath).then(res => {
+                        if (res.success) {
+                            console.log('[DB] Background automatic backup completed successfully');
+                            try {
+                                const currentConfig = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+                                currentConfig.lastBackupTime = new Date().toISOString();
+                                fs.writeFileSync(this.configPath, JSON.stringify(currentConfig, null, 2), 'utf8');
+                            } catch (e) {}
+                        } else {
+                            console.error('[DB] Background automatic backup failed:', res.error);
+                        }
+                    }).catch(err => {
+                        console.error('[DB] Background automatic backup error:', err);
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('[DB] Error triggering automatic backup:', e);
+        }
+    }
+
+    async init(app) {
+        this.app = app;
+        const userDataPath = app.getPath('userData');
+        this.configPath = path.join(userDataPath, 'vero-config.json');
+
+        // Load environment variables from .env if it exists
+        try {
+            const envPath = path.join(process.cwd(), '.env');
+            if (fs.existsSync(envPath)) {
+                const envContent = fs.readFileSync(envPath, 'utf8');
+                envContent.split('\n').forEach(line => {
+                    const trimmed = line.trim();
+                    if (trimmed && !trimmed.startsWith('#')) {
+                        const parts = trimmed.split('=');
+                        if (parts.length >= 2) {
+                            const key = parts[0].trim();
+                            const val = parts.slice(1).join('=').trim().replace(/^['"]|['"]$/g, '');
+                            process.env[key] = val;
+                        }
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('[DB] Error loading .env:', e);
+        }
+
+        let mongoUri = 'mongodb://127.0.0.1:27017/vero';
+        if (process.env.MONGODB_URI) {
+            mongoUri = process.env.MONGODB_URI;
+        } else {
+            try {
+                if (fs.existsSync(this.configPath)) {
+                    const config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+                    if (config.mongoUri) {
+                        mongoUri = config.mongoUri;
+                    }
+                }
+            } catch (e) {}
+        }
+
+        console.log('[DB] Connecting to MongoDB:', mongoUri);
+        await mongoose.connect(mongoUri);
+        console.log('[DB] Connected to MongoDB');
+
+        // Sync all sequences
+        for (const [name, model] of Object.entries(collections)) {
+            if (name !== 'counters') {
+                await syncSequence(name, model);
+            }
+        }
+
+        this.initRepositories();
+        await this.seedDefaultData();
+    }
+
+    initRepositories() {
+        this.users = new UsersRepo(this);
+        this.customers = new CustomersRepo(this);
+        this.suppliers = new SuppliersRepo(this);
+        this.accounts = new AccountsRepo(this);
+        this.products = new ProductsRepo(this);
+        this.invoices = new InvoicesRepo(this);
+        this.vouchers = new VouchersRepo(this);
+        this.journal = new JournalRepo(this);
+        this.reports = new ReportsRepo(this);
+        this.settings = new SettingsRepo(this);
+        this.permissions = new PermissionsRepo(this);
+        this.employees = new EmployeesRepo(this);
+        this.salaries = new SalaryRepo(this);
+        this.leaves = new LeavesRepo(this);
+        this.deductions = new DeductionsRepo(this);
+        this.expenses = new ExpensesRepo(this);
+        this.system = new SystemRepo(this);
+        this.activityLog = new ActivityLogRepo(this);
+        this.stockTransfers = new StockTransfersRepo(this);
+        this.returns = new ReturnsRepo(this);
+        this.coupons = new CouponsRepo(this);
+        this.offers = new OffersRepo(this);
+    }
+
+    async _handleOpeningBalance(type, entityId, oldBalance, oldJeId, newBalance, newDate, entityCode, entityName) {
+        if (oldJeId) {
+            try {
+                await this.journal.delete(oldJeId);
+            } catch (e) {
+                console.error(`Error deleting old opening balance journal entry:`, e);
+            }
+        }
+
+        if (!newBalance || parseFloat(newBalance) === 0) {
+            return null;
+        }
+
+        const accountsPayable = await Account.findOne({ code: '211' });
+        const accountsReceivable = await Account.findOne({ code: '113' });
+        const openingBalancesAcc = await Account.findOne({ code: '399' });
+
+        if (!openingBalancesAcc) {
+            console.error("Opening balances account (399) not found!");
+            return null;
+        }
+
+        const amt = parseFloat(newBalance);
+        const lines = [];
+
+        if (type === 'supplier') {
+            if (accountsPayable) {
+                lines.push({
+                    account_id: openingBalancesAcc.id,
+                    debit: amt,
+                    credit: 0,
+                    description: `رصيد افتتاحي للمورد ${entityName} (${entityCode})`
+                });
+                lines.push({
+                    account_id: accountsPayable.id,
+                    debit: 0,
+                    credit: amt,
+                    description: `رصيد افتتاحي للمورد ${entityName} (${entityCode})`
+                });
+            }
+        } else if (type === 'customer') {
+            if (accountsReceivable) {
+                lines.push({
+                    account_id: accountsReceivable.id,
+                    debit: amt,
+                    credit: 0,
+                    description: `رصيد افتتاحي للعميل ${entityName} (${entityCode})`
+                });
+                lines.push({
+                    account_id: openingBalancesAcc.id,
+                    debit: 0,
+                    credit: amt,
+                    description: `رصيد افتتاحي للعميل ${entityName} (${entityCode})`
+                });
+            }
+        }
+
+        if (lines.length > 0) {
+            const entryDesc = type === 'supplier' 
+                ? `رصيد افتتاحي للمورد ${entityName}` 
+                : `رصيد افتتاحي للعميل ${entityName}`;
+            
+            const jeResult = await this.journal.create({
+                date: newDate || new Date().toISOString().split('T')[0],
+                description: entryDesc,
+                reference: entityCode,
+                lines: lines
+            });
+
+            if (jeResult.success) {
+                return jeResult.id;
+            } else {
+                console.error("Failed to create opening balance journal entry:", jeResult.error);
+            }
+        }
+        return null;
+    }
+
+    async seedDefaultData() {
+        const adminPassword = this.adminConfig?.getAdminPassword() || 'Vero123*';
+        
+        // Admin user
+        const admin = await User.findOne({ username: 'admin' });
+        if (!admin) {
+            const nextId = await getNextSequenceValue('users');
+            await User.create({ id: nextId, username: 'admin', password_hash: hashPassword(adminPassword), full_name: 'مدير النظام', role: 'admin' });
+        } else {
+            const isMatch = verifyPassword(adminPassword, admin.password_hash);
+            if (!isMatch || !admin.password_hash.startsWith('pbkdf2$')) {
+                await User.updateOne({ username: 'admin' }, { $set: { password_hash: hashPassword(adminPassword) } });
+            }
+        }
+
+        // Cash customer & supplier
+        const cashCust = await Customer.findOne({ code: 'CUST-CASH' });
+        if (!cashCust) {
+            const nextId = await getNextSequenceValue('customers');
+            await Customer.create({ id: nextId, code: 'CUST-CASH', name: 'عميل نقدي', phone: '', balance: 0, credit_limit: 0, opening_balance: 0, is_active: true });
+        }
+        const cashSupp = await Supplier.findOne({ code: 'SUPP-CASH' });
+        if (!cashSupp) {
+            const nextId = await getNextSequenceValue('suppliers');
+            await Supplier.create({ id: nextId, code: 'SUPP-CASH', name: 'مورد نقدي', phone: '', balance: 0, opening_balance: 0, is_active: true });
+        }
+
+        // Chart of accounts
+        const count = await Account.countDocuments();
+        if (count === 0) {
+            const accs = [
+                ['1', 'الأصول', null, 'asset', 'debit'], ['2', 'الخصوم', null, 'liability', 'credit'], ['3', 'حقوق الملكية', null, 'equity', 'credit'], ['4', 'الإيرادات', null, 'revenue', 'credit'], ['5', 'المصروفات', null, 'expense', 'debit'],
+                ['11', 'الأصول المتداولة', '1', 'asset', 'debit'], ['111', 'الصندوق', '11', 'asset', 'debit'], ['112', 'البنك', '11', 'asset', 'debit'], ['113', 'العملاء', '11', 'asset', 'debit'],
+                ['21', 'الخصوم المتداولة', '2', 'liability', 'credit'], ['211', 'الموردون', '21', 'liability', 'credit'],
+                ['399', 'الأرصدة الافتتاحية', '3', 'equity', 'credit'],
+                ['41', 'إيرادات المبيعات', '4', 'revenue', 'credit'], ['51', 'تكلفة المبيعات', '5', 'expense', 'debit'],
+                ['52', 'مصروفات الرواتب', '5', 'expense', 'debit'],
+                ['521', 'رواتب الموظفين', '52', 'expense', 'debit'],
+                ['53', 'مصروفات الإيجار', '5', 'expense', 'debit'],
+                ['54', 'مصروفات الضيافة', '5', 'expense', 'debit'],
+                ['55', 'مصروفات الكهرباء والماء', '5', 'expense', 'debit'],
+                ['56', 'مصروفات الصيانة', '5', 'expense', 'debit'],
+                ['57', 'مصروفات أخرى', '5', 'expense', 'debit']
+            ];
+            for (const [code, name, parent, type, nature] of accs) {
+                const parentId = parent ? (await Account.findOne({ code: parent }))?.id : null;
+                const nextId = await getNextSequenceValue('accounts');
+                await Account.create({ id: nextId, code, name, parent_id: parentId, account_type: type, nature, can_post: true });
+            }
+        }
+
+        // Settings
+        const settings = [
+            ['company_name', 'شركتي', 'company'], ['company_address', '', 'company'], ['company_phone', '', 'company'], ['company_email', '', 'company'], ['company_tax_number', '', 'company'], ['company_logo', '', 'company'],
+            ['currency', 'دينار كويتي', 'general'], ['currency_symbol', 'د.ك', 'general'], ['decimal_places', '3', 'general'],
+            ['tax_rate', '0', 'tax'], ['theme', 'light', 'appearance'],
+            ['invoice_title_sales', 'فاتورة مبيعات', 'invoice'], ['invoice_title_purchase', 'فاتورة مشتريات', 'invoice'],
+            ['invoice_footer', 'شكراً لتعاملكم معنا', 'invoice'], ['invoice_terms', '', 'invoice'], ['show_logo', 'yes', 'invoice'], ['show_company_info', 'yes', 'invoice'],
+            ['paper_size', 'A4', 'invoice'], ['paper_orientation', 'portrait', 'invoice']
+        ];
+        for (const [key, value, category] of settings) {
+            const exists = await Setting.findOne({ key });
+            if (!exists) {
+                await Setting.create({ key, value, category });
+            }
+        }
+
+        // Default Permissions
+        const permCount = await Permission.countDocuments();
+        if (permCount === 0) {
+            const modules = ['dashboard', 'customers', 'suppliers', 'products', 'sales_invoices', 'purchase_invoices', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts', 'cash_bank', 'journal_entries', 'reports', 'settings', 'users', 'permissions', 'hr', 'expenses', 'pos', 'database', 'financial_summary', 'warehouse', 'offers', 'sales_returns', 'purchase_returns', 'quotations'];
+            for (const mod of modules) {
+                const nextId = await getNextSequenceValue('permissions');
+                await Permission.create({ id: nextId, role: 'admin', module: mod, can_view: true, can_create: true, can_edit: true, can_delete: true });
+            }
+            const accountantPerms = {
+                dashboard: [1, 0, 0, 0], customers: [1, 1, 1, 0], suppliers: [1, 1, 1, 0], products: [1, 1, 1, 0],
+                sales_invoices: [1, 1, 1, 0], purchase_invoices: [1, 1, 1, 0], receipt_vouchers: [1, 1, 1, 0], payment_vouchers: [1, 1, 1, 0],
+                chart_of_accounts: [1, 0, 0, 0], cash_bank: [1, 0, 0, 0], journal_entries: [1, 1, 0, 0], reports: [1, 0, 0, 0],
+                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [1, 1, 1, 0], expenses: [1, 1, 1, 0], pos: [1, 1, 1, 0],
+                sales_returns: [1, 1, 1, 0], purchase_returns: [1, 1, 1, 0]
+            };
+            for (const [mod, [v, c, e, d]] of Object.entries(accountantPerms)) {
+                const nextId = await getNextSequenceValue('permissions');
+                await Permission.create({ id: nextId, role: 'accountant', module: mod, can_view: !!v, can_create: !!c, can_edit: !!e, can_delete: !!d });
+            }
+            const userPerms = {
+                dashboard: [1, 0, 0, 0], customers: [0, 0, 0, 0], suppliers: [0, 0, 0, 0], products: [0, 0, 0, 0],
+                sales_invoices: [1, 1, 0, 0], purchase_invoices: [0, 0, 0, 0], receipt_vouchers: [1, 1, 0, 0], payment_vouchers: [0, 0, 0, 0],
+                chart_of_accounts: [0, 0, 0, 0], cash_bank: [0, 0, 0, 0], journal_entries: [0, 0, 0, 0], reports: [0, 0, 0, 0],
+                settings: [0, 0, 0, 0], users: [0, 0, 0, 0], permissions: [0, 0, 0, 0], hr: [0, 0, 0, 0], expenses: [0, 0, 0, 0], pos: [1, 1, 1, 0], database: [0, 0, 0, 0],
+                sales_returns: [1, 1, 0, 0], purchase_returns: [0, 0, 0, 0]
+            };
+            for (const [mod, [v, c, e, d]] of Object.entries(userPerms)) {
+                const nextId = await getNextSequenceValue('permissions');
+                await Permission.create({ id: nextId, role: 'user', module: mod, can_view: !!v, can_create: !!c, can_edit: !!e, can_delete: !!d });
+            }
+        }
+    }
+
+    async backup() {
+        try {
+            const backupData = {};
+            for (const [name, model] of Object.entries(collections)) {
+                backupData[name] = await model.find({}).lean();
+            }
+            const jsonText = JSON.stringify(backupData, null, 2);
+            const backupKey = this.adminConfig?.getBackupKey();
+            const encryptedText = backupKey ? encryptData(jsonText, backupKey) : jsonText;
+            
+            const backupPath = path.join(this.app.getPath('documents'), `vero_backup_${Date.now()}.json`);
+            fs.writeFileSync(backupPath, encryptedText, 'utf8');
+
+            try {
+                let config = {};
+                if (fs.existsSync(this.configPath)) {
+                    config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+                }
+                config.lastBackupTime = new Date().toISOString();
+                fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2), 'utf8');
+            } catch (e) {}
+
+            return { success: true, path: backupPath };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    async backupToPath(destPath) {
+        try {
+            const backupData = {};
+            for (const [name, model] of Object.entries(collections)) {
+                backupData[name] = await model.find({}).lean();
+            }
+            const jsonText = JSON.stringify(backupData, null, 2);
+            const backupKey = this.adminConfig?.getBackupKey();
+            const encryptedText = backupKey ? encryptData(jsonText, backupKey) : jsonText;
+            
+            fs.writeFileSync(destPath, encryptedText, 'utf8');
+            return { success: true, path: destPath };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    async restore(filePath) {
+        try {
+            if (!fs.existsSync(filePath)) {
+                return { success: false, error: 'ملف النسخة الاحتياطية غير موجود' };
+            }
+            let rawData = fs.readFileSync(filePath, 'utf8');
+            
+            if (!rawData.trim().startsWith('{')) {
+                const backupKey = this.adminConfig?.getBackupKey();
+                if (!backupKey) {
+                    return { success: false, error: 'مفتاح التشفير غير متوفر لقراءة ملف النسخة الاحتياطية' };
+                }
+                rawData = decryptData(rawData, backupKey);
+            }
+            
+            const backupData = JSON.parse(rawData);
+            for (const [name, model] of Object.entries(collections)) {
+                if (backupData[name]) {
+                    await model.deleteMany({});
+                    if (backupData[name].length > 0) {
+                        await model.insertMany(backupData[name]);
+                    }
+                }
+            }
+            return { success: true, message: 'تم استعادة النسخة الاحتياطية بنجاح' };
+        } catch (e) {
+            console.error('[DB] Restore error:', e);
+            return { success: false, error: 'فشل استعادة النسخة الاحتياطية: ' + e.message };
+        }
+    }
+
+    getDbPath() {
+        return this.configPath;
+    }
+
+    async getBackupPath() {
+        try {
+            if (fs.existsSync(this.configPath)) {
+                const config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+                return {
+                    backupDbPath: config.backupPath || null,
+                    lastBackupTime: config.lastBackupTime || null
+                };
+            }
+        } catch (e) {}
+        return { backupDbPath: null, lastBackupTime: null };
+    }
+
+    async setBackupPath(backupPath) {
+        try {
+            let config = {};
+            if (fs.existsSync(this.configPath)) {
+                config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+            }
+            config.backupPath = backupPath;
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    async changeDbPath(newFolderPath) {
+        return { success: true };
+    }
+
+    async testBackupPath(testPath) {
+        try {
+            const testDir = path.dirname(testPath);
+            fs.mkdirSync(testDir, { recursive: true });
+            fs.writeFileSync(testPath, 'test');
+            fs.unlinkSync(testPath);
+            return { success: true, message: 'المسار صحيح وقابل للكتابة' };
+        } catch (e) {
+            return { success: false, error: 'فشل الوصول للمسار: ' + e.message };
+        }
+    }
+
+    forceSave() {
+        console.log('[DB] MongoDB is real-time persisted, forceSave ignored.');
+    }
+
+    async vacuum() {
+        return { success: true };
+    }
+
+    async resetApp() {
+        for (const model of Object.values(collections)) {
+            await model.deleteMany({});
+        }
+        await this.seedDefaultData();
+        return { success: true };
+    }
+}
+
+const dbInstance = new AppDatabase();
+module.exports = dbInstance;

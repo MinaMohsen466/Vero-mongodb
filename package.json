@@ -2,11 +2,11 @@
   "name": "vero",
   "version": "1.0.0",
   "description": "Vero - نظام المحاسبة المتكامل",
-  "main": "electron/main.js",
+  "main": "backend/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
-    "dev:electron": "wait-on http://localhost:5173 && start-electron.bat",
+    "dev:electron": "wait-on http://127.0.0.1:5173 && start-electron.bat",
     "build": "vite build && electron-builder",
     "preview": "vite preview"
   },
@@ -14,6 +14,7 @@
     "exceljs": "^4.4.0",
     "googleapis": "^171.4.0",
     "lucide-react": "^0.330.0",
+    "mongoose": "^9.7.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.6.0",
@@ -42,7 +43,7 @@
     },
     "files": [
       "dist/**/*",
-      "electron/**/*",
+      "backend/**/*",
       "public/**/*"
     ],
     "win": {

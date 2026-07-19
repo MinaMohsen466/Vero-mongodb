@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Eye, Trash2, Search, ShoppingBag, Printer, X, Edit, Download } from 'lucide-react';
+import { Plus, Eye, Trash2, Search, ShoppingCart, Printer, X, Edit, Download } from 'lucide-react';
 import Modal from '../components/Modal';
 import InvoicePrintPreview from '../components/InvoicePrintPreview';
 import SearchableSelect from '../components/SearchableSelect';
@@ -9,26 +9,31 @@ import { useShortcuts } from '../hooks/useShortcuts';
 
 const parseDbDate = (dbDate) => {
     if (!dbDate) return new Date();
+    if (dbDate instanceof Date) return dbDate;
+    if (typeof dbDate !== 'string') {
+        const d = new Date(dbDate);
+        return isNaN(d.getTime()) ? new Date() : d;
+    }
     if (dbDate.includes('Z') || dbDate.includes('+') || (dbDate.includes('-') && dbDate.includes(':') && dbDate.includes('T'))) {
         return new Date(dbDate);
     }
     return new Date(dbDate.replace(' ', 'T') + 'Z');
 };
 
-function PurchaseInvoices() {
+function SalesInvoices() {
     const { t, user } = useAuth();
     const [invoices, setInvoices] = useState([]);
-    const [suppliers, setSuppliers] = useState([]);
+    const [customers, setCustomers] = useState([]);
     const [products, setProducts] = useState([]);
     const [bankAccounts, setBankAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
-    const [supplierFilter, setSupplierFilter] = useState('');
+    const [customerFilter, setCustomerFilter] = useState('');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [showModal, setShowModal] = useState(false);
-
+    const [showViewModal, setShowViewModal] = useState(false);
     const [showPrintPreview, setShowPrintPreview] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [settings, setSettings] = useState({});
@@ -36,11 +41,15 @@ function PurchaseInvoices() {
     const [error, setError] = useState('');
     const [editMode, setEditMode] = useState(false);
     const [editingId, setEditingId] = useState(null);
+
+    const [activeOffers, setActiveOffers] = useState([]);
+    const [couponCode, setCouponCode] = useState('');
+    const [appliedCoupon, setAppliedCoupon] = useState(null);
     const [visibleInvoicesCount, setVisibleInvoicesCount] = useState(50);
 
     const emptyForm = () => ({
-        supplier_id: '', date: new Date().toISOString().split('T')[0], due_date: '', notes: '',
-        status: 'paid', payment_method: 'cash', payment_account_id: '', paid: 0, image: '',
+        customer_id: '', date: new Date().toISOString().split('T')[0], due_date: '', notes: '',
+        status: 'paid', payment_method: 'cash', payment_account_id: '', paid: 0,
         manual_discount: 0,
         items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }]
     });
@@ -49,31 +58,30 @@ function PurchaseInvoices() {
     const searchInputRef = React.useRef(null);
 
     const productOptions = useMemo(() => {
-        return products.map(p => ({ value: String(p.id), label: p.name, subLabel: p.code }));
+        return products.map(p => ({ value: String(p.id), label: `${p.name} (${p.shop_stock || 0})`, subLabel: p.code }));
     }, [products]);
 
-    const supplierOptions = useMemo(() => {
-        return [...suppliers].sort((a, b) => a.code === 'SUPP-CASH' ? -1 : b.code === 'SUPP-CASH' ? 1 : 0).map(s => ({ value: String(s.id), label: s.name }));
-    }, [suppliers]);
+    const customerOptions = useMemo(() => {
+        return [...customers].sort((a, b) => a.code === 'CUST-CASH' ? -1 : b.code === 'CUST-CASH' ? 1 : 0).map(c => ({ value: String(c.id), label: c.name }));
+    }, [customers]);
 
-    const supplierFilterOptions = useMemo(() => {
-        return suppliers.map(s => ({ value: String(s.id), label: s.name }));
-    }, [suppliers]);
+    const customerFilterOptions = useMemo(() => {
+        return customers.map(c => ({ value: String(c.id), label: c.name }));
+    }, [customers]);
 
     useShortcuts({
         Save: (e) => {
             if (showModal) {
-                const btn = document.querySelector('#purchase-invoice-form button[type="submit"]') || document.querySelector('button[form="purchase-invoice-form"]');
+                const btn = document.querySelector('#sales-invoice-form button[type="submit"]') || document.querySelector('button[form="sales-invoice-form"]');
                 if (btn) btn.click();
                 else handleSubmit(e);
             }
         },
         New: () => {
-            if (!showModal && user?.permissions?.purchase_invoices?.can_create) openModal();
+            if (!showModal && user?.permissions?.sales_invoices?.can_create) openModal();
         },
         Escape: () => {
             if (showModal) closeModal();
-
             if (showPrintPreview) setShowPrintPreview(false);
         },
         Search: () => {
@@ -85,57 +93,116 @@ function PurchaseInvoices() {
 
     useEffect(() => {
         setVisibleInvoicesCount(50);
-    }, [searchQuery, statusFilter, supplierFilter, dateFrom, dateTo]);
+    }, [searchQuery, statusFilter, customerFilter, dateFrom, dateTo]);
 
     useEffect(() => {
-        const savedDraft = localStorage.getItem('purchase_invoice_draft');
+        const savedDraft = localStorage.getItem('sales_invoice_draft');
         if (savedDraft) {
             try {
-                const { showModal: savedShow, formData: savedForm, editMode: savedEdit, editingId: savedId } = JSON.parse(savedDraft);
+                const { showModal: savedShow, formData: savedForm, editMode: savedEdit, editingId: savedId, couponCode: savedCoupon, appliedCoupon: savedApplied } = JSON.parse(savedDraft);
                 if (savedShow) {
                     setShowModal(savedShow);
                     setFormData(savedForm);
                     setEditMode(savedEdit);
                     setEditingId(savedId);
+                    setCouponCode(savedCoupon || '');
+                    setAppliedCoupon(savedApplied || null);
                 }
             } catch (e) {
-                console.error('Error parsing purchase draft:', e);
+                console.error('Error parsing sales draft:', e);
             }
         }
     }, []);
 
     useEffect(() => {
         if (showModal) {
-            localStorage.setItem('purchase_invoice_draft', JSON.stringify({ showModal, formData, editMode, editingId }));
+            localStorage.setItem('sales_invoice_draft', JSON.stringify({ showModal, formData, editMode, editingId, couponCode, appliedCoupon }));
         } else {
-            localStorage.removeItem('purchase_invoice_draft');
+            localStorage.removeItem('sales_invoice_draft');
         }
-    }, [showModal, formData, editMode, editingId]);
+    }, [showModal, formData, editMode, editingId, couponCode, appliedCoupon]);
 
     const loadData = async () => {
         try {
-            const [invoicesData, suppliersData, productsData, settingsData, accountsData] = await Promise.all([
-                window.api.invoices.getAll('purchase'),
-                window.api.suppliers.getAll(),
+            const [invoicesData, customersData, productsData, settingsData, accountsData, offersData] = await Promise.all([
+                window.api.invoices.getAll('sales'),
+                window.api.customers.getAll(),
                 window.api.products.getAll(),
                 window.api.settings.getAll(),
-                window.api.accounts.getBankAccounts ? window.api.accounts.getBankAccounts() : Promise.resolve([])
+                window.api.accounts.getBankAccounts ? window.api.accounts.getBankAccounts() : Promise.resolve([]),
+                window.api.offers.getActive()
             ]);
             setInvoices(invoicesData || []);
-            setSuppliers(suppliersData || []);
+            setCustomers(customersData || []);
             setProducts(productsData || []);
             setSettings(settingsData || {});
             setBankAccounts(accountsData || []);
+            setActiveOffers(offersData || []);
         } catch (e) { console.error('Error loading data:', e); }
         setLoading(false);
     };
 
-    const calculateItemTotal = (item) => (item.quantity * item.unit_price) - (item.discount || 0);
+    const calculateItemTotal = (item) => {
+        let finalPrice = parseFloat(item.unit_price) || 0;
+        let qty = parseFloat(item.quantity) || 0;
+        let finalTotal = finalPrice * qty;
+        let discountManual = 0; // Removing item.discount double-dip since we don't have manual item discounts in UI
+        let appliedOffer = null;
+        let bogoFreeQty = 0;
+
+        const product = products.find(p => p.id === parseInt(item.product_id));
+        const category = product ? product.category : null;
+
+        const offer = activeOffers.find(o => 
+            o.target_type === 'all' || 
+            (o.target_type === 'product' && String(o.target_id) === String(item.product_id)) ||
+            (o.target_type === 'category' && o.target_id === category)
+        );
+
+        if (offer) {
+            appliedOffer = offer;
+            if (offer.offer_type === 'percentage') {
+                const discAmt = finalPrice * (parseFloat(offer.discount_value) / 100);
+                finalPrice = finalPrice - discAmt;
+                finalTotal = finalPrice * qty;
+            } else if (offer.offer_type === 'fixed') {
+                finalPrice = Math.max(0, finalPrice - parseFloat(offer.discount_value));
+                finalTotal = finalPrice * qty;
+            } else if (offer.offer_type === 'bogo') {
+                const bundleSize = offer.buy_qty + offer.get_qty;
+                const bundles = Math.floor(qty / bundleSize);
+                bogoFreeQty = bundles * offer.get_qty;
+                finalTotal = finalPrice * (qty - bogoFreeQty);
+            }
+        }
+
+        const totalAfterManualDiscount = Math.max(0, finalTotal - discountManual);
+
+        return {
+            finalPrice,
+            finalTotal: totalAfterManualDiscount,
+            appliedOffer,
+            bogoFreeQty,
+            discountCalculated: (item.unit_price * qty) - totalAfterManualDiscount
+        };
+    };
+
     const calculateTotals = () => {
-        const subtotal = formData.items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
+        const subtotal = formData.items.reduce((sum, item) => sum + calculateItemTotal(item).finalTotal, 0);
+        let couponDiscountAmount = 0;
+        if (appliedCoupon) {
+            if (appliedCoupon.discount_type === 'percentage') {
+                couponDiscountAmount = subtotal * (parseFloat(appliedCoupon.discount_value) / 100);
+            } else {
+                couponDiscountAmount = parseFloat(appliedCoupon.discount_value);
+            }
+        }
+        
         const manualDiscount = parseFloat(formData.manual_discount) || 0;
-        const total = Math.max(0, subtotal - manualDiscount);
-        return { subtotal, total, manualDiscount };
+        const totalDiscount = couponDiscountAmount + manualDiscount;
+        const actualTotalDiscount = Math.min(subtotal, totalDiscount);
+        const finalTotal = subtotal - actualTotalDiscount;
+        return { subtotal, total: finalTotal, couponDiscountAmount, manualDiscount, totalDiscount: actualTotalDiscount };
     };
 
     const handleProductChange = (index, productId) => {
@@ -145,10 +212,10 @@ function PurchaseInvoices() {
             ...newItems[index],
             product_id: productId,
             description: product?.name || '',
-            unit_price: product?.purchase_price || 0,
+            unit_price: product?.sale_price || 0,
             unit: product?.unit || '',
-            total: calculateItemTotal({ ...newItems[index], unit_price: product?.purchase_price || 0 })
         };
+        newItems[index].total = calculateItemTotal(newItems[index]).finalTotal;
         // Auto-add new row if product was selected on the last row
         if (productId && index === newItems.length - 1) {
             newItems.push({ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' });
@@ -159,12 +226,62 @@ function PurchaseInvoices() {
     const handleItemChange = (index, field, value) => {
         const newItems = [...formData.items];
         newItems[index] = { ...newItems[index], [field]: value };
-        newItems[index].total = calculateItemTotal(newItems[index]);
+        newItems[index].total = calculateItemTotal(newItems[index]).finalTotal;
         setFormData({ ...formData, items: newItems });
     };
 
     const addItem = () => setFormData({ ...formData, items: [...formData.items, { product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }] });
     const removeItem = (index) => formData.items.length > 1 && setFormData({ ...formData, items: formData.items.filter((_, i) => i !== index) });
+
+    // Stock validation: check if selling more than available stock
+    const validateStock = () => {
+        const allowNegative = settings.general?.allow_negative_stock === 'yes';
+        if (allowNegative) return true; // Skip validation if allowed
+
+        for (const item of formData.items) {
+            if (!item.product_id) continue;
+            const product = products.find(p => p.id === parseInt(item.product_id));
+            if (!product) continue;
+
+            const currentStock = product.shop_stock || 0;
+            const requestedQty = parseFloat(item.quantity) || 0;
+
+            if (requestedQty > currentStock) {
+                setError(`${t('inv_stockError') || 'Requested quantity exceeds available stock'}: "${product.name}" - ${t('inv_available') || 'Available'}: ${currentStock}, ${t('inv_requested') || 'Requested'}: ${requestedQty}`);
+                return false;
+            }
+        }
+        return true;
+    };
+
+    const handleApplyCoupon = async () => {
+        if (!couponCode) { setAppliedCoupon(null); return; }
+        const result = await window.api.coupons.validate(couponCode);
+        if (result.valid) {
+            const subtotal = formData.items.reduce((sum, item) => sum + calculateItemTotal(item).finalTotal, 0);
+            let couponVal = 0;
+            if (result.coupon.discount_type === 'percentage') {
+                couponVal = subtotal * (parseFloat(result.coupon.discount_value) / 100);
+            } else {
+                couponVal = parseFloat(result.coupon.discount_value);
+            }
+            const manualDiscount = parseFloat(formData.manual_discount) || 0;
+            const remainingBeforeCoupon = Math.max(0, subtotal - manualDiscount);
+            if (couponVal > remainingBeforeCoupon) {
+                toast.error('قيمة خصم الكوبون أكبر من قيمة الفاتورة المتبقية، لا يمكن تطبيقه');
+                setCouponCode('');
+                setAppliedCoupon(null);
+                return;
+            }
+
+            setAppliedCoupon(result.coupon);
+            toast.success(t('coupon_applied_success') || 'Coupon applied successfully!');
+        } else {
+            toast.error(result.error);
+            setAppliedCoupon(null);
+            setCouponCode('');
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -172,8 +289,12 @@ function PurchaseInvoices() {
 
         const validItems = formData.items.filter(item => (item.product_id || item.description) && item.quantity > 0);
         const totals = calculateTotals();
-        if (totals.manualDiscount > totals.subtotal) {
-            setError('قيمة الخصم لا يمكن أن تتجاوز قيمة الفاتورة');
+        if (totals.couponDiscountAmount > totals.subtotal) {
+            setError('قيمة خصم الكوبون أكبر من قيمة الفاتورة، تم إلغاء الكوبون');
+            return;
+        }
+        if (totals.manualDiscount > totals.subtotal - totals.couponDiscountAmount) {
+            setError('قيمة الخصم الإضافي لا يمكن أن تتجاوز قيمة الفاتورة المتبقية');
             return;
         }
         if (validItems.length === 0) {
@@ -181,11 +302,32 @@ function PurchaseInvoices() {
             return;
         }
 
-        // Require supplier for unpaid invoices
-        const selectedSupplierObj = suppliers.find(s => String(s.id) === String(formData.supplier_id));
-        if (formData.status !== 'paid' && (!formData.supplier_id || (selectedSupplierObj && selectedSupplierObj.code === 'SUPP-CASH'))) {
-            setError(t('cash_supplier_no_credit') || 'لا يمكن إجراء عملية شراء آجل من المورد النقدي');
+        // Require customer for unpaid invoices
+        const selectedCustomerObj = customers.find(c => String(c.id) === String(formData.customer_id));
+        if (formData.status !== 'paid' && (!formData.customer_id || (selectedCustomerObj && selectedCustomerObj.code === 'CUST-CASH'))) {
+            setError(t('cash_customer_no_credit') || 'لا يمكن إجراء عملية بيع آجل للعميل النقدي');
             return;
+        }
+
+        // Stock validation for sales
+        if (!editMode && !validateStock()) {
+            return;
+        }
+
+        // Credit limit validation for pending (credit) or partial invoices
+        if ((formData.status === 'pending' || formData.status === 'partial') && formData.customer_id) {
+            const customer = customers.find(c => c.id === parseInt(formData.customer_id));
+            if (customer && customer.credit_limit > 0) {
+                const totals = calculateTotals();
+                const paidVal = formData.status === 'partial' ? (parseFloat(formData.paid) || 0) : 0;
+                const remaining = totals.total - paidVal;
+                const newBalance = (customer.balance || 0) + remaining;
+                if (newBalance > customer.credit_limit) {
+                    const formatCurr = (a) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(a || 0);
+                    setError(t('errorOccurred') + `: ${t('cust_creditLimit')} - ${customer.name}`);
+                    return;
+                }
+            }
         }
 
         if (formData.status === 'partial') {
@@ -211,29 +353,29 @@ function PurchaseInvoices() {
                 paidAmount = parseFloat(formData.paid) || 0;
             }
             const invoiceData = {
-                type: 'purchase',
-                supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
+                type: 'sales',
+                customer_id: formData.customer_id ? parseInt(formData.customer_id) : null,
                 date: formData.date,
                 due_date: formData.due_date || null,
                 notes: formData.notes,
                 subtotal: totals.subtotal,
-                discount: totals.manualDiscount,
+                discount: totals.totalDiscount,
                 manual_discount: totals.manualDiscount,
+                coupon_code: appliedCoupon ? appliedCoupon.code : null,
                 tax: 0,
                 total: totals.total,
                 paid: paidAmount,
                 status: formData.status,
                 payment_method: (formData.status === 'paid' || formData.status === 'partial') ? formData.payment_method : 'credit',
                 payment_account_id: formData.payment_account_id ? parseInt(formData.payment_account_id) : null,
-                image: formData.image || null,
                 items: validItems.map(item => ({
                     product_id: item.product_id ? parseInt(item.product_id) : null,
                     description: item.description,
                     quantity: parseFloat(item.quantity) || 0,
                     unit_price: parseFloat(item.unit_price) || 0,
-                    discount: parseFloat(item.discount) || 0,
+                    discount: calculateItemTotal(item).discountCalculated,
                     tax: 0,
-                    total: parseFloat(item.total) || 0,
+                    total: calculateItemTotal(item).finalTotal,
                     color: item.color || null,
                     unit: item.unit || null
                 }))
@@ -248,6 +390,9 @@ function PurchaseInvoices() {
             }
 
             if (result.success) {
+                if (appliedCoupon && !editMode) {
+                    await window.api.coupons.incrementUse(appliedCoupon.id);
+                }
                 toast.success(t('savedSuccess') || (editMode ? 'Invoice updated successfully' : 'Invoice saved successfully'));
                 await loadData();
                 closeModal();
@@ -280,7 +425,7 @@ function PurchaseInvoices() {
     };
 
     const handleDelete = async (id) => {
-        if (confirm((t('inv_deleteConfirm') || 'Are you sure you want to delete this invoice?') + ' ' + (t('pinv_deleteNote') || ''))) {
+        if (confirm((t('inv_deleteConfirm') || 'Are you sure you want to delete this invoice?') + ' ' + (t('sinv_deleteNote') || ''))) {
             try {
                 const result = await window.api.invoices.delete(id);
                 if (result.success) {
@@ -298,17 +443,13 @@ function PurchaseInvoices() {
 
     const handleEdit = async (invoiceId) => {
         try {
-            console.log('[handleEdit] Loading invoice:', invoiceId);
             const invoice = await window.api.invoices.getById(invoiceId);
-            console.log('[handleEdit] Got invoice:', invoice);
-            console.log('[handleEdit] Invoice items:', invoice?.items);
 
             if (!invoice) {
                 toast.error(t('inv_loadError'));
                 return;
             }
 
-            // Map items from the database format to form format
             let mappedItems = [];
             if (invoice.items && Array.isArray(invoice.items) && invoice.items.length > 0) {
                 mappedItems = invoice.items.map(item => ({
@@ -321,20 +462,26 @@ function PurchaseInvoices() {
                     color: item.color || '',
                     unit: item.unit || ''
                 }));
-                console.log('[handleEdit] Mapped items:', mappedItems);
             } else {
-                console.log('[handleEdit] No items found, using empty row');
-                mappedItems = [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }];
+                mappedItems = [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '', unit: '' }];
             }
 
-            // First reset everything
             setEditMode(true);
             setEditingId(invoiceId);
             setError('');
-
-            // Set form data with mapped values
+            if (invoice.coupon_code) {
+                setCouponCode(invoice.coupon_code);
+                window.api.coupons.validate(invoice.coupon_code).then(res => {
+                    if (res.success && res.coupon) {
+                        setAppliedCoupon(res.coupon);
+                    }
+                }).catch(e => console.error('Error loading coupon:', e));
+            } else {
+                setCouponCode('');
+                setAppliedCoupon(null);
+            }
             setFormData({
-                supplier_id: invoice.supplier_id != null ? String(invoice.supplier_id) : '',
+                customer_id: invoice.customer_id != null ? String(invoice.customer_id) : '',
                 date: invoice.date || new Date().toISOString().split('T')[0],
                 due_date: invoice.due_date || '',
                 notes: invoice.notes || '',
@@ -342,12 +489,9 @@ function PurchaseInvoices() {
                 payment_method: invoice.payment_method || 'cash',
                 payment_account_id: invoice.payment_account_id != null ? String(invoice.payment_account_id) : '',
                 paid: invoice.paid || 0,
-                image: invoice.image || '',
                 manual_discount: invoice.manual_discount || 0,
                 items: mappedItems
             });
-
-            // Open the modal
             setShowModal(true);
         } catch (err) {
             console.error('[handleEdit] Error:', err);
@@ -365,7 +509,7 @@ function PurchaseInvoices() {
             setSelectedInvoice(invoice);
             setShowPrintPreview(true);
         } catch (e) {
-            console.error('[PurchaseInvoices.viewInvoice] Error:', e);
+            console.error('[SalesInvoices.viewInvoice] Error:', e);
         }
     };
 
@@ -373,10 +517,12 @@ function PurchaseInvoices() {
         setError('');
         setEditMode(false);
         setEditingId(null);
-        const cashSupp = suppliers.find(s => s.code === 'SUPP-CASH');
+        setCouponCode('');
+        setAppliedCoupon(null);
+        const cashCust = customers.find(c => c.code === 'CUST-CASH');
         const defaultForm = emptyForm();
-        if (cashSupp) {
-            defaultForm.supplier_id = String(cashSupp.id);
+        if (cashCust) {
+            defaultForm.customer_id = String(cashCust.id);
         }
         setFormData(defaultForm);
         setShowModal(true);
@@ -389,66 +535,21 @@ function PurchaseInvoices() {
         setEditingId(null);
     };
 
-    const handleImageUpload = async () => {
-        try {
-            const result = await window.api.dialog.openFile({
-                properties: ['openFile'],
-                filters: [{ name: 'Images', extensions: ['jpg', 'png', 'jpeg', 'webp'] }]
-            });
-            if (!result.canceled && result.filePaths.length > 0) {
-                const base64 = await window.api.file.readAsBase64(result.filePaths[0]);
-                if (base64) {
-                    const img = new Image();
-                    img.src = base64;
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        let width = img.width;
-                        let height = img.height;
-                        const MAX_DIMENSION = 800;
-
-                        if (width > height) {
-                            if (width > MAX_DIMENSION) {
-                                height = Math.round(height * (MAX_DIMENSION / width));
-                                width = MAX_DIMENSION;
-                            }
-                        } else {
-                            if (height > MAX_DIMENSION) {
-                                width = Math.round(width * (MAX_DIMENSION / height));
-                                height = MAX_DIMENSION;
-                            }
-                        }
-
-                        canvas.width = width;
-                        canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
-
-                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
-                        setFormData(prev => ({ ...prev, image: compressedBase64 }));
-                    };
-                }
-            }
-        } catch (error) {
-            console.error('Error uploading image:', error);
-            toast.error(t('errorOccurred') || 'An error occurred while uploading the image');
-        }
-    };
-
     const formatCurrency = (amount) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (settings.general?.currency_symbol || (t('currency_kd') || 'KD'));
 
     const filteredInvoices = invoices.filter(inv => {
         const matchesSearch = 
             inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            inv.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            inv.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (inv.items || []).some(item => 
                 item.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 item.description?.toLowerCase().includes(searchQuery.toLowerCase())
             );
         const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
-        const matchesSupplier = !supplierFilter || String(inv.supplier_id) === supplierFilter;
+        const matchesCustomer = !customerFilter || String(inv.customer_id) === customerFilter;
         const matchesDateFrom = !dateFrom || inv.date >= dateFrom;
         const matchesDateTo = !dateTo || inv.date <= dateTo;
-        return matchesSearch && matchesStatus && matchesSupplier && matchesDateFrom && matchesDateTo;
+        return matchesSearch && matchesStatus && matchesCustomer && matchesDateFrom && matchesDateTo;
     }).sort((a, b) => {
         // Sort by date descending, then by id descending
         const dateA = new Date(a.date).getTime();
@@ -467,7 +568,7 @@ function PurchaseInvoices() {
     const exportCSV = async () => {
         const rows = [[
             t('inv_number') || 'Invoice Number',
-            t('pinv_supplier') || 'Supplier',
+            t('sinv_customer') || 'Customer',
             t('date') || 'Date',
             t('subtotal') || 'Subtotal',
             t('discount') || 'Discount',
@@ -478,7 +579,7 @@ function PurchaseInvoices() {
         filteredInvoices.forEach(inv => {
             rows.push([
                 inv.invoice_number || '',
-                inv.supplier_name || '',
+                inv.customer_name || '',
                 inv.date || '',
                 inv.subtotal || 0,
                 inv.discount || 0,
@@ -488,7 +589,7 @@ function PurchaseInvoices() {
             ]);
         });
         const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-        await window.api.file.saveText({ content: csv, defaultName: 'Purchase_Invoices.csv', filters: [{ name: 'CSV', extensions: ['csv'] }] });
+        await window.api.file.saveText({ content: csv, defaultName: 'Sales_Invoices.csv', filters: [{ name: 'CSV', extensions: ['csv'] }] });
     };
 
     if (loading) return <div className="loading"><div className="spinner"></div></div>;
@@ -510,64 +611,56 @@ function PurchaseInvoices() {
                     />
                     <Search size={16} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 </div>
+                {/* Status Filter */}
                 <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
                     style={{ width: '130px', margin: 0 }}>
                     <option value="all">{t('all') || 'All Statuses'}</option>
                     <option value="paid">{t('inv_paid') || 'Paid'}</option>
                     <option value="pending">{t('inv_credit') || 'Credit'}</option>
                 </select>
+                {/* Customer Filter */}
                 <div style={{ width: '200px' }}>
                     <SearchableSelect
-                        options={supplierFilterOptions}
-                        value={supplierFilter}
-                        onChange={setSupplierFilter}
-                        placeholder={t('all') || "All Suppliers"}
-                        emptyLabel={t('all') || "All Suppliers"}
+                        options={customerFilterOptions}
+                        value={customerFilter}
+                        onChange={setCustomerFilter}
+                        placeholder={t('all') || "All Customers"}
+                        emptyLabel={t('all') || "All Customers"}
                     />
                 </div>
+                {/* Date From */}
                 <input type="date" className="form-input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
                     style={{ width: '150px', margin: 0 }} title={t('from_date') || "From Date"} />
+                {/* Date To */}
                 <input type="date" className="form-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
                     style={{ width: '150px', margin: 0 }} title={t('to_date') || "To Date"} />
-                {(searchQuery || statusFilter !== 'all' || supplierFilter || dateFrom || dateTo) && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => { setSearchQuery(''); setStatusFilter('all'); setSupplierFilter(''); setDateFrom(''); setDateTo(''); }}
+                {/* Clear */}
+                {(searchQuery || statusFilter !== 'all' || customerFilter || dateFrom || dateTo) && (
+                    <button className="btn btn-ghost btn-sm" onClick={() => { setSearchQuery(''); setStatusFilter('all'); setCustomerFilter(''); setDateFrom(''); setDateTo(''); }}
                         style={{ color: 'var(--text-muted)' }}>✕ {t('clear') || 'Clear'}</button>
                 )}
-                <span style={{ marginRight: 'auto', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{filteredInvoices.length} {t('menu_purchases')}</span>
+                <span style={{ marginRight: 'auto', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{filteredInvoices.length} {t('menu_sales')}</span>
                 <button className="btn btn-secondary" onClick={exportCSV} style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#059669' }}>
                     <Download size={16} /> CSV
                 </button>
-                {user?.permissions?.purchase_invoices?.can_create && (
-                    <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> {t('pinv_add')}</button>
+                {user?.permissions?.sales_invoices?.can_create && (
+                    <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> {t('sinv_add')}</button>
                 )}
             </div>
 
             <div className="card">
                 <div className="card-body" style={{ padding: 0 }}>
                     {filteredInvoices.length === 0 ? (
-                        <div className="empty-state"><ShoppingBag size={48} /><h3>{t('noData')}</h3></div>
+                        <div className="empty-state"><ShoppingCart size={48} /><h3>{t('noData')}</h3></div>
                     ) : (
                         <div className="table-container">
                             <table>
-                                <thead><tr><th>{t('inv_number')}</th><th>{t('pinv_supplier')}</th><th>{t('date')}</th><th>{t('total')}</th><th>{t('status')}</th><th>{t('actions')}</th></tr></thead>
+                                <thead><tr><th>{t('inv_number')}</th><th>{t('sinv_customer')}</th><th>{t('date')}</th><th>{t('total')}</th><th>{t('status')}</th><th>{t('actions')}</th></tr></thead>
                                 <tbody>
                                     {filteredInvoices.slice(0, visibleInvoicesCount).map(inv => (
                                         <tr key={inv.id}>
-                                            <td className="font-bold">
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    {inv.invoice_number}
-                                                    {inv.image && (
-                                                        <span 
-                                                            title={t('invoice_attachment') || 'يحتوي على مرفق صور'}
-                                                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', fontSize: '0.85rem' }}
-                                                            onClick={(e) => { e.stopPropagation(); viewInvoice(inv.id); }}
-                                                        >
-                                                            📎
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td>{inv.supplier_name || '-'}</td>
+                                            <td className="font-bold">{inv.invoice_number}</td>
+                                            <td>{inv.customer_name || '-'}</td>
                                             <td>
                                                 <div>{new Date(inv.date).toLocaleDateString('en-GB')}</div>
                                                 {inv.created_at && (
@@ -576,7 +669,10 @@ function PurchaseInvoices() {
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="font-bold">{formatCurrency(inv.total)}</td>
+                                            <td className="font-bold">
+                                                {formatCurrency(inv.total)}
+                                                {inv.discount > 0 && <span style={{ display: 'block', fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>{t('discount')}: {formatCurrency(inv.discount)}</span>}
+                                            </td>
                                             <td>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                     <span className={`badge ${inv.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{getStatusLabel(inv.status)}</span>
@@ -589,16 +685,16 @@ function PurchaseInvoices() {
                                             </td>
                                             <td>
                                                 <div className="table-actions">
-                                                    {user?.permissions?.purchase_invoices?.can_view && (
+                                                    {user?.permissions?.sales_invoices?.can_view && (
                                                         <button className="btn btn-ghost btn-sm" onClick={() => viewInvoice(inv.id)} title={t('inv_view')}><Eye size={16} /></button>
                                                     )}
-                                                    {user?.permissions?.purchase_invoices?.can_edit && (
+                                                    {user?.permissions?.sales_invoices?.can_edit && (
                                                         <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(inv.id)} title={t('edit')}><Edit size={16} /></button>
                                                     )}
-                                                    {user?.permissions?.purchase_invoices?.can_view && (
+                                                    {user?.permissions?.sales_invoices?.can_view && (
                                                         <button className="btn btn-ghost btn-sm" onClick={() => viewInvoice(inv.id)} title={t('inv_print')}><Printer size={16} /></button>
                                                     )}
-                                                    {user?.permissions?.purchase_invoices?.can_delete && (
+                                                    {user?.permissions?.sales_invoices?.can_delete && (
                                                         <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(inv.id)} title={t('delete')}><Trash2 size={16} /></button>
                                                     )}
                                                 </div>
@@ -625,10 +721,10 @@ function PurchaseInvoices() {
             </div>
 
             {/* Create/Edit Modal */}
-            <Modal isOpen={showModal} onClose={closeModal} title={editMode ? t('pinv_edit') || 'Edit Purchase Invoice' : t('pinv_add') || 'New Purchase Invoice'} size="lg" footer={<><button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel') || 'Cancel'} (Esc)</button><button type="submit" form="purchase-invoice-form" className="btn btn-primary" disabled={saving}>{saving ? (t('savingProgress') || 'Saving...') : (t('save') || 'Save') + ' (Ctrl+S)'}</button></>}>
+            <Modal isOpen={showModal} onClose={closeModal} title={editMode ? t('sinv_edit') : t('sinv_add')} size="lg" footer={<><button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel')} (Esc)</button><button type="submit" form="sales-invoice-form" className="btn btn-primary" disabled={saving}>{saving ? t('savingProgress') : t('save') + ' (Ctrl+S)'}</button></>}>
                 {error && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{error}</div>}
-                <form id="purchase-invoice-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    
+                <form id="sales-invoice-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    
                     {/* Card 1: معلومات الفاتورة الأساسية */}
                     <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div style={{ fontSize: '0.88rem', fontWeight: '700', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', paddingBottom: '6px', marginBottom: '4px' }}>
@@ -636,25 +732,25 @@ function PurchaseInvoices() {
                         </div>
                         <div className="form-row" style={{ margin: 0, gap: '16px' }}>
                             <div className="form-group" style={{ marginBottom: 0 }}>
-                                <label className="form-label" style={{ fontWeight: '600' }}>{t('pinv_supplier')}</label>
+                                <label className="form-label" style={{ fontWeight: '600' }}>{t('sinv_customer')}</label>
                                 <SearchableSelect
-                                    options={supplierOptions}
-                                    value={formData.supplier_id ? String(formData.supplier_id) : ''}
+                                    options={customerOptions}
+                                    value={formData.customer_id ? String(formData.customer_id) : ''}
                                     onChange={(val) => {
-                                        const selected = suppliers.find(s => String(s.id) === String(val));
-                                        const isCash = selected && selected.code === 'SUPP-CASH';
+                                        const selected = customers.find(c => String(c.id) === String(val));
+                                        const isCash = selected && selected.code === 'CUST-CASH';
                                         setFormData(prev => {
                                             const newStatus = isCash ? 'paid' : prev.status;
                                             return {
                                                 ...prev,
-                                                supplier_id: val,
+                                                customer_id: val,
                                                 status: newStatus,
                                                 paid: newStatus === 'paid' ? calculateTotals().total : prev.paid
                                             };
                                         });
                                     }}
-                                    placeholder={t('pinv_selectSupplier')}
-                                    emptyLabel={t('pinv_selectSupplier')}
+                                    placeholder={t('sinv_selectCustomer')}
+                                    emptyLabel={t('sinv_selectCustomer')}
                                 />
                             </div>
                             <div className="form-group" style={{ marginBottom: 0 }}><label className="form-label" style={{ fontWeight: '600' }}>{t('inv_date')}</label><input type="date" className="form-input" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} style={{ height: '40px' }} /></div>
@@ -676,12 +772,12 @@ function PurchaseInvoices() {
                                 }} style={{ height: '40px' }}>
                                     <option value="paid">{t('inv_paid')}</option>
                                     <option value="partial" disabled={(() => {
-                                        const selected = suppliers.find(s => String(s.id) === String(formData.supplier_id));
-                                        return selected && selected.code === 'SUPP-CASH';
+                                        const selected = customers.find(c => String(c.id) === String(formData.customer_id));
+                                        return selected && selected.code === 'CUST-CASH';
                                     })()}>{t('inv_partial')}</option>
                                     <option value="pending" disabled={(() => {
-                                        const selected = suppliers.find(s => String(s.id) === String(formData.supplier_id));
-                                        return selected && selected.code === 'SUPP-CASH';
+                                        const selected = customers.find(c => String(c.id) === String(formData.customer_id));
+                                        return selected && selected.code === 'CUST-CASH';
                                     })()}>{t('inv_credit')}</option>
                                 </select>
                             </div>
@@ -712,7 +808,7 @@ function PurchaseInvoices() {
                         </div>
                     </div>
 
-                    {/* Card 2: بنود الفاتورة */}
+                    {/* Card 2: أصناف الفاتورة */}
                     <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px' }}>
                         <div style={{ fontSize: '0.88rem', fontWeight: '700', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', paddingBottom: '6px', marginBottom: '12px' }}>
                             📦 {t('inv_product') || 'أصناف الفاتورة'}
@@ -722,49 +818,95 @@ function PurchaseInvoices() {
                                 <thead><tr><th style={{ width: '200px' }}>{t('inv_product')}</th><th>{t('description')}</th><th style={{ width: '120px' }}>{t('inv_quantity')}</th><th style={{ width: '100px' }}>{t('inv_unitPrice')}</th>{settings?.general?.enable_product_color === 'yes' && <th style={{ width: '100px' }}>{t('color') || 'Color'}</th>}<th style={{ width: '100px' }}>{t('inv_itemTotal')}</th><th style={{ width: '50px' }}></th></tr></thead>
                                 <tbody>
                                     {formData.items.map((item, index) => {
-                                        const product = products.find(p => p.id === (item.product_id ? parseInt(item.product_id) : null));
+                                        const product = item.product_id ? products.find(p => p.id === parseInt(item.product_id)) : null;
                                         const showColorField = settings?.general?.enable_product_color === 'yes' && isColorUnit(product?.unit);
                                         return (
-                                        <tr key={index}>
-                                            <td style={{ minWidth: '200px' }}>
-                                                <SearchableSelect
-                                                    options={productOptions}
-                                                    value={item.product_id ? String(item.product_id) : ''}
-                                                    onChange={(val) => handleProductChange(index, val)}
-                                                    placeholder={t('inv_selectProduct')}
-                                                    emptyLabel={t('inv_selectProduct')}
-                                                />
-                                            </td>
-                                            <td><input type="text" className="form-input" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} style={{ margin: 0, height: '38px' }} /></td>
-                                            <td><input type="number" className="form-input" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} min="1" step="1" style={{ margin: 0, height: '38px' }} /></td>
-                                            <td><input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.25" style={{ margin: 0, height: '38px' }} /></td>
-                                            {showColorField && <td><input type="text" className="form-input" placeholder={t('color') || 'Color'} value={item.color || ''} onChange={(e) => handleItemChange(index, 'color', e.target.value)} style={{ margin: 0, height: '38px' }} /></td>}
-                                            <td className="font-bold" style={{ whiteSpace: 'nowrap' }}>{formatCurrency(calculateItemTotal(item))}</td>
-                                            <td><button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => removeItem(index)} style={{ padding: '6px' }}><X size={16} /></button></td>
-                                        </tr>
+                                            <tr key={index}>
+                                                <td style={{ minWidth: '200px' }}>
+                                                    <SearchableSelect
+                                                        options={productOptions}
+                                                        value={item.product_id ? String(item.product_id) : ''}
+                                                        onChange={(val) => handleProductChange(index, val)}
+                                                        placeholder={t('inv_selectProduct')}
+                                                        emptyLabel={t('inv_selectProduct')}
+                                                    />
+                                                </td>
+                                                <td><input type="text" className="form-input" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} style={{ margin: 0, height: '38px' }} /></td>
+                                                <td><input type="number" className="form-input" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} min="1" step="1" style={{ margin: 0, height: '38px' }} /></td>
+                                                <td>
+                                                    <input type="number" className="form-input" value={item.unit_price} onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)} step="0.25" style={{ margin: 0, height: '38px' }} />
+                                                    {calculateItemTotal(item).finalPrice < item.unit_price && (
+                                                        <span style={{ fontSize: '0.75rem', color: '#10b981', display: 'block', marginTop: '4px', fontWeight: 600 }}>
+                                                            {formatCurrency(calculateItemTotal(item).finalPrice)}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                {showColorField && <td><input type="text" className="form-input" placeholder={t('color') || 'Color'} value={item.color || ''} onChange={(e) => handleItemChange(index, 'color', e.target.value)} style={{ margin: 0, height: '38px' }} /></td>}
+                                                <td className="font-bold" style={{ whiteSpace: 'nowrap' }}>
+                                                    {formatCurrency(calculateItemTotal(item).finalTotal)}
+                                                    {calculateItemTotal(item).appliedOffer && (
+                                                        <span style={{ display: 'block', fontSize: '0.65rem', background: '#10B981', color: 'white', padding: '1px 4px', borderRadius: 4, marginTop: 2, width: 'fit-content' }}>
+                                                            {calculateItemTotal(item).bogoFreeQty > 0 ? `${t('bogo_applied_badge') || 'BOGO Free'} ${calculateItemTotal(item).bogoFreeQty}` : (t('offer_applied_badge') || 'Offer Active')}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td><button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => removeItem(index)} style={{ padding: '6px' }}><X size={16} /></button></td>
+                                            </tr>
                                         );
                                     })}
                                 </tbody>
                             </table>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', flexWrap: 'wrap', gap: '12px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                                 <button type="button" className="btn btn-secondary" onClick={addItem}><Plus size={16} /> {t('inv_addItem')}</button>
                                 
+                                {/* Coupon Application UI */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '240px', border: '1px solid var(--border)', borderRadius: '8px', padding: '2px 8px', background: 'var(--bg-primary)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>🏷️ {t('coupon') || 'Coupon'}:</span>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        placeholder={t('coupon_code_placeholder') || 'كود...'}
+                                        value={couponCode}
+                                        onChange={e => setCouponCode(e.target.value)}
+                                        disabled={!!appliedCoupon}
+                                        style={{ flex: 1, padding: '4px 6px', fontSize: '0.8rem', letterSpacing: 1, textTransform: 'uppercase', margin: 0, height: '28px', border: 'none', background: 'transparent' }}
+                                    />
+                                    {!appliedCoupon ? (
+                                        <button type="button" onClick={handleApplyCoupon} style={{ padding: '2px 8px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 4, fontSize: '0.75rem', cursor: 'pointer', height: '26px' }}>
+                                            {t('apply_coupon') || 'تطبيق'}
+                                        </button>
+                                    ) : (
+                                        <button type="button" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} style={{ padding: '2px 6px', background: 'var(--error, #ef4444)', color: '#fff', border: 'none', borderRadius: 4, fontSize: '0.75rem', cursor: 'pointer', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <X size={12} />
+                                        </button>
+                                    )}
+                                </div>
+
                                 {/* Manual Discount Input */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '180px', border: '1px solid var(--border)', borderRadius: '8px', padding: '2px 8px', background: 'var(--bg-primary)' }}>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>💸 {t('discount') || 'الخصم'}:</span>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>💸 {t('discount') || 'خصم إضافي'}:</span>
                                     <input
                                         type="number"
                                         className="form-input"
                                         placeholder="0"
                                         value={formData.manual_discount === 0 ? '' : formData.manual_discount}
                                         onChange={e => {
-                                            const subtotal = formData.items.reduce((sum, item) => sum + (item.quantity * item.unit_price) - (item.discount || 0), 0);
+                                            const subtotal = formData.items.reduce((sum, item) => sum + calculateItemTotal(item).finalTotal, 0);
+                                            let couponVal = 0;
+                                            if (appliedCoupon) {
+                                                if (appliedCoupon.discount_type === 'percentage') {
+                                                    couponVal = subtotal * (parseFloat(appliedCoupon.discount_value) / 100);
+                                                } else {
+                                                    couponVal = parseFloat(appliedCoupon.discount_value);
+                                                }
+                                            }
+                                            const maxAllowed = Math.max(0, subtotal - couponVal);
                                             const val = parseFloat(e.target.value) || 0;
-                                            if (val > subtotal) {
-                                                toast.error('قيمة الخصم لا يمكن أن تتجاوز قيمة الفاتورة');
-                                                setFormData({ ...formData, manual_discount: subtotal });
+                                            if (val > maxAllowed) {
+                                                toast.error('قيمة الخصم الإضافي لا يمكن أن تتجاوز قيمة الفاتورة المتبقية');
+                                                setFormData({ ...formData, manual_discount: maxAllowed });
                                             } else {
                                                 setFormData({ ...formData, manual_discount: val });
                                             }
@@ -773,65 +915,30 @@ function PurchaseInvoices() {
                                     />
                                 </div>
                             </div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--primary)' }}>{t('inv_total')}: {formatCurrency(calculateTotals().total)}</div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                                {appliedCoupon && (
+                                    <div style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 600 }}>
+                                        ✓ {t('coupon_applied_success') || 'خصم الكوبون'}: -{formatCurrency(calculateTotals().couponDiscountAmount)}
+                                    </div>
+                                )}
+                                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--primary)' }}>
+                                    {t('inv_total')}: {formatCurrency(calculateTotals().total)}
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Card 3: الملاحظات ومرفق الفاتورة */}
-                    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', alignItems: 'start' }}>
+                    {/* Card 3: الملاحظات */}
+                    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px' }}>
                         <div className="form-group" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <label className="form-label" style={{ fontWeight: '600', marginBottom: 0 }}>✍️ {t('notes')}</label>
-                            <textarea className="form-textarea" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} style={{ minHeight: '120px', resize: 'vertical' }} />
-                        </div>
-                        
-                        <div className="form-group" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <label className="form-label" style={{ fontWeight: '600', marginBottom: 0 }}>📷 {t('invoice_attachment') || 'صورة الفاتورة / الإيصال'}</label>
-                            <div 
-                                onClick={handleImageUpload}
-                                style={{ 
-                                    border: formData.image ? '1px solid var(--border)' : '2px dashed var(--border)', 
-                                    background: 'var(--bg-primary)', 
-                                    borderRadius: '12px', 
-                                    padding: '16px',
-                                    display: 'flex', 
-                                    flexDirection: 'column',
-                                    alignItems: 'center', 
-                                    justifyContent: 'center', 
-                                    cursor: 'pointer',
-                                    minHeight: '120px',
-                                    position: 'relative',
-                                    transition: 'all 0.2s',
-                                    overflow: 'hidden',
-                                    boxShadow: 'var(--shadow-sm)'
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary)'}
-                                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
-                            >
-                                {formData.image ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', width: '100%' }}>
-                                        <img src={formData.image} alt="Invoice Attachment" style={{ maxWidth: '100%', maxHeight: '80px', objectFit: 'contain', borderRadius: '6px' }} />
-                                        <div style={{ display: 'flex', gap: '10px' }}>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>{t('click_to_change') || 'تغيير الصورة'}</span>
-                                            <span 
-                                                onClick={(e) => { e.stopPropagation(); setFormData(prev => ({ ...prev, image: '' })); }} 
-                                                style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}
-                                            >
-                                                {t('delete') || 'حذف'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
-                                        <Plus size={24} style={{ opacity: 0.7 }} />
-                                        <span style={{ fontSize: '0.82rem', fontWeight: 500 }}>{t('upload_invoice_image') || 'اضغط هنا لرفع صورة الفاتورة الورقية'}</span>
-                                        <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>JPG, PNG, WEBP (Max 800px)</span>
-                                    </div>
-                                )}
-                            </div>
+                            <textarea className="form-textarea" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} style={{ minHeight: '80px', resize: 'vertical' }} />
                         </div>
                     </div>
                 </form>
             </Modal>
+
 
 
             {/* Print Preview Modal */}
@@ -839,7 +946,7 @@ function PurchaseInvoices() {
                 <InvoicePrintPreview
                     invoice={selectedInvoice}
                     settings={settings}
-                    type="purchase"
+                    type="sales"
                     onClose={() => setShowPrintPreview(false)}
                 />
             )}
@@ -847,4 +954,4 @@ function PurchaseInvoices() {
     );
 }
 
-export default PurchaseInvoices;
+export default SalesInvoices;

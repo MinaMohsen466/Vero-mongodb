@@ -1545,69 +1545,6 @@ export default function Settings() {
                 })()}
                                             {/* ══ 8. DATABASE ════════════════════════════════════════════════════ */}
                 {sec === 'database' && (isAdmin || user?.permissions?.database?.can_view) && <>
-                    <Card title={t('system_diagnostics') || 'تشخيصات النظام وإحصائيات البيانات'} icon={HardDrive}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
-                            {[
-                                { label: t('menu_products') || 'المنتجات', value: counts.products, color: '#F59E0B' },
-                                { label: t('menu_customers') || 'العملاء', value: counts.customers, color: '#3B82F6' },
-                                { label: t('menu_suppliers') || 'الموردين', value: counts.suppliers, color: '#8B5CF6' },
-                                { label: t('menu_sales') || 'فواتير المبيعات', value: counts.sales_invoices, color: '#10B981' },
-                                { label: t('menu_purchases') || 'فواتير المشتريات', value: counts.purchase_invoices, color: '#EF4444' }
-                            ].map((c, i) => (
-                                <div key={i} style={{
-                                    padding: '12px 16px',
-                                    borderRadius: 10,
-                                    border: '1px solid var(--border)',
-                                    background: 'var(--bg-secondary)',
-                                    textAlign: 'center',
-                                    transition: 'all 0.2s'
-                                }}>
-                                    <div style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginBottom: 4 }}>{c.label}</div>
-                                    <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)' }}>{c.value}</div>
-                                    <div style={{ height: 4, width: '100%', background: 'var(--border)', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
-                                        <div style={{ width: `${Math.min(100, (c.value / Math.max(1, counts.products + counts.customers + counts.suppliers + counts.sales_invoices + counts.purchase_invoices)) * 100)}%`, height: '100%', background: c.color }} />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-
-                    <Card title={t('database_info') || 'معلومات قاعدة البيانات'} icon={HardDrive}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                            <div style={{ padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8, fontFamily: 'monospace', fontSize: '.82rem', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
-                                <strong>{t('path') || 'المسار'}: </strong>{dbPath || (t('not_available') || 'غير متاح')}
-                            </div>
-                            <div style={{ padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8, fontSize: '.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <strong>{t('size') || 'الحجم'}: </strong><span dir="ltr">{dbSize || (t('calculating') || 'جاري الحساب...')}</span>
-                                </div>
-                                <button style={{ padding: '7px 12px', background: 'var(--primary)', color: '#fff', borderRadius: 6, fontSize: '.75rem', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }} disabled={saving} onClick={async () => {
-                                    setSaving(true);
-                                    try {
-                                        if (typeof window.api.settings.optimizeDb !== 'function') {
-                                            toast.error(t('restart_to_apply_optimization') || 'Please restart the app to activate this feature');
-                                            setSaving(false);
-                                            return;
-                                        }
-                                        const res = await window.api.settings.optimizeDb();
-                                        if (res && res.success === false) {
-                                            toast.error((t('optimization_failed') || 'Space optimization failed: ') + res.error);
-                                        } else {
-                                            const size = await window.api.settings.getDbSize();
-                                            setDbSize(size);
-                                            toast.success(t('optimization_success') || 'Space optimized successfully');
-                                        }
-                                    } catch (e) {
-                                        toast.error((t('optimization_error') || 'Error during database optimization: ') + e.message);
-                                    }
-                                    setSaving(false);
-                                }}>
-                                    <RefreshCw size={14} /> {t('optimize_space') || 'تحسين المساحة'}
-                                </button>
-                            </div>
-                        </div>
-                    </Card>
-
                     <Card title={t('backup_and_restore') || 'النسخ الاحتياطي والاستعادة'} icon={Database}>
                         <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
                             {t('backup_hint') || 'قم بأخذ نسخ احتياطية بانتظام لحماية بياناتك.'}
