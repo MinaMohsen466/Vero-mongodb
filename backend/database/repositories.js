@@ -1007,6 +1007,28 @@ class InvoicesRepo {
 
 class VouchersRepo {
     constructor(db) { this.db = db; }
+
+    async recalculateInvoicePaid(invoiceId) {
+        if (!invoiceId) return;
+        const inv = await Invoice.findOne({ id: invoiceId });
+        if (!inv) return;
+
+        const vouchers = await Voucher.find({ invoice_id: invoiceId }).sort({ date: 1, id: 1 });
+        let remainingBalance = inv.total || 0;
+        let totalPaid = 0;
+
+        for (const v of vouchers) {
+            const canApply = Math.min(v.amount, remainingBalance);
+            if (v.applied_amount !== canApply) {
+                await Voucher.updateOne({ id: v.id }, { $set: { applied_amount: canApply } });
+            }
+            remainingBalance -= canApply;
+            totalPaid += canApply;
+        }
+
+        const newStatus = totalPaid >= inv.total ? 'paid' : totalPaid > 0 ? 'partial' : 'pending';
+        await Invoice.updateOne({ id: invoiceId }, { $set: { paid: totalPaid, status: newStatus } });
+    }
     
     async getAll(type) {
         const filter = type ? { type } : {};
@@ -1162,12 +1184,7 @@ class VouchersRepo {
             }
 
             if (v.invoice_id) {
-                await Invoice.updateOne({ id: v.invoice_id }, { $inc: { paid: appliedAmount } });
-                const inv = await Invoice.findOne({ id: v.invoice_id });
-                if (inv) {
-                    const newStatus = inv.paid >= inv.total ? 'paid' : inv.paid > 0 ? 'partial' : 'pending';
-                    await Invoice.updateOne({ id: v.invoice_id }, { $set: { status: newStatus } });
-                }
+                await this.recalculateInvoicePaid(v.invoice_id);
             }
 
             const jeId = await this._createVoucherJournalEntry(v, nextId, num);
@@ -1208,46 +1225,21 @@ class VouchersRepo {
                 else if (old.customer_id) await Customer.updateOne({ id: old.customer_id }, { $inc: { balance: -old.amount } });
             }
 
-            // 2. Reverse old invoice paid amount if linked
-            if (old.invoice_id) {
-                const oldApplied = old.applied_amount !== undefined ? old.applied_amount : old.amount;
-                await Invoice.updateOne({ id: old.invoice_id }, {
-                    $set: { status: 'pending' },
-                    $inc: { paid: -oldApplied }
-                });
-                const inv = await Invoice.findOne({ id: old.invoice_id });
-                if (inv && inv.paid < 0) {
-                    await Invoice.updateOne({ id: old.invoice_id }, { $set: { paid: 0 } });
-                }
-            }
-
-            // 3. Delete old journal entry
+            // 2. Delete old journal entry
             if (old.journal_entry_id) {
                 await this._deleteJournalEntry(old.journal_entry_id);
             }
 
-            // 4. Calculate new applied amount
-            let appliedAmount = 0;
-            if (old.invoice_id) {
-                const inv = await Invoice.findOne({ id: old.invoice_id });
-                if (inv) {
-                    const invoiceRemaining = (inv.total || 0) - (inv.paid || 0);
-                    appliedAmount = Math.min(parseFloat(v.amount) || 0, invoiceRemaining);
-                } else {
-                    appliedAmount = parseFloat(v.amount) || 0;
-                }
-            }
-
-            // 5. Update voucher
+            // 3. Update voucher
             await Voucher.updateOne({ id: v.id }, {
                 $set: {
-                    date: v.date, amount: v.amount || 0, applied_amount: appliedAmount,
+                    date: v.date, amount: v.amount || 0, applied_amount: 0,
                     payment_method: v.payment_method || 'cash', reference: v.reference,
                     description: v.description, journal_entry_id: null
                 }
             });
 
-            // 6. Apply new customer/supplier balance
+            // 4. Apply new customer/supplier balance
             const amount = parseFloat(v.amount) || 0;
             if (old.type === 'receipt') {
                 if (old.customer_id) await Customer.updateOne({ id: old.customer_id }, { $inc: { balance: -amount } });
@@ -1257,14 +1249,9 @@ class VouchersRepo {
                 else if (old.customer_id) await Customer.updateOne({ id: old.customer_id }, { $inc: { balance: amount } });
             }
 
-            // 7. Re-apply linked invoice paid
+            // 5. Recalculate invoice paid status and voucher applied amounts
             if (old.invoice_id) {
-                await Invoice.updateOne({ id: old.invoice_id }, { $inc: { paid: appliedAmount } });
-                const inv = await Invoice.findOne({ id: old.invoice_id });
-                if (inv) {
-                    const newStatus = inv.paid >= inv.total ? 'paid' : inv.paid > 0 ? 'partial' : 'pending';
-                    await Invoice.updateOne({ id: old.invoice_id }, { $set: { status: newStatus } });
-                }
+                await this.recalculateInvoicePaid(old.invoice_id);
             }
 
             // 8. Create new journal entry
@@ -1296,19 +1283,13 @@ class VouchersRepo {
                     await this._deleteJournalEntry(voucher.journal_entry_id);
                 }
 
+                // Delete first, so recalculateInvoicePaid doesn't count it
+                await Voucher.deleteOne({ id });
+
                 if (voucher.invoice_id) {
-                    const applied = voucher.applied_amount !== undefined ? voucher.applied_amount : voucher.amount;
-                    await Invoice.updateOne({ id: voucher.invoice_id }, { $inc: { paid: -applied } });
-                    const inv = await Invoice.findOne({ id: voucher.invoice_id });
-                    if (inv) {
-                        if (inv.paid < 0) await Invoice.updateOne({ id: voucher.invoice_id }, { $set: { paid: 0 } });
-                        const updatedInv = await Invoice.findOne({ id: voucher.invoice_id });
-                        const newStatus = updatedInv.paid >= updatedInv.total ? 'paid' : updatedInv.paid > 0 ? 'partial' : 'pending';
-                        await Invoice.updateOne({ id: voucher.invoice_id }, { $set: { status: newStatus } });
-                    }
+                    await this.recalculateInvoicePaid(voucher.invoice_id);
                 }
             }
-            await Voucher.deleteOne({ id });
             return { success: true };
         } catch (e) {
             return { success: false, error: e.message };

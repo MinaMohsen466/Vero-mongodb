@@ -106,12 +106,58 @@ const collections = {
     deleted_records: models.DeletedRecord
 };
 
+class CacheManager {
+    constructor(ttlMs = 30000) {
+        this.cache = new Map();
+        this.ttlMs = ttlMs;
+    }
+
+    get(category, key = 'all') {
+        const fullKey = `${category}:${key}`;
+        if (this.cache.has(fullKey)) {
+            const { value, expiry } = this.cache.get(fullKey);
+            if (Date.now() < expiry) {
+                try {
+                    return JSON.parse(JSON.stringify(value));
+                } catch (e) {
+                    return value;
+                }
+            }
+            this.cache.delete(fullKey);
+        }
+        return null;
+    }
+
+    set(category, value, key = 'all') {
+        const fullKey = `${category}:${key}`;
+        const expiry = Date.now() + this.ttlMs;
+        let valueToStore = value;
+        try {
+            valueToStore = JSON.parse(JSON.stringify(value));
+        } catch (e) {}
+        this.cache.set(fullKey, { value: valueToStore, expiry });
+    }
+
+    invalidate(category) {
+        for (const fullKey of this.cache.keys()) {
+            if (fullKey.startsWith(`${category}:`)) {
+                this.cache.delete(fullKey);
+            }
+        }
+    }
+
+    clearAll() {
+        this.cache.clear();
+    }
+}
+
 class AppDatabase {
     constructor() {
         this.app = null;
         this.configPath = null;
         this.adminConfig = null;
         this.lastAutoBackupTime = 0;
+        this.cache = new CacheManager(30000); // 30 seconds TTL
     }
 
     setAdminConfig(adminConfig) {
@@ -251,6 +297,87 @@ class AppDatabase {
         this.returns = new ReturnsRepo(this);
         this.coupons = new CouponsRepo(this);
         this.offers = new OffersRepo(this);
+        this._applyCachingToRepositories();
+    }
+
+    _applyCachingToRepositories() {
+        const reposToCache = [
+            { name: 'customers', category: 'customers' },
+            { name: 'suppliers', category: 'suppliers' },
+            { name: 'accounts', category: 'accounts' },
+            { name: 'products', category: 'products' },
+            { name: 'invoices', category: 'invoices' },
+            { name: 'vouchers', category: 'vouchers' },
+            { name: 'expenses', category: 'expenses' },
+            { name: 'salaries', category: 'salaries' },
+            { name: 'returns', category: 'returns' },
+            { name: 'stockTransfers', category: 'stockTransfers' },
+            { name: 'coupons', category: 'coupons' },
+            { name: 'offers', category: 'offers' },
+            { name: 'reports', category: 'reports' },
+            { name: 'settings', category: 'settings' },
+            { name: 'employees', category: 'employees' },
+            { name: 'leaves', category: 'leaves' },
+            { name: 'deductions', category: 'deductions' }
+        ];
+
+        for (const repoInfo of reposToCache) {
+            const repo = this[repoInfo.name];
+            if (!repo) continue;
+
+            const proto = Object.getPrototypeOf(repo);
+            const methods = Object.getOwnPropertyNames(proto);
+            const activeWrites = new Map();
+
+            for (const methodName of methods) {
+                if (methodName === 'constructor' || typeof repo[methodName] !== 'function') continue;
+
+                const originalMethod = repo[methodName];
+                const isWrite = methodName.startsWith('create') || 
+                                methodName.startsWith('update') || 
+                                methodName.startsWith('delete') || 
+                                methodName.startsWith('save') || 
+                                methodName.startsWith('add') || 
+                                methodName.startsWith('pay') || 
+                                methodName.startsWith('set') || 
+                                methodName.startsWith('clear') || 
+                                methodName.startsWith('increment') || 
+                                methodName.startsWith('runSetup');
+
+                const isRead = !isWrite && methodName !== 'constructor' && typeof repo[methodName] === 'function';
+
+                if (isRead) {
+                    repo[methodName] = async function(...args) {
+                        const key = `${methodName}_${JSON.stringify(args)}`;
+                        const cached = repo.db.cache.get(repoInfo.category, key);
+                        if (cached !== null) {
+                            return cached;
+                         }
+                        const result = await originalMethod.apply(repo, args);
+                        repo.db.cache.set(repoInfo.category, result, key);
+                        return result;
+                    };
+                } else if (isWrite) {
+                    repo[methodName] = async function(...args) {
+                        const callKey = `${methodName}_${JSON.stringify(args)}`;
+                        if (activeWrites.has(callKey)) {
+                            console.warn(`[DB] Coalesced duplicate write call to ${repoInfo.name}.${methodName}`);
+                            return activeWrites.get(callKey);
+                        }
+
+                        const promise = originalMethod.apply(repo, args).finally(() => {
+                            activeWrites.delete(callKey);
+                        });
+
+                        activeWrites.set(callKey, promise);
+
+                        const result = await promise;
+                        repo.db.cache.clearAll();
+                        return result;
+                    };
+                }
+            }
+        }
     }
 
     async _handleOpeningBalance(type, entityId, oldBalance, oldJeId, newBalance, newDate, entityCode, entityName) {
@@ -429,6 +556,19 @@ class AppDatabase {
                 const nextId = await getNextSequenceValue('permissions');
                 await Permission.create({ id: nextId, role: 'user', module: mod, can_view: !!v, can_create: !!c, can_edit: !!e, can_delete: !!d });
             }
+        }
+
+        // Self-healing migration: Recalculate paid amounts for all invoices to heal any out-of-sync states
+        try {
+            const InvoiceModel = collections.invoices || models.Invoice;
+            if (InvoiceModel) {
+                const invoices = await InvoiceModel.find({}).lean();
+                for (const inv of invoices) {
+                    await this.vouchers.recalculateInvoicePaid(inv.id);
+                }
+            }
+        } catch (e) {
+            console.error('[DB] Error running invoice repair migration:', e);
         }
     }
 
