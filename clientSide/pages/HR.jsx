@@ -44,6 +44,7 @@ const EmployeesTab = ({ t }) => {
     const [search, setSearch] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({
         name: '', job_title: '', department: '', hire_date: '',
         base_salary: '', phone: '', email: '', national_id: '',
@@ -97,15 +98,23 @@ const EmployeesTab = ({ t }) => {
     const save = async () => {
         if (!form.name?.trim()) { setError(t('hr_emp_name_required') || 'Employee name is required'); return; }
         setError('');
-        const result = editing
-            ? await window.api.employees.update({ ...form, id: editing.id })
-            : await window.api.employees.create(form);
-        if (result?.success) {
-            setShowModal(false);
-            toast.success(editing ? t('hr_emp_updated') || 'Employee data updated' : t('hr_emp_added') || 'Employee added and payroll account created automatically');
-            load();
-        } else {
-            toast.error(result?.error || t('errorOccurred') || 'An error occurred');
+        setSaving(true);
+        try {
+            const result = editing
+                ? await window.api.employees.update({ ...form, id: editing.id })
+                : await window.api.employees.create(form);
+            if (result?.success) {
+                setShowModal(false);
+                toast.success(editing ? t('hr_emp_updated') || 'Employee data updated' : t('hr_emp_added') || 'Employee added and payroll account created automatically');
+                load();
+            } else {
+                toast.error(result?.error || t('errorOccurred') || 'An error occurred');
+            }
+        } catch (e) {
+            console.error(e);
+            toast.error(t('errorOccurred') || 'An error occurred');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -194,8 +203,11 @@ const EmployeesTab = ({ t }) => {
             <Modal isOpen={showModal} onClose={() => setShowModal(false)}
                 title={editing ? (t('hr_edit_emp') || 'Edit Employee') : (t('hr_new_emp') || 'New Employee')} size="lg"
                 footer={<>
-                    <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>{t('cancel') || 'Cancel'} (Esc)</button>
-                    <button type="submit" form="employee-form" className="btn btn-primary"><SaveIcon size={16} /> {editing ? (t('save_changes') || 'Save Changes') : (t('add') || 'Add')} (Ctrl+S)</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={saving}>{t('cancel') || 'Cancel'} (Esc)</button>
+                    <button type="submit" form="employee-form" className="btn btn-primary" disabled={saving}>
+                        {saving ? <span className="spinner-btn" style={{ marginInlineEnd: '8px' }}></span> : <SaveIcon size={16} />}
+                        {saving ? (t('savingProgress') || 'Saving...') : (editing ? (t('save_changes') || 'Save Changes') : (t('add') || 'Add')) + ' (Ctrl+S)'}
+                    </button>
                 </>}>
                 {error && <div className="alert alert-danger" style={{ marginBottom: 16 }}>{error}</div>}
                 <form id="employee-form" onSubmit={e => { e.preventDefault(); save(); }}>
@@ -282,6 +294,7 @@ function SalariesTab({ t }) {
     const [showModal, setShowModal] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({
         employee_id: '', month: '', base_salary: '', deductions: '0',
         payment_method: 'cash', payment_account_id: '', notes: '',
@@ -352,18 +365,26 @@ function SalariesTab({ t }) {
     const pay = async () => {
         if (!form.employee_id || !form.month) { setError(t('hr_select_emp_month') || 'Select employee and month'); return; }
         setError('');
-        const result = await window.api.salaries.pay({
-            ...form,
-            base_salary: parseFloat(form.base_salary) || 0,
-            deductions: parseFloat(form.deductions) || 0,
-            created_by: user?.id
-        });
-        if (result?.success) {
-            setShowModal(false);
-            toast.success(`✅ ${t('hr_salary_paid') || 'Salary Paid'} | ${t('number') || 'No.'}: ${result.payment_number} | ${t('net') || 'Net'}: ${Number(result.net_salary).toFixed(3)}`);
-            load();
-        } else {
-            toast.error(result?.error || t('errorOccurred') || 'An error occurred');
+        setSaving(true);
+        try {
+            const result = await window.api.salaries.pay({
+                ...form,
+                base_salary: parseFloat(form.base_salary) || 0,
+                deductions: parseFloat(form.deductions) || 0,
+                created_by: user?.id
+            });
+            if (result?.success) {
+                setShowModal(false);
+                toast.success(`✅ ${t('hr_salary_paid') || 'Salary Paid'} | ${t('number') || 'No.'}: ${result.payment_number} | ${t('net') || 'Net'}: ${Number(result.net_salary).toFixed(3)}`);
+                load();
+            } else {
+                toast.error(result?.error || t('errorOccurred') || 'An error occurred');
+            }
+        } catch (e) {
+            console.error(e);
+            toast.error(t('errorOccurred') || 'An error occurred');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -435,8 +456,11 @@ function SalariesTab({ t }) {
 
             <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={t('hr_pay_emp_salary') || 'Pay Employee Salary'}
                 footer={<>
-                    <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>{t('cancel') || 'Cancel'} (Esc)</button>
-                    <button type="submit" form="salary-form" className="btn btn-primary"><DollarSign size={16} /> {t('pay_salary_save') || 'Pay Salary (Ctrl+S)'}</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={saving}>{t('cancel') || 'Cancel'} (Esc)</button>
+                    <button type="submit" form="salary-form" className="btn btn-primary" disabled={saving}>
+                        {saving ? <span className="spinner-btn" style={{ marginInlineEnd: '8px' }}></span> : <DollarSign size={16} />}
+                        {saving ? (t('savingProgress') || 'Saving...') : (t('pay_salary_save') || 'Pay Salary (Ctrl+S)')}
+                    </button>
                 </>}>
                 {error && <div className="alert alert-danger" style={{ marginBottom: 16 }}>{error}</div>}
                 <form id="salary-form" onSubmit={(e) => { e.preventDefault(); pay(); }}>
@@ -542,6 +566,7 @@ const LeavesTab = ({ t }) => {
     const [showModal, setShowModal] = useState(false);
     const [error, setError] = useState('');
     const [filterEmp, setFilterEmp] = useState('');
+    const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({ employee_id: '', leave_type: 'annual', start_date: '', end_date: '', days: 0, reason: '', notes: '' });
 
     const load = async () => {
@@ -593,6 +618,7 @@ const LeavesTab = ({ t }) => {
     const save = async () => {
         if (!form.employee_id || !form.start_date || !form.end_date) { toast.error(t('fill_required_fields') || 'Please fill out all required fields'); return; }
         setError('');
+        setSaving(true);
         try {
             const r = await window.api.leaves.create(form);
             if (r?.success) {
@@ -604,7 +630,9 @@ const LeavesTab = ({ t }) => {
             }
         } catch (error) {
             console.error('Error creating leave:', error);
-            toast.error(t('hr_leave_save_error') || 'Error saving leave request');
+            toast.error(t('errorOccurred') || 'An error occurred');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -708,8 +736,11 @@ const LeavesTab = ({ t }) => {
 
             <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={t('hr_request_leave') || 'Request Leave'}
                 footer={<>
-                    <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>{t('cancel') || 'Cancel'} (Esc)</button>
-                    <button type="submit" form="leave-form" className="btn btn-primary"><SaveIcon size={16} /> {t('save_ctrl_s') || 'Save (Ctrl+S)'}</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={saving}>{t('cancel') || 'Cancel'} (Esc)</button>
+                    <button type="submit" form="leave-form" className="btn btn-primary" disabled={saving}>
+                        {saving ? <span className="spinner-btn" style={{ marginInlineEnd: '8px' }}></span> : <SaveIcon size={16} />}
+                        {saving ? (t('savingProgress') || 'Saving...') : (t('save_ctrl_s') || 'Save (Ctrl+S)')}
+                    </button>
                 </>}>
                 {error && <div className="alert alert-danger" style={{ marginBottom: 16 }}>{error}</div>}
                 <form id="leave-form" onSubmit={(e) => { e.preventDefault(); save(); }}>
@@ -780,6 +811,7 @@ const DeductionsTab = ({ t }) => {
     const [showModal, setShowModal] = useState(false);
     const [error, setError] = useState('');
     const [filterEmp, setFilterEmp] = useState('');
+    const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({ employee_id: '', month: '', amount: '', reason: '' });
 
     const load = async () => {
@@ -809,6 +841,7 @@ const DeductionsTab = ({ t }) => {
     const save = async () => {
         if (!form.employee_id || !form.month || !form.amount) { setError(t('fill_all_fields') || 'Please fill in all fields'); return; }
         setError('');
+        setSaving(true);
         try {
             const r = await window.api.deductions.create({ ...form, amount: parseFloat(form.amount) });
             if (r?.success) {
@@ -820,7 +853,9 @@ const DeductionsTab = ({ t }) => {
             }
         } catch (error) {
             console.error('Error creating deduction:', error);
-            toast.error(t('hr_deduction_save_error') || 'Error saving deduction');
+            toast.error(t('errorOccurred') || 'An error occurred');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -888,8 +923,11 @@ const DeductionsTab = ({ t }) => {
 
             <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={t('add_deduction') || 'Add Deduction'}
                 footer={<>
-                    <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>{t('cancel') || 'Cancel'} (Esc)</button>
-                    <button type="submit" form="deduction-form" className="btn btn-primary"><SaveIcon size={16} /> {t('save_ctrl_s') || 'Save (Ctrl+S)'}</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={saving}>{t('cancel') || 'Cancel'} (Esc)</button>
+                    <button type="submit" form="deduction-form" className="btn btn-primary" disabled={saving}>
+                        {saving ? <span className="spinner-btn" style={{ marginInlineEnd: '8px' }}></span> : <SaveIcon size={16} />}
+                        {saving ? (t('savingProgress') || 'Saving...') : (t('save_ctrl_s') || 'Save (Ctrl+S)')}
+                    </button>
                 </>}>
                 {error && <div className="alert alert-danger" style={{ marginBottom: 16 }}>{error}</div>}
                 <form id="deduction-form" onSubmit={(e) => { e.preventDefault(); save(); }}>

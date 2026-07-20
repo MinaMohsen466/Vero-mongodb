@@ -128,8 +128,8 @@ function POS() {
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [suppliers, setSuppliers] = useState([]);
     const [supplierFilter, setSupplierFilter] = useState('all');
-
-    // Infinite scroll pagination for products grid
+    const [zoomImage, setZoomImage] = useState(null);
+    const [zoomImageName, setZoomImageName] = useState('');    // Infinite scroll pagination for products grid
     const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
     const gridContainerRef = useRef(null);
 
@@ -692,6 +692,15 @@ function POS() {
             return;
         }
 
+        // Credit limit validation for credit sales
+        if (payMethod === 'credit' && selectedCustomer && selectedCustomer.credit_limit > 0) {
+            const newBalance = (selectedCustomer.balance || 0) + total;
+            if (newBalance > selectedCustomer.credit_limit) {
+                toast.error(`${t('cust_creditLimit') || 'تم تجاوز الحد الائتماني المسموح به للعميل'}: ${selectedCustomer.name} (الحد: ${selectedCustomer.credit_limit.toFixed(3)}، الرصيد المتوقع: ${newBalance.toFixed(3)})`);
+                return;
+            }
+        }
+
         if (couponDiscountAmount > calcSubtotal) {
             toast.error('قيمة خصم الكوبون أكبر من قيمة الفاتورة، تم إلغاء الكوبون');
             setAppliedCoupon(null);
@@ -902,7 +911,7 @@ function POS() {
                     onScroll={handleScroll}
                     style={{
                         flex: 1, overflowY: 'auto',
-                        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
                         gap: '12px', alignContent: 'start',
                         padding: '12px 8px',
                     }}
@@ -929,6 +938,10 @@ function POS() {
                                 outOfStockLabel={t('out_of_stock') || 'Out of Stock'}
                                 inStockLabel={t('in_stock') || 'In Stock'}
                                 purchasePriceLabel={t('purchase_price_label') || 'سعر الشراء'}
+                                onZoomImage={(url, name) => {
+                                    setZoomImage(url);
+                                    setZoomImageName(name);
+                                }}
                             />
                         );
                     })}
@@ -937,7 +950,7 @@ function POS() {
 
             {/* ── Right: Cart ────────────────────────────────────────────── */}
             <div style={{
-                width: '340px', minWidth: '300px',
+                width: '420px', minWidth: '380px',
                 background: 'var(--bg-primary)', borderRight: '1px solid var(--border)',
                 display: 'flex', flexDirection: 'column',
                 overflow: 'hidden', minHeight: 0
@@ -946,16 +959,16 @@ function POS() {
                 <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', background: 'var(--primary)', color: 'white' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                            <ShoppingCart size={18} />
-                            <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{t('shopping_cart') || 'Cart'}</span>
+                            <ShoppingCart size={20} />
+                            <span style={{ fontWeight: 800, fontSize: '1.15rem' }}>{t('shopping_cart') || 'Cart'}</span>
                             {cart.length > 0 && (
-                                <span style={{ background: 'rgba(255,255,255,0.3)', borderRadius: '12px', padding: '1px 8px', fontSize: '0.78rem', fontWeight: 700 }}>
+                                <span style={{ background: 'rgba(255,255,255,0.3)', borderRadius: '12px', padding: '2px 10px', fontSize: '0.88rem', fontWeight: 800 }}>
                                     {cart.reduce((s, i) => s + i.qty, 0)}
                                 </span>
                             )}
                         </div>
                         {cart.length > 0 && (
-                            <button onClick={clearCart} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '6px', padding: '3px 8px', cursor: 'pointer', fontSize: '0.72rem' }}>
+                            <button onClick={clearCart} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}>
                                 {t('clear_all') || 'Clear All'}
                             </button>
                         )}
@@ -993,102 +1006,162 @@ function POS() {
                         </div>
                     ) : enrichedCart.map(item => (
                         <div key={item.id} style={{
-                            display: 'flex', alignItems: 'flex-start', gap: '5px',
-                            padding: '6px 7px', borderRadius: '8px', marginBottom: '4px',
-                            background: item.appliedOffer ? 'rgba(16, 185, 129, 0.05)' : 'var(--bg-secondary)', 
-                            border: item.appliedOffer ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border)'
+                            display: 'flex', flexDirection: 'column', gap: '4px',
+                            padding: '6px 10px', borderRadius: '10px', marginBottom: '6px',
+                            background: item.appliedOffer ? 'var(--primary-light)' : 'var(--bg-secondary)', 
+                            border: item.appliedOffer ? '1px solid var(--primary)' : '1px solid var(--border)',
+                            boxShadow: 'var(--shadow-sm)',
+                            position: 'relative',
+                            transition: 'all 0.2s ease'
                         }}>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <p style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {item.name}
+                            {/* Row 1: Product Name & Subtotal & Delete */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
+                                    <p style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {item.name}
+                                    </p>
                                     {item.appliedOffer && (
-                                        <span style={{ marginLeft: 5, fontSize: '0.65rem', background: '#10B981', color: 'white', padding: '1px 4px', borderRadius: 4 }}>
-                                            {item.bogoFreeQty > 0 ? `${t('bogo_applied_badge')} ${item.bogoFreeQty}` : t('offer_applied_badge')}
+                                        <span style={{ marginInlineStart: 4, fontSize: '0.6rem', background: '#10B981', color: 'white', padding: '1px 3px', borderRadius: 4, fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                            {item.bogoFreeQty > 0 ? `${t('bogo_applied_badge')} ${item.bogoFreeQty}` : (t('offer_applied_badge') || 'عرض')}
                                         </span>
                                     )}
-                                </p>
-                                {/* Color field (if unit is Drum, Gallon, or Liter) */}
-                                {settings?.general?.enable_product_color === 'yes' && isColorUnit(item.unit) && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{t('color') || 'اللون'}:</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontWeight: 800, fontSize: '0.98rem', color: 'var(--primary)' }}>
+                                        {formatCurrency(item.finalTotal)}
+                                    </span>
+                                    <button onClick={() => removeFromCart(item.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={t('delete')}>
+                                        <Trash2 size={13} style={{ opacity: 0.8 }} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Row 2: Qty Selector & Price Editor & Color */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', borderTop: '1px solid rgba(0,0,0,0.03)', paddingTop: '4px' }}>
+                                {/* Qty Controls (Right aligned in RTL) */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--surface)', padding: '1px 2px', borderRadius: '20px', border: '1px solid var(--border)' }}>
+                                    {item.qty > 1 ? (
+                                        <button 
+                                            onClick={() => updateQty(item.id, -1)} 
+                                            style={{ 
+                                                width: '24px', height: '24px', borderRadius: '50%', border: 'none', 
+                                                background: 'transparent', cursor: 'pointer', display: 'flex', 
+                                                alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)',
+                                                transition: 'all 0.15s'
+                                            }}
+                                            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                        >
+                                            <Minus size={11} />
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            onClick={() => removeFromCart(item.id)} 
+                                            style={{ 
+                                                width: '24px', height: '24px', borderRadius: '50%', border: 'none', 
+                                                background: 'transparent', cursor: 'pointer', display: 'flex', 
+                                                alignItems: 'center', justifyContent: 'center', color: 'var(--danger)',
+                                                transition: 'all 0.15s'
+                                            }}
+                                            onMouseEnter={e => e.currentTarget.style.background = 'var(--danger-light, #fee2e2)'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                            title={t('delete')}
+                                        >
+                                            <Trash2 size={11} />
+                                        </button>
+                                    )}
+                                    <span style={{ minWidth: '20px', textAlign: 'center', fontWeight: 800, fontSize: '0.88rem', color: 'var(--text-primary)' }}>{item.qty}</span>
+                                    <button 
+                                        onClick={() => updateQty(item.id, 1)} 
+                                        style={{ 
+                                            width: '24px', height: '24px', borderRadius: '50%', border: 'none', 
+                                            background: 'transparent', cursor: 'pointer', display: 'flex', 
+                                            alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)',
+                                            transition: 'all 0.15s'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                    >
+                                        <Plus size={11} />
+                                    </button>
+                                </div>
+
+                                {/* Price Editor & Color (Left aligned in RTL) */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+                                    {/* Color field (Only if active) */}
+                                    {settings?.general?.enable_product_color === 'yes' && isColorUnit(item.unit) && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                            <input
+                                                type="text"
+                                                value={item.color || ''}
+                                                placeholder={t('color') || 'اللون'}
+                                                onClick={e => e.stopPropagation()}
+                                                onChange={e => {
+                                                    setCart(prev => prev.map(i =>
+                                                        i.id === item.id
+                                                            ? { ...i, color: e.target.value }
+                                                            : i
+                                                    ));
+                                                }}
+                                                style={{
+                                                    width: '55px', height: '26px', padding: '2px 4px', fontSize: '0.75rem',
+                                                    border: '1px solid var(--border)', borderRadius: '5px',
+                                                    background: 'var(--surface)', color: 'var(--text-primary)',
+                                                    outline: 'none', textAlign: 'center'
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Original price crossed out if there is an offer */}
+                                    {item.finalPrice < item.price && (
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', background: 'rgba(37,99,235,0.08)', padding: '1px 4px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                                            {formatCurrency(item.finalPrice)}
+                                        </span>
+                                    )}
+
+                                    {/* Price Input (Mainly large and easy to edit) */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                        <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>{t('price') || 'السعر'}:</span>
                                         <input
-                                            type="text"
-                                            value={item.color || ''}
-                                            placeholder={t('enter_color') || 'أدخل اللون'}
+                                            type="number"
+                                            value={item.price}
+                                            min="0"
+                                            step="0.250"
                                             onClick={e => e.stopPropagation()}
                                             onChange={e => {
+                                                const newPrice = parseFloat(e.target.value) || 0;
                                                 setCart(prev => prev.map(i =>
                                                     i.id === item.id
-                                                        ? { ...i, color: e.target.value }
+                                                        ? { ...i, price: newPrice }
                                                         : i
                                                 ));
                                             }}
                                             style={{
-                                                width: '70px', padding: '1px 5px', fontSize: '0.72rem',
+                                                width: '85px', height: '28px', padding: '2px 4px', fontSize: '0.88rem',
                                                 border: '1px solid var(--border)', borderRadius: '5px',
-                                                background: 'var(--bg-primary)', color: 'var(--text-primary)',
-                                                outline: 'none'
+                                                background: 'var(--surface)', color: 'var(--text-primary)',
+                                                outline: 'none', 
+                                                textDecoration: item.finalPrice < item.price ? 'line-through' : 'none', 
+                                                opacity: item.finalPrice < item.price ? 0.6 : 1,
+                                                fontWeight: 700,
+                                                textAlign: 'center'
                                             }}
                                         />
                                     </div>
-                                )}
-                                {/* Editable price */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{t('price') || 'السعر'}:</span>
-                                    <input
-                                        type="number"
-                                        value={item.price}
-                                        min="0"
-                                        step="0.250"
-                                        onClick={e => e.stopPropagation()}
-                                        onChange={e => {
-                                            const newPrice = parseFloat(e.target.value) || 0;
-                                            setCart(prev => prev.map(i =>
-                                                i.id === item.id
-                                                    ? { ...i, price: newPrice }
-                                                    : i
-                                            ));
-                                        }}
-                                        style={{
-                                            width: '85px', padding: '3px 6px', fontSize: '0.8rem',
-                                            border: '1px solid var(--border)', borderRadius: '5px',
-                                            background: 'var(--bg-primary)', color: 'var(--text-primary)',
-                                            outline: 'none', textDecoration: item.finalPrice < item.price ? 'line-through' : 'none', opacity: item.finalPrice < item.price ? 0.6 : 1
-                                        }}
-                                    />
-                                    {item.finalPrice < item.price && (
-                                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--primary)' }}>{formatCurrency(item.finalPrice)}</span>
-                                    )}
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '2px', paddingTop: 2 }}>
-                                <button onClick={() => updateQty(item.id, -1)} style={{ width: '22px', height: '22px', borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-                                    <Minus size={10} />
-                                </button>
-                                <span style={{ minWidth: '20px', textAlign: 'center', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{item.qty}</span>
-                                <button onClick={() => updateQty(item.id, 1)} style={{ width: '22px', height: '22px', borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-                                    <Plus size={10} />
-                                </button>
-                            </div>
-                            <div style={{ textAlign: 'left', minWidth: '58px', paddingTop: 2 }}>
-                                <p style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--primary)', margin: 0 }}>
-                                    {formatCurrency(item.finalTotal)}
-                                </p>
-                            </div>
-                            <button onClick={() => removeFromCart(item.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px', flexShrink: 0, marginTop: 2 }}>
-                                <Trash2 size={12} />
-                            </button>
                         </div>
                     ))}
                 </div>
 
                 {/* Cart Footer — always visible */}
-                <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)', flexShrink: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.83rem', color: 'var(--text-secondary)' }}>
+                <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                         <span>{t('subtotal') || 'Subtotal'}</span><span>{formatCurrency(subtotal)}</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
-                        <span style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{t('discount') || 'Discount'} ({settings.general?.currency_symbol || (t('currency_kd') || 'KD')})</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{t('discount') || 'Discount'} ({settings.general?.currency_symbol || (t('currency_kd') || 'KD')})</span>
                         <input
                             type="number"
                             className="form-input"
@@ -1104,18 +1177,18 @@ function POS() {
                                 }
                             }}
                             min="0" step="0.250"
-                            style={{ flex: 1, padding: '4px 8px', fontSize: '0.83rem', textAlign: 'left' }}
+                            style={{ flex: 1, padding: '6px 10px', fontSize: '0.9rem', textAlign: 'left' }}
                         />
                     </div>
                     {offersDiscountAmount > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.83rem', color: '#10b981', fontWeight: 600 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.9rem', color: '#10b981', fontWeight: 700 }}>
                             <span>{t('offers_discount') || 'خصم العروض'}</span><span>- {formatCurrency(offersDiscountAmount)}</span>
                         </div>
                     )}
                     
                     {/* Coupon Input */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
-                        <span style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', width: 60 }}>{t('coupon') || 'Coupon'}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', width: 60 }}>{t('coupon') || 'Coupon'}</span>
                         <div style={{ display: 'flex', flex: 1, gap: 4 }}>
                             <input
                                 type="text"
@@ -1124,42 +1197,42 @@ function POS() {
                                 value={couponCode}
                                 onChange={e => setCouponCode(e.target.value)}
                                 disabled={!!appliedCoupon}
-                                style={{ flex: 1, padding: '4px 8px', fontSize: '0.83rem', letterSpacing: 1, textTransform: 'uppercase' }}
+                                style={{ flex: 1, padding: '6px 10px', fontSize: '0.9rem', letterSpacing: 1, textTransform: 'uppercase' }}
                             />
                             {!appliedCoupon ? (
-                                <button type="button" onClick={handleApplyCoupon} style={{ padding: '4px 8px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6, fontSize: '0.8rem', cursor: 'pointer' }}>
+                                <button type="button" onClick={handleApplyCoupon} style={{ padding: '6px 12px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6, fontSize: '0.88rem', cursor: 'pointer', fontWeight: 600 }}>
                                     {t('apply_coupon') || 'Apply'}
                                 </button>
                             ) : (
-                                <button type="button" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} style={{ padding: '4px 8px', background: 'var(--error, #ef4444)', color: '#fff', border: 'none', borderRadius: 6, fontSize: '0.8rem', cursor: 'pointer' }}>
+                                <button type="button" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} style={{ padding: '6px 12px', background: 'var(--error, #ef4444)', color: '#fff', border: 'none', borderRadius: 6, fontSize: '0.88rem', cursor: 'pointer' }}>
                                     <X size={14} />
                                 </button>
                             )}
                         </div>
                     </div>
                     {appliedCoupon && (
-                        <div style={{ fontSize: '0.75rem', color: '#10b981', textAlign: 'right', marginBottom: 5 }}>
+                        <div style={{ fontSize: '0.8rem', color: '#10b981', textAlign: 'right', marginBottom: 6 }}>
                             ✓ {t('coupon_applied_success') || 'Coupon Active'} (-{couponDiscountAmount.toFixed(3)})
                         </div>
                     )}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', paddingTop: '8px', borderTop: '2px solid var(--border)' }}>
-                        <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{t('final_total') || 'Total'}</span>
-                        <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)' }}>{formatCurrency(total)}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', paddingTop: '10px', borderTop: '2px solid var(--border)' }}>
+                        <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>{t('final_total') || 'Total'}</span>
+                        <span style={{ fontSize: '1.45rem', fontWeight: 900, color: 'var(--primary)' }}>{formatCurrency(total)}</span>
                     </div>
-                    <div style={{ display: 'grid', gap: '8px', marginTop: '10px' }}>
+                    <div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
                         <button
                             onClick={openPayModal}
                             disabled={cart.length === 0}
                             style={{
-                                padding: '13px', background: cart.length > 0 ? 'var(--primary)' : 'var(--border)',
+                                padding: '14px', background: cart.length > 0 ? 'var(--primary)' : 'var(--border)',
                                 color: 'white', border: 'none', borderRadius: '10px',
                                 cursor: cart.length > 0 ? 'pointer' : 'not-allowed',
-                                fontSize: '0.95rem', fontWeight: 700,
+                                fontSize: '1.05rem', fontWeight: 800,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
                                 transition: 'all 0.2s'
                             }}
                         >
-                            <CreditCard size={18} /> {t('checkout') || 'Checkout'}
+                            <CreditCard size={20} /> {t('checkout') || 'Checkout'}
                         </button>
                     </div>
                 </div>
@@ -1273,7 +1346,7 @@ function POS() {
                                     opacity: (saving || (payMethod === 'cash' && parseFloat(amountPaid) < total)) ? 0.6 : 1
                                 }}
                             >
-                                <Check size={18} />
+                                {saving ? <span className="spinner-btn"></span> : <Check size={18} />}
                                 {saving ? (t('saving') || 'Saving...') : payMethod === 'credit' ? (t('record_credit') || 'Record Credit') : (t('confirm_sale') || 'Confirm Sale')}
                             </button>
                         </div>
@@ -1426,7 +1499,8 @@ function POS() {
                             <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
                                 <button type="button" onClick={() => setShowAddCustomer(false)} style={{ flex: 1, padding: '11px', background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '10px', cursor: 'pointer', fontWeight: 600 }}>{t('cancel') || 'Cancel'}</button>
                                 <button type="submit" disabled={savingCustomer} style={{ flex: 1, padding: '11px', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '10px', cursor: savingCustomer ? 'wait' : 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', opacity: savingCustomer ? 0.7 : 1 }}>
-                                    {savingCustomer ? (t('saving') || 'Saving...') : <><Check size={16} /> {t('save') || 'Save'}</>}
+                                    {savingCustomer ? <span className="spinner-btn"></span> : <Check size={16} />}
+                                    {savingCustomer ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
                                 </button>
                             </div>
                         </form>
@@ -1444,9 +1518,63 @@ function POS() {
                 />
             )}
 
+            {/* Image Zoom Modal */}
+            {zoomImage && (
+                <div 
+                    onClick={() => setZoomImage(null)}
+                    style={{ 
+                        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', 
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                        zIndex: 1100, backdropFilter: 'blur(4px)', cursor: 'zoom-out',
+                        animation: 'fadeIn 0.2s ease'
+                    }}
+                >
+                    <div 
+                        onClick={(e) => e.stopPropagation()} 
+                        style={{ 
+                            position: 'relative', background: 'var(--surface)', 
+                            borderRadius: '16px', padding: '16px', maxWidth: '85vw', 
+                            maxHeight: '85vh', display: 'flex', flexDirection: 'column', 
+                            alignItems: 'center', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                            animation: 'scaleUp 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                        }}
+                    >
+                        <button 
+                            onClick={() => setZoomImage(null)}
+                            style={{ 
+                                position: 'absolute', top: '-15px', left: '-15px', 
+                                background: 'var(--danger)', color: 'white', border: 'none', 
+                                borderRadius: '50%', width: '32px', height: '32px', 
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                zIndex: 10
+                            }}
+                        >
+                            <X size={18} />
+                        </button>
+                        
+                        <div style={{ width: '100%', overflow: 'hidden', borderRadius: '12px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '280px', minHeight: '280px' }}>
+                            <img 
+                                src={zoomImage} 
+                                alt={zoomImageName || "Product"} 
+                                style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }} 
+                            />
+                        </div>
+                        
+                        {zoomImageName && (
+                            <h4 style={{ margin: '12px 0 0 0', color: 'var(--text-primary)', fontWeight: 700, fontSize: '1rem', textAlign: 'center' }}>
+                                {zoomImageName}
+                            </h4>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Spin animation */}
             <style>{`
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes scaleUp { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
             `}</style>
         </div>
     );
@@ -1464,7 +1592,8 @@ const ProductCard = React.memo(function ProductCard({
     formattedPurchasePrice,
     outOfStockLabel,
     inStockLabel,
-    purchasePriceLabel
+    purchasePriceLabel,
+    onZoomImage
 }) {
     const outOfStock = product.shop_stock <= 0;
     return (
@@ -1477,7 +1606,7 @@ const ProductCard = React.memo(function ProductCard({
                 cursor: outOfStock ? 'not-allowed' : 'pointer',
                 opacity: outOfStock ? 0.55 : 1,
                 transition: 'all 0.15s',
-                display: 'flex', alignItems: 'center', gap: '12px',
+                display: 'flex', alignItems: 'center', gap: '10px',
                 position: 'relative', userSelect: 'none',
                 overflow: 'visible', /* prevent badge clipping */
                 boxShadow: inCartQty > 0 ? `0 4px 16px ${color}33` : 'var(--shadow)'
@@ -1505,14 +1634,25 @@ const ProductCard = React.memo(function ProductCard({
             
             {/* Absolute positioned image to force it strictly onto the left in both RTL and LTR without interfering with DOM flow direction */}
             <div style={{ 
-                width: '85px', height: '85px', flexShrink: 0, position: 'absolute', left: '10px', top: '10px',
+                width: '76px', height: '76px', flexShrink: 0, position: 'absolute', left: '10px', top: '10px',
                 background: 'var(--bg-primary)', borderRadius: '8px'
             }}>
                 {product.image ? (
-                    <div style={{
-                        width: '100%', height: '100%', borderRadius: '8px', overflow: 'hidden',
-                        border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
+                    <div 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onZoomImage(product.image, product.name);
+                        }}
+                        title={t('zoom_image') || 'Zoom Image'}
+                        style={{
+                            width: '100%', height: '100%', borderRadius: '8px', overflow: 'hidden',
+                            border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'zoom-in', transition: 'all 0.2s ease',
+                            background: '#fff'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; }}
+                    >
                         <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     </div>
                 ) : (
@@ -1522,16 +1662,16 @@ const ProductCard = React.memo(function ProductCard({
                         alignItems: 'center', justifyContent: 'center', color,
                         border: '1px solid transparent'
                     }}>
-                        <Package size={32} style={{ opacity: 0.7 }} />
+                        <Package size={28} style={{ opacity: 0.7 }} />
                     </div>
                 )}
             </div>
 
             <div style={{ 
                 display: 'flex', flexDirection: 'column', flex: 1, 
-                minHeight: '85px', justifyContent: 'center', paddingLeft: '95px', textAlign: 'start' 
+                minHeight: '76px', justifyContent: 'center', paddingLeft: '92px', textAlign: 'start' 
             }}>
-                <p style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', margin: '0 0 6px 0', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.name}</p>
+                <p style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', margin: '0 0 6px 0', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>{product.name}</p>
                 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 6px 0' }}>
                     <span style={{ fontWeight: 800, color, fontSize: '0.95rem' }}>{formattedSalePrice}</span>

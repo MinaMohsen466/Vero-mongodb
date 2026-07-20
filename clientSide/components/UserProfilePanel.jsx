@@ -72,11 +72,24 @@ export default function UserProfilePanel() {
             <button
                 onClick={() => setOpen(o => !o)}
                 style={{
-                    display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
-                    background: open ? 'rgba(37,99,235,.1)' : 'transparent',
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px',
+                    background: open ? 'rgba(37,99,235,.08)' : 'var(--bg-secondary)',
                     border: '1px solid ' + (open ? 'var(--primary)' : 'var(--border)'),
-                    borderRadius: 10, cursor: 'pointer', transition: 'all .15s',
+                    borderRadius: '24px', cursor: 'pointer', transition: 'all .2s ease',
                     color: 'var(--text-primary)',
+                    boxShadow: 'var(--shadow-sm)'
+                }}
+                onMouseEnter={e => {
+                    if (!open) {
+                        e.currentTarget.style.background = 'var(--border)';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                    }
+                }}
+                onMouseLeave={e => {
+                    if (!open) {
+                        e.currentTarget.style.background = 'var(--bg-secondary)';
+                        e.currentTarget.style.transform = 'none';
+                    }
                 }}
             >
                 <div style={{
@@ -88,8 +101,8 @@ export default function UserProfilePanel() {
                     {(user.full_name || user.username || 'U')[0].toUpperCase()}
                 </div>
                 <div style={{ textAlign: 'right', lineHeight: 1.3 }}>
-                    <div style={{ fontWeight: 600, fontSize: '.82rem' }}>{user.full_name || user.username}</div>
-                    <div style={{ fontSize: '.7rem', color: 'var(--text-muted)' }}>{roleName(user.role)}</div>
+                    <div style={{ fontWeight: 700, fontSize: '.85rem' }}>{user.full_name || user.username}</div>
+                    <div style={{ fontSize: '.73rem', color: 'var(--text-muted)' }}>{roleName(user.role)}</div>
                 </div>
                 <ChevronDown size={14} style={{ color: 'var(--text-muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
             </button>

@@ -9,6 +9,7 @@ function Suppliers() {
     const { user, t } = useAuth();
     const [suppliers, setSuppliers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [showModal, setShowModal] = useState(false);
@@ -93,6 +94,7 @@ function Suppliers() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setSaving(true);
         try {
             if (editingSupplier) {
                 await window.api.suppliers.update({ ...formData, id: editingSupplier.id });
@@ -106,6 +108,8 @@ function Suppliers() {
         } catch (error) {
             console.error('Error saving supplier:', error);
             toast.error(t('errorOccurred') || 'Error occurred while saving supplier data');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -346,13 +350,30 @@ function Suppliers() {
             });
 
             supplierReturns.forEach(ret => {
-                rows.push({
-                    date: ret.date,
-                    description: `${t('purchase_return') || 'مرتجع مشتريات'} ${ret.return_number} ${ret.payment_method === 'credit' ? `(${t('on_account') || 'على الحساب'})` : `(${t('cash') || 'نقداً'})`}`,
-                    debit: ret.payment_method === 'credit' ? (ret.total || 0) : 0,
-                    credit: 0,
-                    seq: seq++
-                });
+                if (ret.payment_method === 'credit') {
+                    rows.push({
+                        date: ret.date,
+                        description: `${t('purchase_return') || 'مرتجع مشتريات'} ${ret.return_number} (${t('on_account') || 'على الحساب'})`,
+                        debit: ret.total || 0,
+                        credit: 0,
+                        seq: seq++
+                    });
+                } else {
+                    rows.push({
+                        date: ret.date,
+                        description: `${t('purchase_return') || 'مرتجع مشتريات'} ${ret.return_number} (${t('cash') || 'نقداً'})`,
+                        debit: ret.total || 0,
+                        credit: 0,
+                        seq: seq++
+                    });
+                    rows.push({
+                        date: ret.date,
+                        description: `${t('refund_received') || 'دفعة استرداد نقدي مرتجع'} ${ret.return_number}`,
+                        debit: 0,
+                        credit: ret.total || 0,
+                        seq: seq++
+                    });
+                }
             });
 
             const sortedRows = rows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.seq - b.seq);
@@ -471,8 +492,8 @@ function Suppliers() {
             <Modal isOpen={showModal} onClose={closeModal} title={editingSupplier ? t('supp_edit') : t('supp_add')}
                 footer={
                     <>
-                        <button type="button" className="btn btn-secondary" onClick={closeModal}>{t('cancel')} (Esc)</button>
-                        <button type="submit" form="supplier-form" className="btn btn-primary">{t('save')} (Ctrl+S)</button>
+                        <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel')} (Esc)</button>
+                        <button type="submit" form="supplier-form" className="btn btn-primary" disabled={saving}>{saving && <span className="spinner-btn" style={{ marginInlineEnd: '8px' }}></span>}{saving ? (t('savingProgress') || 'Saving...') : t('save') + ' (Ctrl+S)'}</button>
                     </>
                 }
             >

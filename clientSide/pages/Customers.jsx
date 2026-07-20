@@ -9,6 +9,7 @@ function Customers() {
     const { user, t } = useAuth();
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'active', 'inactive'
     const [showModal, setShowModal] = useState(false);
@@ -93,6 +94,7 @@ function Customers() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setSaving(true);
         try {
             if (editingCustomer) {
                 await window.api.customers.update({ ...formData, id: editingCustomer.id });
@@ -106,6 +108,8 @@ function Customers() {
         } catch (error) {
             console.error('Error saving customer:', error);
             toast.error(t('errorOccurred') || 'Error occurred while saving customer data');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -347,13 +351,30 @@ function Customers() {
             });
 
             customerReturns.forEach(ret => {
-                rows.push({
-                    date: ret.date,
-                    description: `${t('sales_return') || 'مرتجع مبيعات'} ${ret.return_number} ${ret.payment_method === 'credit' ? `(${t('on_account') || 'على الحساب'})` : `(${t('cash') || 'نقداً'})`}`,
-                    debit: 0,
-                    credit: ret.payment_method === 'credit' ? (ret.total || 0) : 0,
-                    seq: seq++
-                });
+                if (ret.payment_method === 'credit') {
+                    rows.push({
+                        date: ret.date,
+                        description: `${t('sales_return') || 'مرتجع مبيعات'} ${ret.return_number} (${t('on_account') || 'على الحساب'})`,
+                        debit: 0,
+                        credit: ret.total || 0,
+                        seq: seq++
+                    });
+                } else {
+                    rows.push({
+                        date: ret.date,
+                        description: `${t('sales_return') || 'مرتجع مبيعات'} ${ret.return_number} (${t('cash') || 'نقداً'})`,
+                        debit: 0,
+                        credit: ret.total || 0,
+                        seq: seq++
+                    });
+                    rows.push({
+                        date: ret.date,
+                        description: `${t('refund_paid') || 'دفعة مرتجع نقدي'} ${ret.return_number}`,
+                        debit: ret.total || 0,
+                        credit: 0,
+                        seq: seq++
+                    });
+                }
             });
 
             const sortedRows = rows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.seq - b.seq);
@@ -490,8 +511,8 @@ function Customers() {
             <Modal isOpen={showModal} onClose={closeModal} title={editingCustomer ? t('cust_edit') : t('cust_add')}
                 footer={
                     <>
-                        <button type="button" className="btn btn-secondary" onClick={closeModal}>{t('cancel')} (Esc)</button>
-                        <button type="submit" form="customer-form" className="btn btn-primary">{t('save')} (Ctrl+S)</button>
+                        <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel')} (Esc)</button>
+                        <button type="submit" form="customer-form" className="btn btn-primary" disabled={saving}>{saving && <span className="spinner-btn" style={{ marginInlineEnd: '8px' }}></span>}{saving ? (t('savingProgress') || 'Saving...') : t('save') + ' (Ctrl+S)'}</button>
                     </>
                 }
             >

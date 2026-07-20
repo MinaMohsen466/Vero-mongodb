@@ -265,7 +265,7 @@ function CashBank() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px', direction: 'rtl' }}>
             {/* Summary Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
-                
+
                 {/* Total Balance Card */}
                 <div style={{
                     background: 'linear-gradient(135deg, var(--primary), #3b82f6)',
@@ -342,7 +342,7 @@ function CashBank() {
             {/* Actions + Account Filter Toolbar */}
             <div style={{ ...glassCard, padding: '16px 24px', overflow: 'visible', position: 'relative', zIndex: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', direction: 'rtl' }}>
-                    
+
                     {/* Right Side: Custom Dropdown Account Selector */}
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center', position: 'relative' }} ref={dropdownRef}>
                         <label style={{ fontSize: '0.88rem', fontWeight: 750, color: 'var(--text-secondary)' }}>
@@ -414,9 +414,9 @@ function CashBank() {
                                         position: 'absolute',
                                         top: 'calc(100% + 6px)',
                                         right: 0,
-                                        background: 'var(--surface-overlay)',
-                                        backdropFilter: 'blur(16px)',
-                                        WebkitBackdropFilter: 'blur(16px)',
+                                        background: 'var(--surface)',
+                                        backdropFilter: 'none',
+                                        WebkitBackdropFilter: 'none',
                                         border: '1px solid var(--border)',
                                         borderRadius: '12px',
                                         boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
@@ -488,7 +488,7 @@ function CashBank() {
                     {/* Left Side: Refresh Button + Actions Dropdown Menu */}
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center', position: 'relative' }} ref={actionsDropdownRef}>
                         {/* Refresh Button */}
-                        <ActionButton 
+                        <ActionButton
                             onClick={() => { setLoading(true); loadData(); }}
                             style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
                             hoverShadow="0 6px 20px rgba(0,0,0,0.12)"
@@ -498,7 +498,7 @@ function CashBank() {
 
                         {/* Actions Dropdown Button */}
                         <div style={{ position: 'relative' }}>
-                            <ActionButton 
+                            <ActionButton
                                 onClick={() => setIsActionsDropdownOpen(prev => !prev)}
                                 style={{ background: 'linear-gradient(135deg, var(--primary), #2563eb)', color: '#fff' }}
                                 hoverShadow="0 6px 20px rgba(37,99,235,0.3)"
@@ -512,9 +512,9 @@ function CashBank() {
                                     position: 'absolute',
                                     top: 'calc(100% + 6px)',
                                     left: 0,
-                                    background: 'var(--surface-overlay)',
-                                    backdropFilter: 'blur(16px)',
-                                    WebkitBackdropFilter: 'blur(16px)',
+                                    background: 'var(--surface)',
+                                    backdropFilter: 'none',
+                                    WebkitBackdropFilter: 'none',
                                     border: '1px solid var(--border)',
                                     borderRadius: '12px',
                                     boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
@@ -693,14 +693,14 @@ function CashBank() {
             >
                 <form id="cashbank-form" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} style={{ direction: 'rtl' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '4px' }}>
-                        
+
                         <div className="form-group">
                             <label className="form-label" style={{ fontWeight: 600, fontSize: '.85rem', display: 'block', marginBottom: 6 }}>{modalType === 'transfer' ? (t('cb_fromAccount') || 'من حساب') : (t('cb_account') || 'الحساب')}</label>
                             <select className="form-select" value={selectedAccount || ''} onChange={e => setSelectedAccount(Number(e.target.value))} style={{ width: '100%', height: 40 }}>
                                 {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}
                             </select>
                         </div>
-                        
+
                         {modalType === 'transfer' && (
                             <div className="form-group">
                                 <label className="form-label" style={{ fontWeight: 600, fontSize: '.85rem', display: 'block', marginBottom: 6 }}>{t('cb_toAccount') || 'إلى حساب'}</label>
@@ -710,7 +710,7 @@ function CashBank() {
                                 </select>
                             </div>
                         )}
-                        
+
                         <div className="form-group">
                             <label className="form-label" style={{ fontWeight: 600, fontSize: '.85rem', display: 'block', marginBottom: 6 }}>{t('amount') || 'المبلغ'}</label>
                             <input
@@ -726,7 +726,7 @@ function CashBank() {
                                 style={{ width: '100%', height: 40, padding: '8px 12px', boxSizing: 'border-box' }}
                             />
                         </div>
-                        
+
                         <div className="form-group">
                             <label className="form-label" style={{ fontWeight: 600, fontSize: '.85rem', display: 'block', marginBottom: 6 }}>{t('date') || 'التاريخ'}</label>
                             <input
@@ -737,7 +737,7 @@ function CashBank() {
                                 style={{ width: '100%', height: 40, padding: '8px 12px', boxSizing: 'border-box' }}
                             />
                         </div>
-                        
+
                         <div className="form-group">
                             <label className="form-label" style={{ fontWeight: 600, fontSize: '.85rem', display: 'block', marginBottom: 6 }}>{t('description') || 'الوصف / السبب'}</label>
                             <input
@@ -749,7 +749,7 @@ function CashBank() {
                                 style={{ width: '100%', height: 40, padding: '8px 12px', boxSizing: 'border-box' }}
                             />
                         </div>
-                        
+
                         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
                             <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} style={{ margin: 0 }}>{t('cancel') || 'إلغاء'} (Esc)</button>
                             <button

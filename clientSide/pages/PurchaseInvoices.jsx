@@ -630,7 +630,7 @@ function PurchaseInvoices() {
             </div>
 
             {/* Create/Edit Modal */}
-            <Modal isOpen={showModal} onClose={closeModal} title={editMode ? t('pinv_edit') || 'Edit Purchase Invoice' : t('pinv_add') || 'New Purchase Invoice'} size="lg" footer={<><button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel') || 'Cancel'} (Esc)</button><button type="submit" form="purchase-invoice-form" className="btn btn-primary" disabled={saving}>{saving ? (t('savingProgress') || 'Saving...') : (t('save') || 'Save') + ' (Ctrl+S)'}</button></>}>
+            <Modal isOpen={showModal} onClose={closeModal} title={editMode ? t('pinv_edit') || 'Edit Purchase Invoice' : t('pinv_add') || 'New Purchase Invoice'} size="lg" footer={<><button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel') || 'Cancel'} (Esc)</button><button type="submit" form="purchase-invoice-form" className="btn btn-primary" disabled={saving}>{saving && <span className="spinner-btn" style={{ marginInlineEnd: '8px' }}></span>}{saving ? (t('savingProgress') || 'Saving...') : (t('save') || 'Save') + ' (Ctrl+S)'}</button></>}>
                 {error && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{error}</div>}
                 <form id="purchase-invoice-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                     

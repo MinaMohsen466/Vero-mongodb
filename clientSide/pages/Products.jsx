@@ -31,6 +31,7 @@ function Products() {
     const { user, t } = useAuth();
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
     const [showModal, setShowModal] = useState(false);
@@ -335,6 +336,7 @@ function Products() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setSaving(true);
         try {
             // Uniqueness validation
             const nameLower = (formData.name || '').trim().toLowerCase();
@@ -342,6 +344,7 @@ function Products() {
 
             if (!nameLower) {
                 toast.error(t('name_required') || 'اسم المنتج مطلوب!');
+                setSaving(false);
                 return;
             }
 
@@ -353,6 +356,7 @@ function Products() {
                 );
                 if (duplicateName) {
                     toast.error(t('product_name_exists') || 'اسم المنتج هذا موجود بالفعل!');
+                    setSaving(false);
                     return;
                 }
             }
@@ -366,6 +370,7 @@ function Products() {
                     );
                     if (duplicateCode) {
                         toast.error(t('product_code_exists') || 'كود المنتج هذا مستخدم بالفعل!');
+                        setSaving(false);
                         return;
                     }
                 }
@@ -394,6 +399,7 @@ function Products() {
                     toast.success(t('savedSuccess') || 'Product updated successfully');
                 } else {
                     toast.error(result.error || t('errorOccurred'));
+                    setSaving(false);
                     return;
                 }
             } else {
@@ -402,6 +408,7 @@ function Products() {
                     toast.success(t('savedSuccess') || 'Product added successfully');
                 } else {
                     toast.error(result.error || t('errorOccurred'));
+                    setSaving(false);
                     return;
                 }
             }
@@ -410,6 +417,8 @@ function Products() {
         } catch (error) {
             console.error(error);
             toast.error(t('errorOccurred') || 'An error occurred while saving the product');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -833,8 +842,8 @@ function Products() {
                 title={editingProduct ? t('prod_edit') : t('prod_add')}
                 footer={
                     <>
-                        <button type="button" className="btn btn-secondary" onClick={closeModal}>{t('cancel') || 'إلغاء'} (Esc)</button>
-                        <button type="submit" form="product-form" className="btn btn-primary">{t('save') || 'حفظ'} (Ctrl+S)</button>
+                        <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel') || 'إلغاء'} (Esc)</button>
+                        <button type="submit" form="product-form" className="btn btn-primary" disabled={saving}>{saving && <span className="spinner-btn" style={{ marginInlineEnd: '8px' }}></span>}{saving ? (t('savingProgress') || 'Saving...') : (t('save') || 'حفظ') + ' (Ctrl+S)'}</button>
                     </>
                 }
             >

@@ -8,23 +8,36 @@ const {
 
 // Password security helpers (from db.js)
 const crypto = require('crypto');
+const PBKDF2_ITERATIONS_V2 = 600000;
+const PBKDF2_ITERATIONS_V1 = 1000;
+
 function hashPassword(password) {
     if (!password) return '';
     const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-    return `pbkdf2$${salt}$${hash}`;
+    const hash = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS_V2, 64, 'sha512').toString('hex');
+    return `pbkdf2v2$${salt}$${hash}`;
 }
 function verifyPassword(password, storedPassword) {
     if (!storedPassword || !password) return false;
+    if (storedPassword.startsWith('pbkdf2v2$')) {
+        const parts = storedPassword.split('$');
+        if (parts.length === 3) {
+            const salt = parts[1];
+            const originalHash = parts[2];
+            const hash = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS_V2, 64, 'sha512').toString('hex');
+            try { return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(originalHash, 'hex')); } catch(e) { return false; }
+        }
+    }
     if (storedPassword.startsWith('pbkdf2$')) {
         const parts = storedPassword.split('$');
         if (parts.length === 3) {
             const salt = parts[1];
             const originalHash = parts[2];
-            const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-            return hash === originalHash;
+            const hash = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS_V1, 64, 'sha512').toString('hex');
+            try { return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(originalHash, 'hex')); } catch(e) { return false; }
         }
     }
+    console.warn('[Security] Plaintext password comparison detected - will be upgraded on next login');
     return password === storedPassword;
 }
 
@@ -37,7 +50,7 @@ class UsersRepo {
             const isMatch = verifyPassword(password, userDoc.password_hash);
             if (isMatch) {
                 // Auto-upgrade plain-text password to hash on successful login
-                if (!userDoc.password_hash.startsWith('pbkdf2$')) {
+                if (!userDoc.password_hash.startsWith('pbkdf2v2$')) {
                     userDoc.password_hash = hashPassword(password);
                     await User.updateOne({ id: userDoc.id }, { $set: { password_hash: userDoc.password_hash } });
                 }
@@ -119,7 +132,9 @@ class UsersRepo {
 
     async delete(id) {
         try {
-            await User.deleteOne({ id: id, id: { $ne: 1 } });
+            const numId = parseInt(id, 10);
+            if (numId === 1) return { success: false, error: 'لا يمكن حذف حساب المدير الرئيسي' };
+            await User.deleteOne({ id: numId });
             return { success: true };
         } catch (e) {
             return { success: false, error: e.message };
@@ -814,6 +829,19 @@ class InvoicesRepo {
 
     async create(inv) {
         try {
+            if (inv.type === 'sales' && inv.customer_id) {
+                const remaining = (parseFloat(inv.total) || 0) - (parseFloat(inv.paid) || 0);
+                if (remaining > 0) {
+                    const customer = await Customer.findOne({ id: parseInt(inv.customer_id, 10) }).lean();
+                    if (customer && customer.credit_limit > 0) {
+                        const newBalance = (customer.balance || 0) + remaining;
+                        if (newBalance > customer.credit_limit) {
+                            return { success: false, error: `تجاوز الحد الائتماني المسموح به للعميل "${customer.name}" (الرصيد بعد الفاتورة: ${newBalance.toFixed(3)}، الحد الأقصى: ${customer.credit_limit.toFixed(3)})` };
+                        }
+                    }
+                }
+            }
+
             const lastDoc = await Invoice.findOne({ type: inv.type }).sort({ id: -1 }).lean();
             let nextNumVal = 1;
             if (lastDoc && lastDoc.invoice_number) {
@@ -848,6 +876,22 @@ class InvoicesRepo {
             });
 
             if (inv.type !== 'quotation') {
+                // Check stock availability for sales invoices
+                if (inv.type === 'sales') {
+                    const allowNegativeSetting = await Setting.findOne({ key: 'allow_negative_stock' }).lean();
+                    const allowNegative = allowNegativeSetting && (allowNegativeSetting.value === 'yes' || allowNegativeSetting.value === '1');
+                    if (!allowNegative) {
+                        for (const item of items) {
+                            if (item.product_id) {
+                                const product = await Product.findOne({ id: item.product_id }).lean();
+                                if (product && (product.shop_stock || 0) < item.quantity) {
+                                    return { success: false, error: `الكمية المتوفرة في المخزن للمنتج "${product.name}" (${product.shop_stock || 0}) غير كافية للبيع (المطلوب: ${item.quantity})` };
+                                }
+                            }
+                        }
+                    }
+                }
+
                 for (const item of items) {
                     if (item.product_id) {
                         if (inv.type === 'sales') {
@@ -889,6 +933,24 @@ class InvoicesRepo {
         try {
             const oldInvoice = await this.getById(invId);
             if (!oldInvoice) return { success: false, error: 'Invoice not found' };
+
+            if (oldInvoice.type !== 'quotation' && oldInvoice.type === 'sales' && inv.customer_id) {
+                const newRemaining = (parseFloat(inv.total) || 0) - (parseFloat(inv.paid) || 0);
+                const oldRemaining = (oldInvoice.total || 0) - (oldInvoice.paid || 0);
+                const customer = await Customer.findOne({ id: parseInt(inv.customer_id, 10) }).lean();
+                if (customer && customer.credit_limit > 0) {
+                    let netChange = 0;
+                    if (oldInvoice.customer_id === parseInt(inv.customer_id, 10)) {
+                        netChange = newRemaining - oldRemaining;
+                    } else {
+                        netChange = newRemaining;
+                    }
+                    const projectedBalance = (customer.balance || 0) + netChange;
+                    if (projectedBalance > customer.credit_limit) {
+                        return { success: false, error: `تجاوز الحد الائتماني المسموح به للعميل "${customer.name}" (الرصيد بعد التعديل: ${projectedBalance.toFixed(3)}، الحد الأقصى: ${customer.credit_limit.toFixed(3)})` };
+                    }
+                }
+            }
 
             if (oldInvoice.type !== 'quotation') {
                 for (const oldItem of oldInvoice.items || []) {

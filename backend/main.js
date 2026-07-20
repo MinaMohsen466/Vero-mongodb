@@ -103,7 +103,12 @@ ipcMain.handle('users:login', async (event, { username, password }) => {
     return result;
 });
 ipcMain.handle('users:setCurrentUser', async (event, user) => {
-    currentUser = user;
+    // Only allow setting user if data has expected structure
+    if (user && typeof user === 'object' && user.id && user.username) {
+        currentUser = { id: user.id, username: user.username, full_name: user.full_name, role: user.role };
+    } else {
+        currentUser = null;
+    }
     return { success: true };
 });
 ipcMain.handle('users:getAll', async () => await db.users.getAll());
@@ -225,16 +230,11 @@ ipcMain.handle('products:addWarehouseStock', async (event, { id, quantity }) => 
 // --- Invoices ---
 ipcMain.handle('invoices:getAll', async (event, type) => await db.invoices.getAll(type));
 ipcMain.handle('invoices:getById', async (event, id) => {
-    console.log('[IPC] invoices:getById called with id:', id, 'type:', typeof id);
     const result = await db.invoices.getById(id);
-    console.log('[IPC] invoices:getById result - has items:', result?.items?.length || 0);
-    console.log('[IPC] invoices:getById items:', JSON.stringify(result?.items));
     return result;
 });
 ipcMain.handle('invoices:create', async (event, invoice) => {
-    console.log('Creating invoice:', JSON.stringify(invoice, null, 2));
     const result = await db.invoices.create(invoice);
-    console.log('Invoice result:', result);
     if (result.success) await logActivity('create', invoice.type === 'sales' ? 'sales_invoices' : 'purchase_invoices', result.id, result.invoice_number, invoice);
     return result;
 });

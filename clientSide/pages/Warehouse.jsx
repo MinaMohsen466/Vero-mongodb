@@ -813,8 +813,8 @@ export default function Warehouse() {
                             disabled={loading || transferItems.length === 0}
                             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                         >
-                            <CheckCircle size={16} />
-                            {t('save') || 'إتمام التحويل وتعديل الأرصدة'}
+                            {loading ? <span className="spinner-btn"></span> : <CheckCircle size={16} />}
+                            {loading ? (t('savingProgress') || 'جاري الحفظ...') : (t('save') || 'إتمام التحويل وتعديل الأرصدة')}
                         </button>
                     </div>
                 </form>
@@ -951,8 +951,8 @@ export default function Warehouse() {
                             disabled={loading || !inflowProductId || !inflowQty}
                             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                         >
-                            <CheckCircle size={16} />
-                            {t('add') || 'إضافة الكمية للمستودع'}
+                            {loading ? <span className="spinner-btn"></span> : <CheckCircle size={16} />}
+                            {loading ? (t('savingProgress') || 'جاري الحفظ...') : (t('add') || 'إضافة الكمية للمستودع')}
                         </button>
                     </div>
                 </form>

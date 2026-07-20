@@ -641,6 +641,7 @@ export default function Expenses() {
                                 {isAr ? 'إلغاء' : 'Cancel'}
                             </button>
                             <button className="btn btn-primary" onClick={save} disabled={loading}>
+                                {loading && <span className="spinner-btn" style={{ marginInlineEnd: '8px' }}></span>}
                                 {loading ? (isAr ? 'جارٍ الحفظ...' : 'Saving...') : (isAr ? 'حفظ المصروف' : 'Save Expense')}
                             </button>
                         </div>

@@ -14,6 +14,7 @@ function Vouchers() {
     const [pendingInvoices, setPendingInvoices] = useState([]);
     const [invoiceSearch, setInvoiceSearch] = useState('');
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState('receipt');
     const [showModal, setShowModal] = useState(false);
     const [editMode, setEditMode] = useState(false);
@@ -196,6 +197,7 @@ function Vouchers() {
                 }
             }
         }
+        setSaving(true);
         try {
             const voucherData = {
                 ...formData,
@@ -217,6 +219,8 @@ function Vouchers() {
         } catch (error) {
             console.error('Error:', error);
             toast.error(t('errorOccurred') || 'Error occurred while saving voucher');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -424,7 +428,7 @@ function Vouchers() {
             </div>
 
             {/* Create/Edit Modal */}
-            <Modal isOpen={showModal} onClose={closeModal} title={editMode ? (formData.type === 'receipt' ? t('vouch_editReceipt') : t('vouch_editPayment')) : (formData.type === 'receipt' ? t('vouch_addReceipt') : t('vouch_addPayment'))} size="lg" footer={<><button type="button" className="btn btn-secondary" onClick={closeModal}>{t('cancel') || 'Cancel'} (Esc)</button><button type="submit" form="voucher-form" className="btn btn-primary">{t('save') || 'Save'} (Ctrl+S)</button></>}>
+            <Modal isOpen={showModal} onClose={closeModal} title={editMode ? (formData.type === 'receipt' ? t('vouch_editReceipt') : t('vouch_editPayment')) : (formData.type === 'receipt' ? t('vouch_addReceipt') : t('vouch_addPayment'))} size="lg" footer={<><button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>{t('cancel') || 'Cancel'} (Esc)</button><button type="submit" form="voucher-form" className="btn btn-primary" disabled={saving}>{saving && <span className="spinner-btn" style={{ marginInlineEnd: '8px' }}></span>}{saving ? (t('savingProgress') || 'SavingProgress...') : (t('save') || 'Save') + ' (Ctrl+S)'}</button></>}>
                 <form id="voucher-form" onSubmit={handleSubmit}>
                     <div className="form-row">
                         <div className="form-group">

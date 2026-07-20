@@ -18,23 +18,36 @@ const {
 } = repos;
 
 // Password security helpers
+const PBKDF2_ITERATIONS_V2 = 600000;
+const PBKDF2_ITERATIONS_V1 = 1000;
+
 function hashPassword(password) {
     if (!password) return '';
     const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-    return `pbkdf2$${salt}$${hash}`;
+    const hash = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS_V2, 64, 'sha512').toString('hex');
+    return `pbkdf2v2$${salt}$${hash}`;
 }
 function verifyPassword(password, storedPassword) {
     if (!storedPassword || !password) return false;
+    if (storedPassword.startsWith('pbkdf2v2$')) {
+        const parts = storedPassword.split('$');
+        if (parts.length === 3) {
+            const salt = parts[1];
+            const originalHash = parts[2];
+            const hash = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS_V2, 64, 'sha512').toString('hex');
+            try { return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(originalHash, 'hex')); } catch(e) { return false; }
+        }
+    }
     if (storedPassword.startsWith('pbkdf2$')) {
         const parts = storedPassword.split('$');
         if (parts.length === 3) {
             const salt = parts[1];
             const originalHash = parts[2];
-            const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-            return hash === originalHash;
+            const hash = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS_V1, 64, 'sha512').toString('hex');
+            try { return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(originalHash, 'hex')); } catch(e) { return false; }
         }
     }
+    console.warn('[Security] Plaintext password comparison detected - will be upgraded on next login');
     return password === storedPassword;
 }
 
@@ -259,7 +272,7 @@ class AppDatabase {
             } catch (e) {}
         }
 
-        console.log('[DB] Connecting to MongoDB:', mongoUri);
+        console.log('[DB] Connecting to MongoDB:', mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
         await mongoose.connect(mongoUri);
         console.log('[DB] Connected to MongoDB');
 
@@ -469,7 +482,7 @@ class AppDatabase {
             await User.create({ id: nextId, username: 'admin', password_hash: hashPassword(adminPassword), full_name: 'مدير النظام', role: 'admin' });
         } else {
             const isMatch = verifyPassword(adminPassword, admin.password_hash);
-            if (!isMatch || !admin.password_hash.startsWith('pbkdf2$')) {
+            if (!isMatch || !admin.password_hash.startsWith('pbkdf2v2$')) {
                 await User.updateOne({ username: 'admin' }, { $set: { password_hash: hashPassword(adminPassword) } });
             }
         }
@@ -702,15 +715,41 @@ class AppDatabase {
                 backupData = JSON.parse(decryptedText);
             }
             
+            // Create in-memory backup before restoring for rollback safety
+            const tempBackup = {};
             for (const [name, model] of Object.entries(collections)) {
                 if (backupData[name]) {
-                    await model.deleteMany({});
-                    if (backupData[name].length > 0) {
-                        await model.insertMany(backupData[name]);
-                    }
+                    tempBackup[name] = await model.find({}).lean();
                 }
             }
-            this.cache.clearAll(); // Clear cache so the newly restored data is fetched on subsequent reads
+
+            try {
+                for (const [name, model] of Object.entries(collections)) {
+                    if (backupData[name]) {
+                        await model.deleteMany({});
+                        if (backupData[name].length > 0) {
+                            await model.insertMany(backupData[name]);
+                        }
+                    }
+                }
+            } catch (restoreError) {
+                console.error('[DB] Restore failed, attempting rollback:', restoreError.message);
+                for (const [name, model] of Object.entries(collections)) {
+                    if (tempBackup[name]) {
+                        try {
+                            await model.deleteMany({});
+                            if (tempBackup[name].length > 0) {
+                                await model.insertMany(tempBackup[name]);
+                            }
+                        } catch (rollbackErr) {
+                            console.error('[DB] Rollback failed for ' + name + ':', rollbackErr.message);
+                        }
+                    }
+                }
+                throw restoreError;
+            }
+
+            this.cache.clearAll();
             return { success: true, message: 'تم استعادة النسخة الاحتياطية بنجاح' };
         } catch (e) {
             console.error('[DB] Restore error:', e);
@@ -742,7 +781,7 @@ class AppDatabase {
                 config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
             }
             config.backupPath = backupPath;
-            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+            fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2), 'utf8');
             return { success: true };
         } catch (e) {
             return { success: false, error: e.message };

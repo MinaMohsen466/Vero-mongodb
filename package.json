@@ -44,8 +44,7 @@
     "files": [
       "dist/**/*",
       "backend/**/*",
-      "public/**/*",
-      ".env"
+      "public/**/*"
     ],
     "win": {
       "icon": "public/icon.ico",

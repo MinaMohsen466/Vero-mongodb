@@ -5,7 +5,7 @@ import UserProfilePanel from './UserProfilePanel';
 import {
     Home, Users, Truck, ShoppingCart, ShoppingBag, FileText,
     CreditCard, BookOpen, BarChart3, Settings, LogOut,
-    Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight, ChevronDown, UserCheck, Menu, Monitor, Ticket, Tag, TrendingDown, Warehouse, Undo, RotateCcw
+    Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight, ChevronDown, UserCheck, Menu, Monitor, Ticket, Tag, TrendingDown, Warehouse, Undo, RotateCcw, Search
 } from 'lucide-react';
 
 const menuItems = [
@@ -269,6 +269,7 @@ function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
 
                     <div className="header-right">
                         <div className="header-search">
+                            <Search size={16} />
                             <input
                                 type="text"
                                 placeholder={t('search')}
@@ -277,11 +278,61 @@ function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
                             />
                         </div>
 
-                        <button className="btn btn-ghost btn-icon" onClick={onHelpClick} title={t('shortcuts_help') || 'اختصارات لوحة المفاتيح'}>
+                        <button 
+                            className="btn btn-ghost btn-icon" 
+                            onClick={onHelpClick} 
+                            title={t('shortcuts_help') || 'اختصارات لوحة المفاتيح'}
+                            style={{ 
+                                background: 'var(--bg-secondary)', 
+                                border: '1px solid var(--border)',
+                                color: 'var(--text-secondary)',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                boxShadow: 'var(--shadow-sm)'
+                            }}
+                            onMouseEnter={e => {
+                                e.currentTarget.style.background = 'var(--border)';
+                                e.currentTarget.style.color = 'var(--text-primary)';
+                                e.currentTarget.style.transform = 'scale(1.05)';
+                            }}
+                            onMouseLeave={e => {
+                                e.currentTarget.style.background = 'var(--bg-secondary)';
+                                e.currentTarget.style.color = 'var(--text-secondary)';
+                                e.currentTarget.style.transform = 'none';
+                            }}
+                        >
                             <FileText size={20} />
                         </button>
 
-                        <button className="btn btn-ghost btn-icon" onClick={toggleTheme}>
+                        <button 
+                            className="btn btn-ghost btn-icon" 
+                            onClick={toggleTheme}
+                            title={theme === 'light' ? (t('dark_mode') || 'الوضع الداكن') : (t('light_mode') || 'الوضع الفاتح')}
+                            style={{ 
+                                background: 'var(--bg-secondary)', 
+                                border: '1px solid var(--border)',
+                                color: 'var(--text-secondary)',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                boxShadow: 'var(--shadow-sm)'
+                            }}
+                            onMouseEnter={e => {
+                                e.currentTarget.style.background = 'var(--border)';
+                                e.currentTarget.style.color = 'var(--text-primary)';
+                                e.currentTarget.style.transform = 'scale(1.05)';
+                            }}
+                            onMouseLeave={e => {
+                                e.currentTarget.style.background = 'var(--bg-secondary)';
+                                e.currentTarget.style.color = 'var(--text-secondary)';
+                                e.currentTarget.style.transform = 'none';
+                            }}
+                        >
                             {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
                         </button>
 
