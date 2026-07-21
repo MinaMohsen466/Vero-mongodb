@@ -128,20 +128,35 @@ class ProductsRepo {
 
     async update(p) {
         try {
-            const warehouseStock = parseFloat(p.warehouse_stock) || 0;
-            const shopStock = parseFloat(p.shop_stock) || 0;
-            const totalStock = warehouseStock + shopStock;
+            const existing = await Product.findOne({ id: p.id });
+            if (!existing) {
+                return { success: false, error: 'المنتج غير موجود' };
+            }
+
+            const updateFields = {};
             
-            await Product.updateOne({ id: p.id }, {
-                $set: {
-                    name: p.name, description: p.description, unit: p.unit, category: p.category,
-                    purchase_price: p.purchase_price || 0, sale_price: p.sale_price || 0, stock_quantity: totalStock,
-                    min_stock: p.min_stock || 0, image: p.image || null, supplier_id: p.supplier_id !== undefined ? p.supplier_id : null,
-                    supplier_ids: Array.isArray(p.supplier_ids) ? p.supplier_ids : [],
-                    is_active: p.is_active ? true : false, warehouse_stock: warehouseStock, shop_stock: shopStock,
-                    dozen_price: p.dozen_price || 0, dozen_qty: parseFloat(p.dozen_qty) > 0 ? parseFloat(p.dozen_qty) : 1
-                }
-            });
+            if (p.name !== undefined) updateFields.name = p.name;
+            if (p.description !== undefined) updateFields.description = p.description;
+            if (p.unit !== undefined) updateFields.unit = p.unit;
+            if (p.category !== undefined) updateFields.category = p.category;
+            if (p.purchase_price !== undefined) updateFields.purchase_price = parseFloat(p.purchase_price) || 0;
+            if (p.sale_price !== undefined) updateFields.sale_price = parseFloat(p.sale_price) || 0;
+            if (p.min_stock !== undefined) updateFields.min_stock = parseFloat(p.min_stock) || 0;
+            if (p.image !== undefined) updateFields.image = p.image;
+            if (p.supplier_id !== undefined) updateFields.supplier_id = p.supplier_id;
+            if (p.supplier_ids !== undefined) updateFields.supplier_ids = p.supplier_ids;
+            if (p.is_active !== undefined) updateFields.is_active = p.is_active ? true : false;
+            if (p.dozen_price !== undefined) updateFields.dozen_price = parseFloat(p.dozen_price) || 0;
+            if (p.dozen_qty !== undefined) updateFields.dozen_qty = parseFloat(p.dozen_qty) > 0 ? parseFloat(p.dozen_qty) : 1;
+
+            const warehouseStock = p.warehouse_stock !== undefined ? parseFloat(p.warehouse_stock) : existing.warehouse_stock;
+            const shopStock = p.shop_stock !== undefined ? parseFloat(p.shop_stock) : existing.shop_stock;
+            
+            updateFields.warehouse_stock = warehouseStock;
+            updateFields.shop_stock = shopStock;
+            updateFields.stock_quantity = warehouseStock + shopStock;
+
+            await Product.updateOne({ id: p.id }, { $set: updateFields });
             return { success: true };
         } catch (e) {
             return { success: false, error: e.message };

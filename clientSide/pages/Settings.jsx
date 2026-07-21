@@ -326,8 +326,8 @@ export default function Settings() {
         { m: 'offers', l: t('offers') || 'Offers & Coupons', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'reports', l: t('reports') || 'Reports', a: ['view'] },
         { m: 'settings', l: t('settings') || 'Settings', a: ['view', 'edit'] },
-        { m: 'users', l: t('users') || 'Users', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'permissions', l: t('permissions') || 'Permissions', a: ['view', 'edit'] },
+        { m: 'ai_assistant', l: t('ai_assistant') || 'المساعد الذكي', a: ['view', 'edit'] },
         { m: 'database', l: t('database_management') || 'Database', a: ['view'] },
         { m: 'financial_summary', l: t('financial_summary') || 'Financial Summary', a: ['view'] },
         { m: 'stock_alerts', l: t('stock_alerts') || 'Stock Alerts', a: ['view'] },
@@ -446,6 +446,10 @@ export default function Settings() {
         paper_size: 'A4', paper_orientation: 'portrait', invoice_template: 'modern',
         voucher_title_receipt: t('receipt_voucher') || 'Receipt Voucher', voucher_title_payment: t('payment_voucher') || 'Payment Voucher', voucher_footer: ''
     });
+    const [ai, setAi] = useState({
+        gemini_api_key: '',
+        enable_ai_assistant: 'no'
+    });
 
     const SECTIONS = [
         { id: 'company', l: t('company_details') || 'بيانات الشركة', icon: Building2 },
@@ -454,6 +458,11 @@ export default function Settings() {
         ...(isAdmin ? [
             { id: 'users', l: t('users') || 'إدارة المستخدمين', icon: Users },
             { id: 'permissions', l: t('permissions') || 'الصلاحيات', icon: Shield },
+        ] : []),
+        ...((isAdmin || user?.permissions?.ai_assistant?.can_edit) ? [
+            { id: 'ai_assistant', l: t('ai_assistant') || 'المساعد الذكي', icon: Key },
+        ] : []),
+        ...(isAdmin ? [
             { id: 'activity_log', l: t('activity_log') || 'سجل النشاط', icon: FileText },
         ] : []),
         { id: 'database', l: t('database') || 'قاعدة البيانات', icon: Database },
@@ -552,6 +561,14 @@ export default function Settings() {
                     brand_color: sd.general?.brand_color || '#2563eb',
                     enable_pos_sounds: sd.general?.enable_pos_sounds !== undefined ? sd.general.enable_pos_sounds : 'yes',
                     enable_alert_sounds: sd.general?.enable_alert_sounds !== undefined ? sd.general.enable_alert_sounds : 'yes'
+                }));
+            }
+            if (sd?.ai) {
+                setAi(prev => ({
+                    ...prev,
+                    ...sd.ai,
+                    gemini_api_key: sd.ai.gemini_api_key || '',
+                    enable_ai_assistant: sd.ai.enable_ai_assistant || 'no'
                 }));
             }
             if (sd?.invoice) {
@@ -1740,6 +1757,61 @@ export default function Settings() {
                         </>
                     );
                 })()}
+
+                {/* ══ AI ASSISTANT ════════════════════════════════════════════════════ */}
+                {sec === 'ai_assistant' && (isAdmin || user?.permissions?.ai_assistant?.can_edit) && (
+                    <>
+                        <Card title={t('ai_assistant_settings') || 'إعدادات المساعد الذكي'} icon={Key} action={
+                            <button
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: 6,
+                                    padding: '6px 12px', background: 'var(--primary)',
+                                    color: '#fff', border: 'none', borderRadius: 8,
+                                    fontSize: '.85rem', fontWeight: 600, cursor: 'pointer'
+                                }}
+                                onClick={() => saveSection('ai', ai, t('ai_settings_saved') || 'تم حفظ إعدادات المساعد الذكي بنجاح')}
+                                disabled={saving}
+                            >
+                                <Save size={14} /> {t('save') || 'حفظ'}
+                            </button>
+                        }>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                <TRow
+                                    label={t('enable_ai_assistant') || 'تفعيل المساعد الذكي'}
+                                    desc={t('enable_ai_assistant_desc') || 'تفعيل محادثة الذكاء الاصطناعي للمساعدة العامة وتعديل المنتجات.'}
+                                    value={ai.enable_ai_assistant}
+                                    onChange={v => setAi(prev => ({ ...prev, enable_ai_assistant: v }))}
+                                />
+                                <Fld label={t('gemini_api_key') || 'مفتاح Gemini API (Google AI Studio)'}>
+                                    <div style={{ position: 'relative' }}>
+                                        <input
+                                            type={showPw ? 'text' : 'password'}
+                                            className="form-input"
+                                            value={ai.gemini_api_key}
+                                            onChange={e => setAi(prev => ({ ...prev, gemini_api_key: e.target.value }))}
+                                            placeholder="AIzaSy..."
+                                            style={{ ...inp, paddingRight: 40 }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPw(p => !p)}
+                                            style={{
+                                                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                                                border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)'
+                                            }}
+                                        >
+                                            {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                    <span style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 6, display: 'block', lineHeight: 1.4 }}>
+                                        {t('gemini_key_hint') || 'يمكنك الحصول على مفتاح مجاني من Google AI Studio لتشغيل المساعد الذكي.'}
+                                    </span>
+                                </Fld>
+                            </div>
+                        </Card>
+                    </>
+                )}
+
                                             {/* ══ 8. DATABASE ════════════════════════════════════════════════════ */}
                 {sec === 'database' && (isAdmin || user?.permissions?.database?.can_view) && <>
                     {/* Database Connection Settings */}

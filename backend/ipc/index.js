@@ -4,6 +4,7 @@ const registerTransactionsIpc = require('./transactions');
 const registerHrIpc = require('./hr');
 const registerBusinessIpc = require('./business');
 const registerSystemIpc = require('./system');
+const registerAiIpc = require('./ai');
 
 const context = {
     currentUser: null,
@@ -50,6 +51,7 @@ function initIpc(ipcMain, app, dialog, BrowserWindow, db) {
     registerHrIpc(wrappedIpcMain, context);
     registerBusinessIpc(wrappedIpcMain, context);
     registerSystemIpc(wrappedIpcMain, context);
+    registerAiIpc(wrappedIpcMain, context);
 }
 
 function setMainWindow(win) {

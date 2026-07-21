@@ -138,6 +138,11 @@ contextBridge.exposeInMainWorld('api', {
         clearUserPermissions: (userId) => ipcRenderer.invoke('permissions:clearUserPermissions', userId)
     },
 
+    // AI Assistant
+    ai: {
+        chat: (message, history, contextInfo, imageData) => ipcRenderer.invoke('ai:chat', { message, history, contextInfo, imageData })
+    },
+
     // HR: Employees
     employees: {
         getAll: () => ipcRenderer.invoke('employees:getAll'),

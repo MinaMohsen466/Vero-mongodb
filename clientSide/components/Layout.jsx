@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../App';
 import appIcon from '../assets/icon.png';
 import UserProfilePanel from './UserProfilePanel';
+import AiAssistantBubble from './AiAssistantBubble';
 import {
     Home, Users, Truck, ShoppingCart, ShoppingBag, FileText,
     CreditCard, BookOpen, BarChart3, Settings, LogOut,
@@ -348,6 +349,7 @@ function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
                 <div className="page-content">
                     {children}
                 </div>
+                <AiAssistantBubble />
             </main>
         </div>
     );

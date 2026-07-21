@@ -320,7 +320,11 @@ function Products() {
 
     const units = [t('unit_drum') || 'برميل', t('unit_gallon') || 'جالون', t('unit_liter') || 'لتر', t('unit_kilo') || 'كيلو', t('unit_gram') || 'جرام', t('prod_piece') || 'قطعة', t('unit_box') || 'علبة', t('unit_carton') || 'كرتون'];
 
-    useEffect(() => { loadProducts(); }, []);
+    useEffect(() => {
+        loadProducts();
+        window.addEventListener('productsUpdated', loadProducts);
+        return () => window.removeEventListener('productsUpdated', loadProducts);
+    }, []);
 
     const loadProducts = async () => {
         try {

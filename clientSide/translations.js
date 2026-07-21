@@ -1610,9 +1610,15 @@ const translations = {
         reverting_local: 'يجري الآن العودة لقاعدة البيانات المحلية...',
         switch_to_cloud: 'الربط بقاعدة بيانات سحابية (MongoDB Atlas)',
         switch_to_cloud_desc: 'أدخل رابط اتصال MongoDB Atlas لربط هذا الجهاز ومزامنة البيانات في الوقت الحقيقي.',
-        enter_mongodb_uri: 'أدخل رابط اتصال MongoDB Atlas:',
         connection_saved_relaunching: 'تم حفظ الاتصال بنجاح! يجري إعادة تشغيل التطبيق...',
         connect_cloud: 'ربط قاعدة بيانات سحابية',
+        ai_assistant: 'المساعد الذكي',
+        ai_assistant_settings: 'إعدادات المساعد الذكي',
+        ai_settings_saved: 'تم حفظ إعدادات المساعد الذكي بنجاح',
+        enable_ai_assistant: 'تفعيل المساعد الذكي',
+        enable_ai_assistant_desc: 'تفعيل محادثة الذكاء الاصطناعي للمساعدة العامة وتعديل المنتجات.',
+        gemini_api_key: 'مفتاح Gemini API (Google AI Studio)',
+        gemini_key_hint: 'يمكنك الحصول على مفتاح مجاني من Google AI Studio لتشغيل المساعد الذكي.',
     },
     en: {
         load_more: 'Load More',
@@ -3182,9 +3188,15 @@ const translations = {
         reverting_local: 'Reverting to local database...',
         switch_to_cloud: 'Connect to Cloud Database (MongoDB Atlas)',
         switch_to_cloud_desc: 'Enter MongoDB Atlas connection string to connect this device and sync data in real time.',
-        enter_mongodb_uri: 'Enter MongoDB Atlas connection URI:',
         connection_saved_relaunching: 'Connection saved successfully! Relaunching application...',
         connect_cloud: 'Connect Cloud Database',
+        ai_assistant: 'AI Assistant',
+        ai_assistant_settings: 'AI Assistant Settings',
+        ai_settings_saved: 'AI Assistant settings saved successfully',
+        enable_ai_assistant: 'Enable AI Assistant',
+        enable_ai_assistant_desc: 'Enable AI chat to help generally and edit product details.',
+        gemini_api_key: 'Gemini API Key (Google AI Studio)',
+        gemini_key_hint: 'You can get a free API Key from Google AI Studio to run the AI assistant.',
     }
 };
 

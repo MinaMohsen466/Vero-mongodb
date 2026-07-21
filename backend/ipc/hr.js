@@ -1,20 +1,35 @@
 module.exports = function(ipcMain, context) {
     const { db, logActivity } = context;
 
+    const checkPermission = (moduleName, action) => {
+        if (!context.currentUser) return false;
+        if (context.currentUser.role === 'admin') return true;
+        return context.currentUser.permissions?.[moduleName]?.[action] === true;
+    };
+
     // --- Employees ---
     ipcMain.handle('employees:getAll', async () => await db.employees.getAll());
     ipcMain.handle('employees:getById', async (event, id) => await db.employees.getById(id));
     ipcMain.handle('employees:create', async (event, emp) => {
+        if (!checkPermission('hr', 'can_create')) {
+            return { success: false, error: 'عذراً، لا تمتلك الصلاحية الكافية لإضافة الموظفين.' };
+        }
         const result = await db.employees.create(emp);
         if (result.success) await logActivity('create', 'employees', result.id, emp.name, emp);
         return result;
     });
     ipcMain.handle('employees:update', async (event, emp) => {
+        if (!checkPermission('hr', 'can_edit')) {
+            return { success: false, error: 'عذراً، لا تمتلك الصلاحية الكافية لتعديل الموظفين.' };
+        }
         const result = await db.employees.update(emp);
         if (result.success) await logActivity('update', 'employees', emp.id, emp.name, emp);
         return result;
     });
     ipcMain.handle('employees:delete', async (event, id) => {
+        if (!checkPermission('hr', 'can_delete')) {
+            return { success: false, error: 'عذراً، لا تمتلك الصلاحية الكافية لحذف الموظفين.' };
+        }
         const result = await db.employees.delete(id);
         if (result.success) await logActivity('delete', 'employees', id, String(id), {});
         return result;

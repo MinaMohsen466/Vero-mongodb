@@ -18,7 +18,7 @@ module.exports = function(ipcMain, context) {
 
     ipcMain.handle('users:setCurrentUser', async (event, user) => {
         if (user && typeof user === 'object' && user.id && user.username) {
-            context.currentUser = { id: user.id, username: user.username, full_name: user.full_name, role: user.role };
+            context.currentUser = { id: user.id, username: user.username, full_name: user.full_name, role: user.role, permissions: user.permissions };
         } else {
             context.currentUser = null;
         }
