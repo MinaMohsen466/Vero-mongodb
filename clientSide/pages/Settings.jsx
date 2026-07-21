@@ -287,6 +287,14 @@ function LiveInvoicePreview({ inv, co, logoPreview, t }) {
     );
 }
 
+// Activity Log Cache
+let activityLogCache = {
+    logs: [],
+    filters: { module: '', action: '', user_name: '', startDate: '', endDate: '' },
+    skip: 0,
+    hasMore: true
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Settings() {
     const auth = useAuth() || {};
@@ -450,22 +458,80 @@ export default function Settings() {
 
 
     // ─── Activity Log State ───────────────────────────────────────────────────
-    const [activityLogs, setActivityLogs] = useState([]);
+    const [activityLogs, setActivityLogs] = useState(activityLogCache.logs);
     const [logLoading, setLogLoading] = useState(false);
-    const [logFilters, setLogFilters] = useState({ module: '', action: '', user_name: '', startDate: '', endDate: '' });
+    const [moreLoading, setMoreLoading] = useState(false);
+    const [logFilters, setLogFilters] = useState(activityLogCache.filters);
+    const sentinelRef = useRef(null);
 
     useEffect(() => { loadData(); }, []);
     useEffect(() => { if (sec === 'permissions' && !permLoaded) loadPerms(); }, [sec]);
-    useEffect(() => { if (sec === 'activity_log') loadActivityLog(); }, [sec]);
+    useEffect(() => { if (sec === 'activity_log') loadActivityLog(logFilters); }, [sec]);
 
-    const loadActivityLog = async (filters = logFilters) => {
-        setLogLoading(true);
+    const loadActivityLog = async (filters = logFilters, isAppend = false) => {
+        const filtersChanged = JSON.stringify(filters) !== JSON.stringify(activityLogCache.filters);
+        if (!isAppend && !filtersChanged && activityLogCache.logs.length > 0) {
+            setActivityLogs(activityLogCache.logs);
+            return;
+        }
+
+        if (isAppend) {
+            setMoreLoading(true);
+        } else {
+            setLogLoading(true);
+        }
+
         try {
-            const logs = await window.api.activityLog.getAll(filters);
-            setActivityLogs(logs || []);
-        } catch (e) { console.error(e); }
+            const limit = 30;
+            const currentSkip = isAppend ? activityLogCache.skip : 0;
+            const logs = await window.api.activityLog.getAll({ ...filters, limit, skip: currentSkip });
+            
+            if (isAppend) {
+                const merged = [...activityLogCache.logs, ...(logs || [])];
+                activityLogCache.logs = merged;
+                activityLogCache.skip = currentSkip + (logs || []).length;
+                activityLogCache.hasMore = (logs || []).length === limit;
+                activityLogCache.filters = { ...filters };
+                setActivityLogs(merged);
+            } else {
+                activityLogCache.logs = logs || [];
+                activityLogCache.skip = (logs || []).length;
+                activityLogCache.hasMore = (logs || []).length === limit;
+                activityLogCache.filters = { ...filters };
+                setActivityLogs(logs || []);
+            }
+        } catch (e) {
+            console.error(e);
+        }
         setLogLoading(false);
+        setMoreLoading(false);
     };
+
+    useEffect(() => {
+        if (sec !== 'activity_log') return;
+
+        const observer = new IntersectionObserver((entries) => {
+            const first = entries[0];
+            if (first.isIntersecting && activityLogCache.hasMore && !logLoading && !moreLoading) {
+                loadActivityLog(activityLogCache.filters, true);
+            }
+        }, {
+            root: null,
+            rootMargin: '100px',
+            threshold: 0.1
+        });
+
+        const currentSentinel = sentinelRef.current;
+        if (currentSentinel) {
+            observer.observe(currentSentinel);
+        }
+
+        return () => {
+            if (currentSentinel) {
+                observer.unobserve(currentSentinel);
+            }
+        };
+    }, [sec, logLoading, moreLoading]);
 
 
 
@@ -1602,10 +1668,23 @@ export default function Settings() {
                                                 })}
                                             </tbody>
                                         </table>
-                                        <div style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: '.8rem', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)', borderBottomLeftRadius: 12, borderBottomRightRadius: 12 }}>
-                                            {activityLogs.length} {t('records') || 'سجل'}
+
+                                        {moreLoading && (
+                                            <div style={{ display: 'flex', justifyContent: 'center', padding: 16, borderTop: '1px solid var(--border-light)' }}>
+                                                <div className="spinner" style={{ width: 20, height: 20 }} />
+                                            </div>
+                                        )}
+
+                                        <div style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: '.8rem', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)', borderBottomLeftRadius: 12, borderBottomRightRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span>{activityLogs.length} {t('records') || 'سجل'}</span>
+                                            {!activityLogCache.hasMore && activityLogs.length > 0 && (
+                                                <span style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>{t('log_no_more') || 'تم تحميل جميع السجلات'}</span>
+                                            )}
                                         </div>
                                     </div>
+                                )}
+                                {activityLogs.length > 0 && (
+                                    <div ref={sentinelRef} style={{ height: 10, width: '100%', visibility: 'hidden' }} />
                                 )}
                             </Card>
                         </>

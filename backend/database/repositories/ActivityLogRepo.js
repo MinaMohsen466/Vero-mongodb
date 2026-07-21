@@ -21,7 +21,7 @@ class ActivityLogRepo {
         }
     }
 
-    async getAll({ module, action, user_name, startDate, endDate, limit } = {}) {
+    async getAll({ module, action, user_name, startDate, endDate, limit, skip } = {}) {
         try {
             const filter = {};
             if (module) filter.module = module;
@@ -32,7 +32,9 @@ class ActivityLogRepo {
                 if (startDate) filter.created_at.$gte = new Date(startDate + 'T00:00:00.000Z');
                 if (endDate) filter.created_at.$lte = new Date(endDate + 'T23:59:59.999Z');
             }
-            return await ActivityLog.find(filter).sort({ id: -1 }).limit(limit || 500).lean();
+            const queryLimit = limit !== undefined ? parseInt(limit) : 500;
+            const querySkip = skip !== undefined ? parseInt(skip) : 0;
+            return await ActivityLog.find(filter).sort({ id: -1 }).skip(querySkip).limit(queryLimit).lean();
         } catch (e) {
             console.error('[ActivityLog] getAll error:', e.message);
             return [];

@@ -794,6 +794,7 @@ const translations = {
         log_all_actions: 'جميع الأنواع',
         log_entity_ref: 'المرجع',
         log_no_logs: 'لا توجد سجلات بعد',
+        log_no_more: 'تم تحميل جميع السجلات',
         log_refresh: 'تحديث',
 
         // --- Offers & Coupons ---
@@ -2844,6 +2845,7 @@ const translations = {
         log_all_actions: 'All Types',
         log_entity_ref: 'Reference',
         log_no_logs: 'No activity logs yet',
+        log_no_more: 'All logs loaded',
         log_refresh: 'Refresh',
 
         // HR
