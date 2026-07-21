@@ -245,7 +245,7 @@ contextBridge.exposeInMainWorld('api', {
         getConnectionStatus: () => ipcRenderer.invoke('database:getConnectionStatus'),
         setConnectionUri: (uri) => ipcRenderer.invoke('database:setConnectionUri', uri),
         clearConnectionUri: () => ipcRenderer.invoke('database:clearConnectionUri'),
-        backupToExcel: (filePath) => ipcRenderer.invoke('database:backupToExcel', filePath)
+        backupToExcel: (filePath, includeData) => ipcRenderer.invoke('database:backupToExcel', filePath, includeData)
     },
 
     // Activity Log

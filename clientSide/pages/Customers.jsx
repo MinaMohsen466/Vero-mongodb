@@ -530,7 +530,7 @@ function Customers() {
             >
                 <form id="customer-form" onSubmit={handleSubmit}>
                     <div className="form-row">
-                        <div className="form-group"><label className="form-label">{t('code') || 'الكود'} *</label><input type="text" className="form-input" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} required /></div>
+                        <div className="form-group"><label className="form-label">{t('code') || 'الكود'} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 400 }}>({t('auto_generated') || 'تلقائي'})</span></label><input type="text" className="form-input" value={formData.code} readOnly style={{ opacity: 0.7, cursor: 'default', background: 'var(--bg-secondary)' }} /></div>
                         <div className="form-group"><label className="form-label">{t('cust_name')} *</label><input type="text" className="form-input" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required /></div>
                     </div>
                     <div className="form-row">

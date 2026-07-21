@@ -414,6 +414,21 @@ export default function Settings() {
         deleteSettingsAndUsers: false
     });
     const [isResetting, setIsResetting] = useState(false);
+    const [showExcelExportModal, setShowExcelExportModal] = useState(false);
+    const [excelExportPath, setExcelExportPath] = useState('');
+
+    const handleConfirmExcelExport = async (includeData) => {
+        setShowExcelExportModal(false);
+        if (!excelExportPath) return;
+        setIsResetting(true);
+        const res = await window.api.database.backupToExcel(excelExportPath, includeData);
+        setIsResetting(false);
+        res?.success 
+            ? toast.success(t('savedSuccess') || 'Saved successfully') 
+            : toast.error((t('failed') || 'Failed') + ': ' + (res?.error || ''));
+        setExcelExportPath('');
+    };
+
     const upUserIdRef = useRef(null); // tracks which user we're loading for (prevents race conditions)
     const dropRef = useRef(null);
 
@@ -779,12 +794,8 @@ export default function Settings() {
             filters: [{ name: 'Excel Files', extensions: ['xlsx'] }] 
         });
         if (!r.canceled && r.filePath) {
-            setIsResetting(true);
-            const res = await window.api.database.backupToExcel(r.filePath);
-            setIsResetting(false);
-            res?.success 
-                ? toast.success(t('savedSuccess') || 'Saved successfully') 
-                : toast.error((t('failed') || 'Failed') + ': ' + (res?.error || ''));
+            setExcelExportPath(r.filePath);
+            setShowExcelExportModal(true);
         }
     };
     const triggerResetApp = () => {
@@ -2144,6 +2155,39 @@ export default function Settings() {
                     </Modal>
                 );
             })()}
+
+            {/* Excel Export Modal */}
+            <Modal isOpen={showExcelExportModal} onClose={() => setShowExcelExportModal(false)} title={t('export_excel_title') || 'تصدير ملف إكسيل احتياطي (Excel)'}
+                footer={
+                    <>
+                        <button type="button" className="btn btn-secondary" onClick={() => setShowExcelExportModal(false)}>{t('cancel') || 'إلغاء'}</button>
+                    </>
+                }
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '10px 0', direction: 'rtl', fontFamily: 'Cairo, sans-serif' }}>
+                    <div style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.5 }}>
+                        {t('export_excel_question') || 'هل تريد تصدير ملف الإكسيل محتوياً على البيانات الحالية للتطبيق، أم تريده نموذجاً فارغاً للاستخدام من الصفر؟'}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <button 
+                            className="btn btn-primary" 
+                            style={{ padding: '12px', justifyContent: 'center', fontSize: '0.9rem', fontWeight: 600 }}
+                            onClick={() => handleConfirmExcelExport(true)}
+                        >
+                            <Download size={16} style={{ marginInlineEnd: '8px' }} />
+                            {t('export_with_data') || 'تصدير البيانات الحالية بالكامل'}
+                        </button>
+                        <button 
+                            className="btn btn-secondary" 
+                            style={{ padding: '12px', justifyContent: 'center', fontSize: '0.9rem', fontWeight: 600, border: '1px solid var(--primary)', color: 'var(--primary)' }}
+                            onClick={() => handleConfirmExcelExport(false)}
+                        >
+                            <FileText size={16} style={{ marginInlineEnd: '8px' }} />
+                            {t('export_empty_template') || 'تصدير كـ نموذج فارغ (للبدء من الصفر)'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
 
             {isResetting && (
                 <div style={{

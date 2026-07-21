@@ -99,7 +99,7 @@ function formatDate(d) {
     }
 }
 
-async function exportToExcel(db, filePath) {
+async function exportToExcel(db, filePath, includeData = true) {
     try {
         const workbook = new ExcelJS.Workbook();
 
@@ -153,13 +153,13 @@ async function exportToExcel(db, filePath) {
             cell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: true };
         });
 
-        // Fetch database records
-        const customers = await db.collections.customers.find({}).lean();
-        const suppliers = await db.collections.suppliers.find({}).lean();
-        const products = await db.collections.products.find({}).lean();
-        const expenses = await db.collections.expenses.find({}).lean();
-        const employees = await db.collections.employees.find({}).lean();
-        const invoices = await db.collections.invoices.find({}).lean();
+        // Fetch database records conditionally based on includeData parameter
+        const customers = includeData ? await db.collections.customers.find({}).lean() : [];
+        const suppliers = includeData ? await db.collections.suppliers.find({}).lean() : [];
+        const products = includeData ? await db.collections.products.find({}).lean() : [];
+        const expenses = includeData ? await db.collections.expenses.find({}).lean() : [];
+        const employees = includeData ? await db.collections.employees.find({}).lean() : [];
+        const invoices = includeData ? await db.collections.invoices.find({}).lean() : [];
 
         // Build mappings
         const customerMap = {};
@@ -215,8 +215,8 @@ async function exportToExcel(db, filePath) {
 
         // KPI Rows data & formulas
         const kpiRows = [
-            { kpi: 'إجمالي المبيعات', val: { formula: "=SUM(المبيعات!I3:I5002)" }, desc: 'مجموع المبيعات التراكمي من جدول المبيعات' },
-            { kpi: 'إجمالي المشتريات', val: { formula: "=SUM(المشتريات!I3:I5002)" }, desc: 'مجموع المشتريات التراكمي من جدول المشتريات' },
+            { kpi: 'إجمالي المبيعات', val: { formula: "=SUM(المبيعات!H3:H5002)" }, desc: 'مجموع المبيعات التراكمي من جدول المبيعات' },
+            { kpi: 'إجمالي المشتريات', val: { formula: "=SUM(المشتريات!H3:H5002)" }, desc: 'مجموع المشتريات التراكمي من جدول المشتريات' },
             { kpi: 'صافي الأرباح التشغيلية', val: { formula: "=B2-B3" }, desc: 'الأرباح قبل خصم المصروفات (المبيعات - المشتريات)' },
             { kpi: 'إجمالي المصروفات العامة', val: { formula: "=SUM(المصروفات!C3:C1002)" }, desc: 'مجموع المصروفات من جدول المصروفات' },
             { kpi: 'صافي الربح النهائي', val: { formula: "=B4-B5" }, desc: 'الأرباح الصافية النهائية (الأرباح التشغيلية - المصروفات)' },
@@ -283,8 +283,8 @@ async function exportToExcel(db, filePath) {
             purchase_price: 10,
             sale_price: 15,
             initial_stock: 100,
-            purchased_qty: { formula: `=IF(A2="","",SUMIF(المشتريات!E:E,A2,المشتريات!G:G))`, result: 0 },
-            sold_qty: { formula: `=IF(A2="","",SUMIF(المبيعات!E:E,A2,المبيعات!G:G))`, result: 0 },
+            purchased_qty: { formula: `=IF(A2="","",SUMIF(المشتريات!E:E,A2,المشتريات!F:F))`, result: 0 },
+            sold_qty: { formula: `=IF(A2="","",SUMIF(المبيعات!E:E,A2,المبيعات!F:F))`, result: 0 },
             current_stock: { formula: `=IF(A2="","",H2+I2-J2)`, result: 100 },
             stock_value: { formula: `=IF(A2="","",F2*K2)`, result: 1000 }
         });
@@ -309,11 +309,11 @@ async function exportToExcel(db, filePath) {
                     sale_price: p.sale_price || 0,
                     initial_stock: initialStock,
                     purchased_qty: {
-                        formula: `=IF(A${rowNum}="","",SUMIF(المشتريات!E:E, A${rowNum}, المشتريات!G:G))`,
+                        formula: `=IF(A${rowNum}="","",SUMIF(المشتريات!E:E, A${rowNum}, المشتريات!F:F))`,
                         result: purchasedInDb
                     },
                     sold_qty: {
-                        formula: `=IF(A${rowNum}="","",SUMIF(المبيعات!E:E, A${rowNum}, المبيعات!G:G))`,
+                        formula: `=IF(A${rowNum}="","",SUMIF(المبيعات!E:E, A${rowNum}, المبيعات!F:F))`,
                         result: soldInDb
                     },
                     current_stock: {
@@ -327,7 +327,7 @@ async function exportToExcel(db, filePath) {
                 });
             } else {
                 productsSheet.addRow({
-                    code: '',
+                    code: { formula: `=IF(B${rowNum}="","","P"&TEXT(ROW()-2,"0000"))` },
                     name: '',
                     description: '',
                     unit: '',
@@ -335,8 +335,8 @@ async function exportToExcel(db, filePath) {
                     purchase_price: '',
                     sale_price: '',
                     initial_stock: '',
-                    purchased_qty: { formula: `=IF(A${rowNum}="","",SUMIF(المشتريات!E:E, A${rowNum}, المشتريات!G:G))` },
-                    sold_qty: { formula: `=IF(A${rowNum}="","",SUMIF(المبيعات!E:E, A${rowNum}, المبيعات!G:G))` },
+                    purchased_qty: { formula: `=IF(A${rowNum}="","",SUMIF(المشتريات!E:E, A${rowNum}, المشتريات!F:F))` },
+                    sold_qty: { formula: `=IF(A${rowNum}="","",SUMIF(المبيعات!E:E, A${rowNum}, المبيعات!F:F))` },
                     current_stock: { formula: `=IF(A${rowNum}="","",H${rowNum}+I${rowNum}-J${rowNum})` },
                     stock_value: { formula: `=IF(A${rowNum}="","",F${rowNum}*K${rowNum})` }
                 });
@@ -361,7 +361,7 @@ async function exportToExcel(db, filePath) {
             name: 'مثال: عميل تجريبي',
             phone: 'مثال: 99999999',
             opening_balance: 0,
-            sales_total: { formula: `=IF(A2="","",SUMIF(المبيعات!B3:B5002, B2, المبيعات!I3:I5002))`, result: 0 },
+            sales_total: { formula: `=IF(A2="","",SUMIF(المبيعات!B3:B5002, B2, المبيعات!H3:H5002))`, result: 0 },
             balance: { formula: `=IF(A2="","",D2+E2)`, result: 0 }
         });
 
@@ -377,7 +377,7 @@ async function exportToExcel(db, filePath) {
                     phone: c.phone || '',
                     opening_balance: c.opening_balance || 0,
                     sales_total: {
-                        formula: `=IF(A${rowNum}="","",SUMIF(المبيعات!B3:B5002, B${rowNum}, المبيعات!I3:I5002))`,
+                        formula: `=IF(A${rowNum}="","",SUMIF(المبيعات!B3:B5002, B${rowNum}, المبيعات!H3:H5002))`,
                         result: c.balance || 0
                     },
                     balance: {
@@ -387,11 +387,11 @@ async function exportToExcel(db, filePath) {
                 });
             } else {
                 customersSheet.addRow({
-                    code: '',
+                    code: { formula: `=IF(B${rowNum}="","","C"&TEXT(ROW()-2,"0000"))` },
                     name: '',
                     phone: '',
                     opening_balance: '',
-                    sales_total: { formula: `=IF(A${rowNum}="","",SUMIF(المبيعات!B3:B5002, B${rowNum}, المبيعات!I3:I5002))` },
+                    sales_total: { formula: `=IF(A${rowNum}="","",SUMIF(المبيعات!B3:B5002, B${rowNum}, المبيعات!H3:H5002))` },
                     balance: { formula: `=IF(A${rowNum}="","",D${rowNum}+E${rowNum})` }
                 });
             }
@@ -415,7 +415,7 @@ async function exportToExcel(db, filePath) {
             name: 'مثال: مورد تجريبي',
             phone: 'مثال: 99999999',
             opening_balance: 0,
-            purchases_total: { formula: `=IF(A2="","",SUMIF(المشتريات!B3:B5002, B2, المشتريات!I3:I5002))`, result: 0 },
+            purchases_total: { formula: `=IF(A2="","",SUMIF(المشتريات!B3:B5002, B2, المشتريات!H3:H5002))`, result: 0 },
             balance: { formula: `=IF(A2="","",D2+E2)`, result: 0 }
         });
 
@@ -431,7 +431,7 @@ async function exportToExcel(db, filePath) {
                     phone: s.phone || '',
                     opening_balance: s.opening_balance || 0,
                     purchases_total: {
-                        formula: `=IF(A${rowNum}="","",SUMIF(المشتريات!B3:B5002, B${rowNum}, المشتريات!I3:I5002))`,
+                        formula: `=IF(A${rowNum}="","",SUMIF(المشتريات!B3:B5002, B${rowNum}, المشتريات!H3:H5002))`,
                         result: s.balance || 0
                     },
                     balance: {
@@ -441,11 +441,11 @@ async function exportToExcel(db, filePath) {
                 });
             } else {
                 suppliersSheet.addRow({
-                    code: '',
+                    code: { formula: `=IF(B${rowNum}="","","S"&TEXT(ROW()-2,"0000"))` },
                     name: '',
                     phone: '',
                     opening_balance: '',
-                    purchases_total: { formula: `=IF(A${rowNum}="","",SUMIF(المشتريات!B3:B5002, B${rowNum}, المشتريات!I3:I5002))` },
+                    purchases_total: { formula: `=IF(A${rowNum}="","",SUMIF(المشتريات!B3:B5002, B${rowNum}, المشتريات!H3:H5002))` },
                     balance: { formula: `=IF(A${rowNum}="","",D${rowNum}+E${rowNum})` }
                 });
             }
@@ -479,13 +479,13 @@ async function exportToExcel(db, filePath) {
 
         // --- 6. Sales Sheet (المبيعات) ---
         const salesSheet = workbook.addWorksheet('المبيعات');
+        salesSheet.views = [{ rightToLeft: true }];
         salesSheet.columns = [
             { header: 'التاريخ', key: 'date', width: 16 },
             { header: 'اسم العميل', key: 'customer_name', width: 24 },
-            { header: 'اختر بالاسم (Search by Name)', key: 'search_name', width: 26 },
-            { header: 'اختر بالكود (Search by Code)', key: 'search_code', width: 26 },
-            { header: 'كود المنتج (النهائي)', key: 'product_code', width: 18 },
-            { header: 'اسم المنتج (النهائي)', key: 'product_name', width: 24 },
+            { header: 'كود العميل (تلقائي)', key: 'customer_code', width: 18 },
+            { header: 'اسم المنتج', key: 'product_name', width: 24 },
+            { header: 'كود المنتج (تلقائي)', key: 'product_code', width: 18 },
             { header: 'الكمية المباعة', key: 'quantity', width: 14 },
             { header: 'سعر البيع', key: 'sale_price', width: 14 },
             { header: 'الإجمالي', key: 'total', width: 16 },
@@ -496,13 +496,12 @@ async function exportToExcel(db, filePath) {
         salesSheet.addRow({
             date: '2026-07-21',
             customer_name: 'مثال: عميل تجريبي',
-            search_name: 'مثال: منتج تجريبي',
-            search_code: '',
-            product_code: { formula: `=IF(AND(C2="",D2=""),"",IF(D2<>"",D2,IFERROR(INDEX(المنتجات!A:A,MATCH(C2,المنتجات!B:B,0)),"")))`, result: 'P-100' },
-            product_name: { formula: `=IF(AND(C2="",D2=""),"",IF(C2<>"",C2,IFERROR(VLOOKUP(D2,المنتجات!A:B,2,FALSE),"")))`, result: 'منتج تجريبي' },
+            customer_code: { formula: `=IF(B2="","",IFERROR(INDEX(العملاء!A:A,MATCH(B2,العملاء!B:B,0)),""))`, result: 'C0001' },
+            product_name: 'مثال: منتج تجريبي',
+            product_code: { formula: `=IF(D2="","",IFERROR(INDEX(المنتجات!A:A,MATCH(D2,المنتجات!B:B,0)),""))`, result: 'P0001' },
             quantity: 5,
             sale_price: 15,
-            total: { formula: `=IF(OR(G2="",H2=""),"",G2*H2)`, result: 75 },
+            total: { formula: `=IF(OR(F2="",G2=""),"",F2*G2)`, result: 75 },
             notes: 'مثال: ملاحظة بيع تجريبية'
         });
 
@@ -512,17 +511,19 @@ async function exportToExcel(db, filePath) {
             const dbItem = dbSalesItems[idx];
 
             if (dbItem) {
+                const cust = customers.find(c => c.name === dbItem.entityName);
+                const custCode = cust ? (cust.code || `CUST-${cust.id}`) : '';
+
                 salesSheet.addRow({
                     date: dbItem.date,
                     customer_name: dbItem.entityName,
-                    search_name: dbItem.productName,
-                    search_code: dbItem.productCode,
-                    product_code: { formula: `=IF(AND(C${rowNum}="",D${rowNum}=""),"",IF(D${rowNum}<>"",D${rowNum},IFERROR(INDEX(المنتجات!A:A,MATCH(C${rowNum},المنتجات!B:B,0)),"")))`, result: dbItem.productCode },
-                    product_name: { formula: `=IF(AND(C${rowNum}="",D${rowNum}=""),"",IF(C${rowNum}<>"",C${rowNum},IFERROR(VLOOKUP(D${rowNum},المنتجات!A:B,2,FALSE),"")))`, result: dbItem.productName },
+                    customer_code: { formula: `=IF(B${rowNum}="","",IFERROR(INDEX(العملاء!A:A,MATCH(B${rowNum},العملاء!B:B,0)),""))`, result: custCode },
+                    product_name: dbItem.productName,
+                    product_code: { formula: `=IF(D${rowNum}="","",IFERROR(INDEX(المنتجات!A:A,MATCH(D${rowNum},المنتجات!B:B,0)),""))`, result: dbItem.productCode },
                     quantity: dbItem.quantity,
                     sale_price: dbItem.unitPrice,
                     total: {
-                        formula: `=IF(OR(G${rowNum}="",H${rowNum}=""),"",G${rowNum}*H${rowNum})`,
+                        formula: `=IF(OR(F${rowNum}="",G${rowNum}=""),"",F${rowNum}*G${rowNum})`,
                         result: dbItem.quantity * dbItem.unitPrice
                     },
                     notes: dbItem.notes
@@ -531,29 +532,29 @@ async function exportToExcel(db, filePath) {
                 salesSheet.addRow({
                     date: '',
                     customer_name: '',
-                    search_name: '',
-                    search_code: '',
-                    product_code: { formula: `=IF(AND(C${rowNum}="",D${rowNum}=""),"",IF(D${rowNum}<>"",D${rowNum},IFERROR(INDEX(المنتجات!A:A,MATCH(C${rowNum},المنتجات!B:B,0)),"")))` },
-                    product_name: { formula: `=IF(AND(C${rowNum}="",D${rowNum}=""),"",IF(C${rowNum}<>"",C${rowNum},IFERROR(VLOOKUP(D${rowNum},المنتجات!A:B,2,FALSE),"")))` },
+                    customer_code: { formula: `=IF(B${rowNum}="","",IFERROR(INDEX(العملاء!A:A,MATCH(B${rowNum},العملاء!B:B,0)),""))` },
+                    product_name: '',
+                    product_code: { formula: `=IF(D${rowNum}="","",IFERROR(INDEX(المنتجات!A:A,MATCH(D${rowNum},المنتجات!B:B,0)),""))` },
                     quantity: '',
                     sale_price: { formula: `=IF(E${rowNum}="","",IFERROR(VLOOKUP(E${rowNum},المنتجات!A:G,7,FALSE),0))` },
-                    total: { formula: `=IF(OR(G${rowNum}="",H${rowNum}=""),"",G${rowNum}*H${rowNum})` },
+                    total: { formula: `=IF(OR(F${rowNum}="",G${rowNum}=""),"",F${rowNum}*G${rowNum})` },
                     notes: ''
                 });
             }
         }
-        styleWorksheet(salesSheet, salesSheet.columns, 5001, [6, 8]);
+        styleWorksheet(salesSheet, salesSheet.columns, 5001, [5, 7]);
 
-        // Dropdown buffers scaled to catalog sizes
-        const customerLimit = Math.max(customers.length + 100, 200);
-        const supplierLimit = Math.max(suppliers.length + 100, 200);
-        const productLimit = Math.max(products.length + 200, 500);
+        // Named Ranges: only cover rows with actual data (row 3 = first data row after header + instruction)
+        // This prevents blank/white dropdown entries in Excel caused by empty cells in the range
+        const customerLastRow = Math.max(customers.length + 2, 3); // At least row 3
+        const supplierLastRow = Math.max(suppliers.length + 2, 3);
+        const productLastRow = Math.max(products.length + 2, 3);
 
         // Define Named Ranges for cross-sheet validations
-        workbook.definedNames.add(`العملاء!$B$3:$B$${customerLimit}`, 'CustomerList');
-        workbook.definedNames.add(`الموردين!$B$3:$B$${supplierLimit}`, 'SupplierList');
-        workbook.definedNames.add(`المنتجات!$B$3:$B$${productLimit}`, 'ProductList');
-        workbook.definedNames.add(`المنتجات!$A$3:$A$${productLimit}`, 'ProductCodes');
+        workbook.definedNames.add(`العملاء!$B$3:$B$${customerLastRow}`, 'CustomerList');
+        workbook.definedNames.add(`الموردين!$B$3:$B$${supplierLastRow}`, 'SupplierList');
+        workbook.definedNames.add(`المنتجات!$B$3:$B$${productLastRow}`, 'ProductList');
+        workbook.definedNames.add(`المنتجات!$A$3:$A$${productLastRow}`, 'ProductCodes');
 
         for (let r = 2; r <= 5002; r++) {
             const row = salesSheet.getRow(r);
@@ -562,15 +563,10 @@ async function exportToExcel(db, filePath) {
                 allowBlank: true,
                 formulae: ['=CustomerList']
             };
-            row.getCell(3).dataValidation = {
-                type: 'list',
-                allowBlank: true,
-                formulae: ['=ProductList']
-            };
             row.getCell(4).dataValidation = {
                 type: 'list',
                 allowBlank: true,
-                formulae: ['=ProductCodes']
+                formulae: ['=ProductList']
             };
         }
 
@@ -579,10 +575,9 @@ async function exportToExcel(db, filePath) {
         purchasesSheet.columns = [
             { header: 'التاريخ', key: 'date', width: 16 },
             { header: 'اسم المورد', key: 'supplier_name', width: 24 },
-            { header: 'اختر بالاسم (Search by Name)', key: 'search_name', width: 26 },
-            { header: 'اختر بالكود (Search by Code)', key: 'search_code', width: 26 },
-            { header: 'كود المنتج (النهائي)', key: 'product_code', width: 18 },
-            { header: 'اسم المنتج (النهائي)', key: 'product_name', width: 24 },
+            { header: 'كود المورد (تلقائي)', key: 'supplier_code', width: 18 },
+            { header: 'اسم المنتج', key: 'product_name', width: 24 },
+            { header: 'كود المنتج (تلقائي)', key: 'product_code', width: 18 },
             { header: 'الكمية المشتراة', key: 'quantity', width: 14 },
             { header: 'سعر الشراء', key: 'purchase_price', width: 14 },
             { header: 'الإجمالي', key: 'total', width: 16 },
@@ -593,13 +588,12 @@ async function exportToExcel(db, filePath) {
         purchasesSheet.addRow({
             date: '2026-07-21',
             supplier_name: 'مثال: مورد تجريبي',
-            search_name: 'مثال: منتج تجريبي',
-            search_code: '',
-            product_code: { formula: `=IF(AND(C2="",D2=""),"",IF(D2<>"",D2,IFERROR(INDEX(المنتجات!A:A,MATCH(C2,المنتجات!B:B,0)),"")))`, result: 'P-100' },
-            product_name: { formula: `=IF(AND(C2="",D2=""),"",IF(C2<>"",C2,IFERROR(VLOOKUP(D2,المنتجات!A:B,2,FALSE),"")))`, result: 'منتج تجريبي' },
+            supplier_code: { formula: `=IF(B2="","",IFERROR(INDEX(الموردين!A:A,MATCH(B2,الموردين!B:B,0)),""))`, result: 'S0001' },
+            product_name: 'مثال: منتج تجريبي',
+            product_code: { formula: `=IF(D2="","",IFERROR(INDEX(المنتجات!A:A,MATCH(D2,المنتجات!B:B,0)),""))`, result: 'P0001' },
             quantity: 5,
             purchase_price: 10,
-            total: { formula: `=IF(OR(G2="",H2=""),"",G2*H2)`, result: 50 },
+            total: { formula: `=IF(OR(F2="",G2=""),"",F2*G2)`, result: 50 },
             notes: 'مثال: ملاحظة شراء تجريبية'
         });
 
@@ -609,17 +603,19 @@ async function exportToExcel(db, filePath) {
             const dbItem = dbPurchasesItems[idx];
 
             if (dbItem) {
+                const supp = suppliers.find(s => s.name === dbItem.entityName);
+                const suppCode = supp ? (supp.code || `SUPP-${supp.id}`) : '';
+
                 purchasesSheet.addRow({
                     date: dbItem.date,
                     supplier_name: dbItem.entityName,
-                    search_name: dbItem.productName,
-                    search_code: dbItem.productCode,
-                    product_code: { formula: `=IF(AND(C${rowNum}="",D${rowNum}=""),"",IF(D${rowNum}<>"",D${rowNum},IFERROR(INDEX(المنتجات!A:A,MATCH(C${rowNum},المنتجات!B:B,0)),"")))`, result: dbItem.productCode },
-                    product_name: { formula: `=IF(AND(C${rowNum}="",D${rowNum}=""),"",IF(C${rowNum}<>"",C${rowNum},IFERROR(VLOOKUP(D${rowNum},المنتجات!A:B,2,FALSE),"")))`, result: dbItem.productName },
+                    supplier_code: { formula: `=IF(B${rowNum}="","",IFERROR(INDEX(الموردين!A:A,MATCH(B${rowNum},الموردين!B:B,0)),""))`, result: suppCode },
+                    product_name: dbItem.productName,
+                    product_code: { formula: `=IF(D${rowNum}="","",IFERROR(INDEX(المنتجات!A:A,MATCH(D${rowNum},المنتجات!B:B,0)),""))`, result: dbItem.productCode },
                     quantity: dbItem.quantity,
                     purchase_price: dbItem.unitPrice,
                     total: {
-                        formula: `=IF(OR(G${rowNum}="",H${rowNum}=""),"",G${rowNum}*H${rowNum})`,
+                        formula: `=IF(OR(F${rowNum}="",G${rowNum}=""),"",F${rowNum}*G${rowNum})`,
                         result: dbItem.quantity * dbItem.unitPrice
                     },
                     notes: dbItem.notes
@@ -628,18 +624,17 @@ async function exportToExcel(db, filePath) {
                 purchasesSheet.addRow({
                     date: '',
                     supplier_name: '',
-                    search_name: '',
-                    search_code: '',
-                    product_code: { formula: `=IF(AND(C${rowNum}="",D${rowNum}=""),"",IF(D${rowNum}<>"",D${rowNum},IFERROR(INDEX(المنتجات!A:A,MATCH(C${rowNum},المنتجات!B:B,0)),"")))` },
-                    product_name: { formula: `=IF(AND(C${rowNum}="",D${rowNum}=""),"",IF(C${rowNum}<>"",C${rowNum},IFERROR(VLOOKUP(D${rowNum},المنتجات!A:B,2,FALSE),"")))` },
+                    supplier_code: { formula: `=IF(B${rowNum}="","",IFERROR(INDEX(الموردين!A:A,MATCH(B${rowNum},الموردين!B:B,0)),""))` },
+                    product_name: '',
+                    product_code: { formula: `=IF(D${rowNum}="","",IFERROR(INDEX(المنتجات!A:A,MATCH(D${rowNum},المنتجات!B:B,0)),""))` },
                     quantity: '',
                     purchase_price: { formula: `=IF(E${rowNum}="","",IFERROR(VLOOKUP(E${rowNum},المنتجات!A:F,6,FALSE),0))` },
-                    total: { formula: `=IF(OR(G${rowNum}="",H${rowNum}=""),"",G${rowNum}*H${rowNum})` },
+                    total: { formula: `=IF(OR(F${rowNum}="",G${rowNum}=""),"",F${rowNum}*G${rowNum})` },
                     notes: ''
                 });
             }
         }
-        styleWorksheet(purchasesSheet, purchasesSheet.columns, 5001, [6, 8]);
+        styleWorksheet(purchasesSheet, purchasesSheet.columns, 5001, [5, 7]);
 
         // Add validations to Purchases Sheet
         for (let r = 2; r <= 5002; r++) {
@@ -649,15 +644,10 @@ async function exportToExcel(db, filePath) {
                 allowBlank: true,
                 formulae: ['=SupplierList']
             };
-            row.getCell(3).dataValidation = {
-                type: 'list',
-                allowBlank: true,
-                formulae: ['=ProductList']
-            };
             row.getCell(4).dataValidation = {
                 type: 'list',
                 allowBlank: true,
-                formulae: ['=ProductCodes']
+                formulae: ['=ProductList']
             };
         }
 

@@ -622,9 +622,9 @@ class AppDatabase {
         }
     }
 
-    async backupToExcel(filePath) {
+    async backupToExcel(filePath, includeData = true) {
         const { exportToExcel } = require('./utils/excelBackup');
-        return await exportToExcel(this, filePath);
+        return await exportToExcel(this, filePath, includeData);
     }
 
     async restore(filePath) {

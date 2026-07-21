@@ -872,8 +872,8 @@ function Products() {
                             <div style={{ flex: 1, minWidth: '200px' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px', marginBottom: '12px' }}>
                                     <div className="form-group" style={{ marginBottom: 0 }}>
-                                        <label className="form-label" style={{ fontWeight: '600' }}>{t('code') || 'الكود'} *</label>
-                                        <input type="text" className="form-input" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} required style={{ height: '40px' }} />
+                                        <label className="form-label" style={{ fontWeight: '600' }}>{t('code') || 'الكود'} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 400 }}>({t('auto_generated') || 'تلقائي'})</span></label>
+                                        <input type="text" className="form-input" value={formData.code} readOnly style={{ height: '40px', opacity: 0.7, cursor: 'default', background: 'var(--bg-secondary)' }} />
                                     </div>
                                     <div className="form-group" style={{ marginBottom: 0 }}>
                                         <label className="form-label" style={{ fontWeight: '600' }}>{t('prod_name')} *</label>
