@@ -36,21 +36,29 @@ function createWindow() {
     }
 }
 
-app.whenReady().then(async () => {
+app.whenReady().then(() => {
     // Initialize admin config first
     const userDataPath = app.getPath('userData');
     adminConfig = new AdminConfig(userDataPath);
     adminConfig.init();
     db.setAdminConfig(adminConfig);
     
-    await db.init(app);
-    console.log('Database initialized successfully');
-
-    // Register all modular IPC handlers
+    // Register all modular IPC handlers immediately (they wait internally for db to be ready)
     ipc.initIpc(ipcMain, app, dialog, BrowserWindow, db);
     console.log('IPC handlers initialized successfully');
 
     createWindow();
+
+    // Initialize database asynchronously in the background
+    db.init(app).then(() => {
+        console.log('Database initialized successfully');
+    }).catch(err => {
+        console.error('Database initialization failed:', err);
+        dialog.showErrorBox(
+            'خطأ في تشغيل قاعدة البيانات',
+            `فشل بدء تشغيل قاعدة البيانات. يرجى التأكد من تشغيل MongoDB والاتصال بالخادم.\n\nالتفاصيل: ${err.message}`
+        );
+    });
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {

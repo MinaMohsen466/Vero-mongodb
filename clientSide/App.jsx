@@ -107,6 +107,16 @@ function App() {
     useEffect(() => {
         const initApp = async () => {
             try {
+                const isReinstall = await window.api.system.checkReinstall();
+                if (isReinstall) {
+                    console.log("[App] Reinstall or update detected. Clearing user session.");
+                    localStorage.removeItem('accapp_user');
+                }
+            } catch (e) {
+                console.error("Error checking reinstall status:", e);
+            }
+
+            try {
                 const firstRun = await window.api.system.isFirstRun();
                 setIsFirstRun(firstRun);
             } catch (e) {

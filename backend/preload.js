@@ -5,7 +5,8 @@ contextBridge.exposeInMainWorld('api', {
     system: {
         isFirstRun: () => ipcRenderer.invoke('system:isFirstRun'),
         runSetup: (data) => ipcRenderer.invoke('system:runSetup', data),
-        verifySetupAccess: (username, password) => ipcRenderer.invoke('system:verifySetupAccess', { username, password })
+        verifySetupAccess: (username, password) => ipcRenderer.invoke('system:verifySetupAccess', { username, password }),
+        checkReinstall: () => ipcRenderer.invoke('system:checkReinstall')
     },
 
     // Users & Auth

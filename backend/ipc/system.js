@@ -21,6 +21,37 @@ module.exports = function(ipcMain, context) {
         return { success: false, message: 'Invalid admin credentials' };
     });
 
+    ipcMain.handle('system:checkReinstall', async () => {
+        const configPath = path.join(app.getPath('userData'), 'vero-config.json');
+        let config = {};
+        if (fs.existsSync(configPath)) {
+            try {
+                config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            } catch (e) {}
+        }
+        
+        let packageMtime = 0;
+        try {
+            const packageJsonPath = path.join(app.getAppPath(), 'package.json');
+            packageMtime = fs.statSync(packageJsonPath).mtimeMs;
+        } catch (e) {}
+
+        const isReinstall = config.lastRunMtime !== packageMtime;
+        
+        if (isReinstall) {
+            config.lastRunMtime = packageMtime;
+            try {
+                const configDir = path.dirname(configPath);
+                if (!fs.existsSync(configDir)) {
+                    fs.mkdirSync(configDir, { recursive: true });
+                }
+                fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+            } catch (e) {}
+            return true;
+        }
+        return false;
+    });
+
     // --- Settings ---
     ipcMain.handle('settings:get', async (event, key) => await db.settings.get(key));
     ipcMain.handle('settings:getAll', async () => await db.settings.getAll());

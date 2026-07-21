@@ -27,12 +27,29 @@ function initIpc(ipcMain, app, dialog, BrowserWindow, db) {
     context.BrowserWindow = BrowserWindow;
     context.db = db;
 
-    registerUsersIpc(ipcMain, context);
-    registerEntitiesIpc(ipcMain, context);
-    registerTransactionsIpc(ipcMain, context);
-    registerHrIpc(ipcMain, context);
-    registerBusinessIpc(ipcMain, context);
-    registerSystemIpc(ipcMain, context);
+    const wrappedIpcMain = new Proxy(ipcMain, {
+        get(target, prop) {
+            if (prop === 'handle') {
+                return (channel, listener) => {
+                    target.handle(channel, async (event, ...args) => {
+                        while (!db.isReady) {
+                            await new Promise(resolve => setTimeout(resolve, 50));
+                        }
+                        return await listener(event, ...args);
+                    });
+                };
+            }
+            const value = target[prop];
+            return typeof value === 'function' ? value.bind(target) : value;
+        }
+    });
+
+    registerUsersIpc(wrappedIpcMain, context);
+    registerEntitiesIpc(wrappedIpcMain, context);
+    registerTransactionsIpc(wrappedIpcMain, context);
+    registerHrIpc(wrappedIpcMain, context);
+    registerBusinessIpc(wrappedIpcMain, context);
+    registerSystemIpc(wrappedIpcMain, context);
 }
 
 function setMainWindow(win) {

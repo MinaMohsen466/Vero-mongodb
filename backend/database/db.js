@@ -80,6 +80,7 @@ class AppDatabase {
         this.adminConfig = null;
         this.lastAutoBackupTime = 0;
         this.cache = new CacheManager(30000); // 30 seconds TTL
+        this.isReady = false;
     }
 
     setAdminConfig(adminConfig) {
@@ -208,6 +209,7 @@ class AppDatabase {
 
         this.initRepositories();
         await this.seedDefaultData();
+        this.isReady = true;
     }
 
     initRepositories() {
