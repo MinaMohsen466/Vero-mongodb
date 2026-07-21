@@ -215,13 +215,16 @@ async function exportToExcel(db, filePath, includeData = true) {
 
         // KPI Rows data & formulas
         const kpiRows = [
-            { kpi: 'إجمالي المبيعات', val: { formula: "=SUM(المبيعات!H3:H5002)" }, desc: 'مجموع المبيعات التراكمي من جدول المبيعات' },
-            { kpi: 'إجمالي المشتريات', val: { formula: "=SUM(المشتريات!H3:H5002)" }, desc: 'مجموع المشتريات التراكمي من جدول المشتريات' },
-            { kpi: 'صافي الأرباح التشغيلية', val: { formula: "=B2-B3" }, desc: 'الأرباح قبل خصم المصروفات (المبيعات - المشتريات)' },
-            { kpi: 'إجمالي المصروفات العامة', val: { formula: "=SUM(المصروفات!C3:C1002)" }, desc: 'مجموع المصروفات من جدول المصروفات' },
-            { kpi: 'صافي الربح النهائي', val: { formula: "=B4-B5" }, desc: 'الأرباح الصافية النهائية (الأرباح التشغيلية - المصروفات)' },
-            { kpi: 'إجمالي قيمة المخزون الحالي', val: { formula: "=SUM(المنتجات!L3:L1002)" }, desc: 'القيمة المالية الإجمالية للبضاعة المتاحة في المخازن' },
-            { kpi: 'إجمالي عدد المنتجات المسجلة', val: { formula: "=COUNTA(المنتجات!A3:A1002)" }, desc: 'عدد الأصناف المعرفة والمسجلة في ورقة المنتجات' }
+            { kpi: 'إجمالي المبيعات', val: { formula: "=IFERROR(SUM(المبيعات!H3:H5002), 0)" }, desc: 'مجموع المبيعات التراكمي من جدول المبيعات' },
+            { kpi: 'إجمالي المشتريات', val: { formula: "=IFERROR(SUM(المشتريات!H3:H5002), 0)" }, desc: 'مجموع المشتريات التراكمي من جدول المشتريات' },
+            { kpi: 'صافي الأرباح التشغيلية', val: { formula: "=IFERROR(B2-B3, 0)" }, desc: 'الأرباح قبل خصم المصروفات (المبيعات - المشتريات)' },
+            { kpi: 'إجمالي المصروفات العامة', val: { formula: "=IFERROR(SUM(المصروفات!C3:C1002), 0)" }, desc: 'مجموع المصروفات من جدول المصروفات' },
+            { kpi: 'صافي الربح النهائي', val: { formula: "=IFERROR(B4-B5, 0)" }, desc: 'الأرباح الصافية النهائية (الأرباح التشغيلية - المصروفات)' },
+            { kpi: 'إجمالي قيمة المخزون الحالي', val: { formula: "=IFERROR(SUM(المنتجات!L3:L1002), 0)" }, desc: 'القيمة المالية الإجمالية للبضاعة المتاحة في المخازن' },
+            { kpi: 'إجمالي عدد المنتجات المسجلة', val: { formula: "=IFERROR(COUNTA(المنتجات!A3:A1002), 0)" }, desc: 'عدد الأصناف المعرفة والمسجلة في ورقة المنتجات' },
+            { kpi: 'إجمالي عدد العملاء', val: { formula: "=IFERROR(COUNTA(العملاء!A3:A1002), 0)" }, desc: 'عدد العملاء المسجلين في ورقة العملاء' },
+            { kpi: 'إجمالي عدد الموردين', val: { formula: "=IFERROR(COUNTA(الموردين!A3:A1002), 0)" }, desc: 'عدد الموردين المسجلين في ورقة الموردين' },
+            { kpi: 'متوسط قيمة الحركة/الفاتورة', val: { formula: "=IFERROR(AVERAGEIF(المبيعات!H3:H5002, \">0\"), 0)" }, desc: 'متوسط قيم المبيعات لكل حركة بيع' }
         ];
 
         kpiRows.forEach((item, idx) => {
@@ -242,13 +245,14 @@ async function exportToExcel(db, filePath, includeData = true) {
             cellKPI.border = EXCEL_BORDER;
             cellKPI.alignment = { horizontal: 'right', vertical: 'middle' };
 
-            cellVal.font = { name: 'Arial', size: 11, bold: true, color: { argb: rNum === 6 ? 'FF107C41' : (rNum === 4 ? 'FF2563EB' : 'FF000000') } };
+            const isCountRow = rNum === 8 || rNum === 9 || rNum === 10;
+            cellVal.font = { name: 'Arial', size: 11, bold: true, color: { argb: rNum === 7 ? 'FF107C41' : (rNum === 4 || rNum === 6 ? 'FF2563EB' : 'FF000000') } };
             cellVal.border = EXCEL_BORDER;
             cellVal.alignment = { horizontal: 'center', vertical: 'middle' };
-            if (rNum !== 8) {
+            if (!isCountRow) {
                 cellVal.numFmt = '#,##0.00';
             } else {
-                cellVal.numFmt = '#,##0'; // Integer for count
+                cellVal.numFmt = '#,##0'; // Integer for counts
             }
 
             cellDesc.font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF7F7F7F' } };
@@ -283,10 +287,10 @@ async function exportToExcel(db, filePath, includeData = true) {
             purchase_price: 10,
             sale_price: 15,
             initial_stock: 100,
-            purchased_qty: { formula: `=IF(A2="","",SUMIF(المشتريات!E:E,A2,المشتريات!F:F))`, result: 0 },
-            sold_qty: { formula: `=IF(A2="","",SUMIF(المبيعات!E:E,A2,المبيعات!F:F))`, result: 0 },
-            current_stock: { formula: `=IF(A2="","",H2+I2-J2)`, result: 100 },
-            stock_value: { formula: `=IF(A2="","",F2*K2)`, result: 1000 }
+            purchased_qty: { formula: `=IFERROR(IF(A2="","",SUMIF(المشتريات!E:E,A2,المشتريات!F:F)),0)`, result: 0 },
+            sold_qty: { formula: `=IFERROR(IF(A2="","",SUMIF(المبيعات!E:E,A2,المبيعات!F:F)),0)`, result: 0 },
+            current_stock: { formula: `=IFERROR(IF(A2="","",N(H2)+N(I2)-N(J2)),100)`, result: 100 },
+            stock_value: { formula: `=IFERROR(IF(A2="","",N(F2)*N(K2)),1000)`, result: 1000 }
         });
 
         // Rows 3 to 1002: Products data + empty rows
@@ -309,19 +313,19 @@ async function exportToExcel(db, filePath, includeData = true) {
                     sale_price: p.sale_price || 0,
                     initial_stock: initialStock,
                     purchased_qty: {
-                        formula: `=IF(A${rowNum}="","",SUMIF(المشتريات!E:E, A${rowNum}, المشتريات!F:F))`,
+                        formula: `=IFERROR(IF(A${rowNum}="","",SUMIF(المشتريات!E:E, A${rowNum}, المشتريات!F:F)), 0)`,
                         result: purchasedInDb
                     },
                     sold_qty: {
-                        formula: `=IF(A${rowNum}="","",SUMIF(المبيعات!E:E, A${rowNum}, المبيعات!F:F))`,
+                        formula: `=IFERROR(IF(A${rowNum}="","",SUMIF(المبيعات!E:E, A${rowNum}, المبيعات!F:F)), 0)`,
                         result: soldInDb
                     },
                     current_stock: {
-                        formula: `=IF(A${rowNum}="","",H${rowNum}+I${rowNum}-J${rowNum})`,
+                        formula: `=IFERROR(IF(A${rowNum}="","",N(H${rowNum})+N(I${rowNum})-N(J${rowNum})), 0)`,
                         result: p.stock_quantity || 0
                     },
                     stock_value: {
-                        formula: `=IF(A${rowNum}="","",F${rowNum}*K${rowNum})`,
+                        formula: `=IFERROR(IF(A${rowNum}="","",N(F${rowNum})*N(K${rowNum})), 0)`,
                         result: (p.purchase_price || 0) * (p.stock_quantity || 0)
                     }
                 });
@@ -335,10 +339,10 @@ async function exportToExcel(db, filePath, includeData = true) {
                     purchase_price: '',
                     sale_price: '',
                     initial_stock: '',
-                    purchased_qty: { formula: `=IF(A${rowNum}="","",SUMIF(المشتريات!E:E, A${rowNum}, المشتريات!F:F))` },
-                    sold_qty: { formula: `=IF(A${rowNum}="","",SUMIF(المبيعات!E:E, A${rowNum}, المبيعات!F:F))` },
-                    current_stock: { formula: `=IF(A${rowNum}="","",H${rowNum}+I${rowNum}-J${rowNum})` },
-                    stock_value: { formula: `=IF(A${rowNum}="","",F${rowNum}*K${rowNum})` }
+                    purchased_qty: { formula: `=IFERROR(IF(A${rowNum}="","",SUMIF(المشتريات!E:E, A${rowNum}, المشتريات!F:F)), "")` },
+                    sold_qty: { formula: `=IFERROR(IF(A${rowNum}="","",SUMIF(المبيعات!E:E, A${rowNum}, المبيعات!F:F)), "")` },
+                    current_stock: { formula: `=IFERROR(IF(A${rowNum}="","",N(H${rowNum})+N(I${rowNum})-N(J${rowNum})), "")` },
+                    stock_value: { formula: `=IFERROR(IF(A${rowNum}="","",N(F${rowNum})*N(K${rowNum})), "")` }
                 });
             }
         }
@@ -361,8 +365,8 @@ async function exportToExcel(db, filePath, includeData = true) {
             name: 'مثال: عميل تجريبي',
             phone: 'مثال: 99999999',
             opening_balance: 0,
-            sales_total: { formula: `=IF(A2="","",SUMIF(المبيعات!B3:B5002, B2, المبيعات!H3:H5002))`, result: 0 },
-            balance: { formula: `=IF(A2="","",D2+E2)`, result: 0 }
+            sales_total: { formula: `=IFERROR(IF(A2="","",SUMIF(المبيعات!B3:B5002, B2, المبيعات!H3:H5002)),0)`, result: 0 },
+            balance: { formula: `=IFERROR(IF(A2="","",N(D2)+N(E2)),0)`, result: 0 }
         });
 
         // Rows 3 to 1002
@@ -377,11 +381,11 @@ async function exportToExcel(db, filePath, includeData = true) {
                     phone: c.phone || '',
                     opening_balance: c.opening_balance || 0,
                     sales_total: {
-                        formula: `=IF(A${rowNum}="","",SUMIF(المبيعات!B3:B5002, B${rowNum}, المبيعات!H3:H5002))`,
+                        formula: `=IFERROR(IF(A${rowNum}="","",SUMIF(المبيعات!B3:B5002, B${rowNum}, المبيعات!H3:H5002)),0)`,
                         result: c.balance || 0
                     },
                     balance: {
-                        formula: `=IF(A${rowNum}="","",D${rowNum}+E${rowNum})`,
+                        formula: `=IFERROR(IF(A${rowNum}="","",N(D${rowNum})+N(E${rowNum})),0)`,
                         result: c.balance || 0
                     }
                 });
@@ -391,8 +395,8 @@ async function exportToExcel(db, filePath, includeData = true) {
                     name: '',
                     phone: '',
                     opening_balance: '',
-                    sales_total: { formula: `=IF(A${rowNum}="","",SUMIF(المبيعات!B3:B5002, B${rowNum}, المبيعات!H3:H5002))` },
-                    balance: { formula: `=IF(A${rowNum}="","",D${rowNum}+E${rowNum})` }
+                    sales_total: { formula: `=IFERROR(IF(A${rowNum}="","",SUMIF(المبيعات!B3:B5002, B${rowNum}, المبيعات!H3:H5002)),"")` },
+                    balance: { formula: `=IFERROR(IF(A${rowNum}="","",N(D${rowNum})+N(E${rowNum})),"")` }
                 });
             }
         }
@@ -415,8 +419,8 @@ async function exportToExcel(db, filePath, includeData = true) {
             name: 'مثال: مورد تجريبي',
             phone: 'مثال: 99999999',
             opening_balance: 0,
-            purchases_total: { formula: `=IF(A2="","",SUMIF(المشتريات!B3:B5002, B2, المشتريات!H3:H5002))`, result: 0 },
-            balance: { formula: `=IF(A2="","",D2+E2)`, result: 0 }
+            purchases_total: { formula: `=IFERROR(IF(A2="","",SUMIF(المشتريات!B3:B5002, B2, المشتريات!H3:H5002)),0)`, result: 0 },
+            balance: { formula: `=IFERROR(IF(A2="","",N(D2)+N(E2)),0)`, result: 0 }
         });
 
         // Rows 3 to 1002
@@ -431,11 +435,11 @@ async function exportToExcel(db, filePath, includeData = true) {
                     phone: s.phone || '',
                     opening_balance: s.opening_balance || 0,
                     purchases_total: {
-                        formula: `=IF(A${rowNum}="","",SUMIF(المشتريات!B3:B5002, B${rowNum}, المشتريات!H3:H5002))`,
+                        formula: `=IFERROR(IF(A${rowNum}="","",SUMIF(المشتريات!B3:B5002, B${rowNum}, المشتريات!H3:H5002)),0)`,
                         result: s.balance || 0
                     },
                     balance: {
-                        formula: `=IF(A${rowNum}="","",D${rowNum}+E${rowNum})`,
+                        formula: `=IFERROR(IF(A${rowNum}="","",N(D${rowNum})+N(E${rowNum})),0)`,
                         result: s.balance || 0
                     }
                 });
@@ -445,8 +449,8 @@ async function exportToExcel(db, filePath, includeData = true) {
                     name: '',
                     phone: '',
                     opening_balance: '',
-                    purchases_total: { formula: `=IF(A${rowNum}="","",SUMIF(المشتريات!B3:B5002, B${rowNum}, المشتريات!H3:H5002))` },
-                    balance: { formula: `=IF(A${rowNum}="","",D${rowNum}+E${rowNum})` }
+                    purchases_total: { formula: `=IFERROR(IF(A${rowNum}="","",SUMIF(المشتريات!B3:B5002, B${rowNum}, المشتريات!H3:H5002)),"")` },
+                    balance: { formula: `=IFERROR(IF(A${rowNum}="","",N(D${rowNum})+N(E${rowNum})),"")` }
                 });
             }
         }

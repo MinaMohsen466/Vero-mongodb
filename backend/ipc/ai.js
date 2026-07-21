@@ -5,9 +5,25 @@ module.exports = function(ipcMain, context) {
 
     ipcMain.handle('ai:chat', async (event, { message, history, contextInfo, imageData }) => {
         try {
+            // 0. Check DB connection status
+            if (db && !db.isConnected) {
+                return {
+                    success: false,
+                    error: 'تعذر الاتصال بقاعدة البيانات (MongoDB). يرجى التأكد من تشغيل خادم قاعدة البيانات أو مراجعة رابط الاتصال في صفحة الإعدادات.'
+                };
+            }
+
             // 1. Get AI settings from DB
-            const isEnabled = await db.settings.get('enable_ai_assistant');
-            const apiKey = await db.settings.get('gemini_api_key');
+            let isEnabled, apiKey;
+            try {
+                isEnabled = await db.settings.get('enable_ai_assistant');
+                apiKey = await db.settings.get('gemini_api_key');
+            } catch (dbErr) {
+                return {
+                    success: false,
+                    error: `تعذر الاتصال بقاعدة البيانات (MongoDB): ${dbErr.message}. يرجى التحقق من تشغيل قاعدة البيانات أو تغيير رابط الاتصال من الإعدادات.`
+                };
+            }
 
             if (isEnabled !== 'yes') {
                 return { success: false, error: 'المساعد الذكي غير مفعّل حالياً من الإعدادات.' };
@@ -49,7 +65,9 @@ Permissions Summary:
                     productsSummary = (allProducts || []).map(p => ({
                         id: p.id,
                         code: p.code,
-                        name: p.name
+                        name: p.name,
+                        purchase_price: p.purchase_price,
+                        sale_price: p.sale_price
                     }));
                 } catch (e) {
                     console.error("Error fetching products for AI prompt:", e);
@@ -249,6 +267,17 @@ JSON Structure:
 
         } catch (error) {
             console.error("AI IPC Error:", error);
+            const isConnError = error.message && (
+                error.message.includes('ECONNREFUSED') || 
+                error.message.includes('connect ECONNREFUSED') || 
+                error.message.includes('buffering timed out')
+            );
+            if (isConnError) {
+                return { 
+                    success: false, 
+                    error: `تعذر الاتصال بقاعدة البيانات (MongoDB). يرجى التأكد من تشغيل خادم قاعدة البيانات أو مراجعة إعدادات الاتصال من صفحة الإعدادات.\n(${error.message})` 
+                };
+            }
             return { success: false, error: `حدث خطأ أثناء معالجة الطلب: ${error.message}` };
         }
     });
