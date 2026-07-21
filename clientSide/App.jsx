@@ -88,6 +88,183 @@ function applyBrandColor(color) {
     document.documentElement.style.setProperty('--sidebar-active', hexToRgba(color, 0.25));
 }
 
+// ── DbConnectionScreen Component ──────────────────────────────────────────────
+function DbConnectionScreen({ t, language, changeLanguage, connectionError, hasConfig, onSave }) {
+    const [uri, setUri] = React.useState('');
+    const [testing, setTesting] = React.useState(false);
+    const [error, setError] = React.useState(connectionError || '');
+    const [success, setSuccess] = React.useState(false);
+
+    const handleTestAndSave = async (e) => {
+        e.preventDefault();
+        if (!uri) {
+            setError(language === 'ar' ? 'الرجاء إدخال رابط الاتصال بقاعدة البيانات' : 'Please enter database connection URI');
+            return;
+        }
+        setError('');
+        setTesting(true);
+        try {
+            const res = await onSave(uri);
+            if (res && !res.success) {
+                setError(res.error || (language === 'ar' ? 'فشل الاتصال بقاعدة البيانات. تأكد من صحة الرابط والإنترنت.' : 'Connection failed. Verify URI and internet.'));
+            } else {
+                setSuccess(true);
+            }
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setTesting(false);
+        }
+    };
+
+    const dir = language === 'ar' ? 'rtl' : 'ltr';
+
+    return (
+        <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            minHeight: '100vh', padding: 20, background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+            color: '#f8fafc', fontFamily: 'system-ui, -apple-system, sans-serif', direction: dir
+        }}>
+            <div style={{
+                width: '100%', maxWidth: 540, background: 'rgba(30, 41, 59, 0.7)',
+                backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 16, padding: 32, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2)'
+            }}>
+                <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                    <div style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 60, height: 60, borderRadius: '50%', background: 'rgba(37, 99, 235, 0.15)',
+                        color: '#3b82f6', marginBottom: 16
+                    }}>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                            <path d="M3 5V19A9 3 0 0 0 21 19V5"></path>
+                            <path d="M3 12A9 3 0 0 0 21 12"></path>
+                        </svg>
+                    </div>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
+                        {language === 'ar' ? 'إعداد قاعدة البيانات السحابية' : 'Configure Cloud Database'}
+                    </h2>
+                    <p style={{ fontSize: '.875rem', color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
+                        {language === 'ar'
+                            ? 'الرجاء إدخال رابط اتصال MongoDB Atlas لمزامنة بيانات هذا الجهاز مع السحاب.'
+                            : 'Please enter your MongoDB Atlas connection string to sync this device with the cloud.'}
+                    </p>
+                </div>
+
+                {error && (
+                    <div style={{
+                        background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)',
+                        borderRadius: 8, padding: '12px 16px', marginBottom: 20, fontSize: '.85rem', color: '#fca5a5',
+                        lineHeight: 1.5, display: 'flex', gap: 10, alignItems: 'flex-start'
+                    }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 2 }}>
+                            <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <div>
+                            <strong>{language === 'ar' ? 'خطأ في الاتصال:' : 'Connection Error:'}</strong>
+                            <div style={{ marginTop: 4, fontFamily: 'monospace', wordBreak: 'break-all' }}>{error}</div>
+                        </div>
+                    </div>
+                )}
+
+                {success ? (
+                    <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                        <div style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            width: 50, height: 50, borderRadius: '50%', background: 'rgba(16, 185, 129, 0.15)',
+                            color: '#10b981', marginBottom: 16
+                        }}>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: 600, margin: 0, color: '#f8fafc' }}>
+                            {language === 'ar' ? 'تم حفظ الاتصال بنجاح!' : 'Connection saved successfully!'}
+                        </h3>
+                        <p style={{ fontSize: '.875rem', color: '#94a3b8', marginTop: 8 }}>
+                            {language === 'ar' ? 'يجري الآن إعادة تشغيل التطبيق للاتصال...' : 'Relaunching application to connect...'}
+                        </p>
+                    </div>
+                ) : (
+                    <form onSubmit={handleTestAndSave}>
+                        <div style={{ marginBottom: 20 }}>
+                            <label style={{ display: 'block', fontSize: '.875rem', fontWeight: 500, color: '#cbd5e1', marginBottom: 8 }}>
+                                {language === 'ar' ? 'رابط الاتصال (Connection URI):' : 'Connection String URI:'}
+                            </label>
+                            <textarea
+                                value={uri}
+                                onChange={(e) => setUri(e.target.value)}
+                                placeholder="mongodb+srv://user:password@cluster0.mongodb.net/vero"
+                                required
+                                disabled={testing}
+                                style={{
+                                    width: '100%', height: 100, padding: 12, borderRadius: 8,
+                                    background: '#0f172a', border: '1px solid #334155', color: '#f8fafc',
+                                    fontSize: '.85rem', fontFamily: 'monospace', outline: 'none', resize: 'none',
+                                    transition: 'border-color 0.2s', direction: 'ltr'
+                                }}
+                            />
+                            <span style={{ fontSize: '.75rem', color: '#64748b', marginTop: 6, display: 'block', lineHeight: 1.4 }}>
+                                {language === 'ar'
+                                    ? 'تنبيه: تأكد من تهيئة شبكة Atlas (IP Access List) للسماح بالاتصال من أي مكان (0.0.0.0/0).'
+                                    : 'Note: Ensure your MongoDB Atlas IP Access List allows connections from anywhere (0.0.0.0/0).'}
+                            </span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+                            <button
+                                type="submit"
+                                disabled={testing}
+                                style={{
+                                    flex: 1, padding: '10px 16px', borderRadius: 8, background: '#2563eb',
+                                    color: '#fff', border: 'none', fontSize: '.9rem', fontWeight: 600,
+                                    cursor: 'pointer', transition: 'background 0.2s', display: 'flex',
+                                    alignItems: 'center', justifyContent: 'center', gap: 8
+                                }}
+                            >
+                                {testing ? (
+                                    <>
+                                        <span className="spinner-border" style={{
+                                            width: 14, height: 14, border: '2px solid #fff',
+                                            borderTopColor: 'transparent', borderRadius: '50%',
+                                            display: 'inline-block', animation: 'spin 1s linear infinite'
+                                        }} />
+                                        {language === 'ar' ? 'جاري التحقق...' : 'Verifying...'}
+                                    </>
+                                ) : (
+                                    language === 'ar' ? 'اختبار وحفظ الرابط' : 'Test & Save Connection'
+                                )}
+                            </button>
+
+                            {/* Cloud URI entry only, no revert to local option */}
+                        </div>
+                    </form>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 28, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '.8rem' }}>
+                    <span
+                        onClick={() => changeLanguage('ar')}
+                        style={{ cursor: 'pointer', color: language === 'ar' ? '#3b82f6' : '#64748b', fontWeight: language === 'ar' ? 600 : 400 }}
+                    >
+                        العربية
+                    </span>
+                    <span style={{ color: '#334155' }}>|</span>
+                    <span
+                        onClick={() => changeLanguage('en')}
+                        style={{ cursor: 'pointer', color: language === 'en' ? '#3b82f6' : '#64748b', fontWeight: language === 'en' ? 600 : 400 }}
+                    >
+                        English
+                    </span>
+                </div>
+            </div>
+            <style dangerouslySetInnerHTML={{__html: `
+                @keyframes spin { to { transform: rotate(360deg); } }
+            `}} />
+        </div>
+    );
+}
+
 export { AuthContext, useAuth };
 
 function App() {
@@ -98,6 +275,9 @@ function App() {
     const [language, setLanguage] = useState('ar');
     const [isFirstRun, setIsFirstRun] = useState(false);
     const [showShortcutsPanel, setShowShortcutsPanel] = useState(false);
+    const [dbConnected, setDbConnected] = useState(true);
+    const [dbError, setDbError] = useState('');
+    const [hasDbConfig, setHasDbConfig] = useState(false);
 
     // Memoize translation function
     const t = useCallback((key) => {
@@ -106,6 +286,24 @@ function App() {
 
     useEffect(() => {
         const initApp = async () => {
+            // Check Database connection first
+            try {
+                const dbStatus = await window.api.database.getConnectionStatus();
+                setDbConnected(dbStatus.isConnected);
+                setDbError(dbStatus.error || '');
+                setHasDbConfig(dbStatus.hasConfiguredUri);
+                if (!dbStatus.isConnected) {
+                    setLoading(false);
+                    return;
+                }
+            } catch (dbErr) {
+                console.error("Error checking database connection status:", dbErr);
+                setDbConnected(false);
+                setDbError(dbErr.message || 'Failed to connect to database');
+                setLoading(false);
+                return;
+            }
+
             try {
                 const isReinstall = await window.api.system.checkReinstall();
                 if (isReinstall) {
@@ -303,6 +501,25 @@ function App() {
 
     if (loading) {
         return <LoadingScreen />;
+    }
+
+    if (!dbConnected) {
+        return (
+            <AuthContext.Provider value={{ t, language, setLanguage }}>
+                <Toaster position="top-center" reverseOrder={false} />
+                <DbConnectionScreen
+                    t={t}
+                    language={language}
+                    changeLanguage={setLanguage}
+                    connectionError={dbError}
+                    hasConfig={hasDbConfig}
+                    onSave={async (uri) => {
+                        const result = await window.api.database.setConnectionUri(uri);
+                        return result;
+                    }}
+                />
+            </AuthContext.Provider>
+        );
     }
 
     if (isFirstRun) {

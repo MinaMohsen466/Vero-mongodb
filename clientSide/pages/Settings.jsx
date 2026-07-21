@@ -383,6 +383,10 @@ export default function Settings() {
     const [users, setUsers] = useState([]);
     const [dbPath, setDbPath] = useState('');
     const [dbSize, setDbSize] = useState('');
+    const [dbStatus, setDbStatus] = useState({ isConnected: true, error: '', hasConfiguredUri: false, isCloud: false });
+    const [cloudModalOpen, setCloudModalOpen] = useState(false);
+    const [newCloudUri, setNewCloudUri] = useState('');
+    const [cloudError, setCloudError] = useState('');
     const [logoPreview, setLogoPreview] = useState('');
     const [showPw, setShowPw] = useState(false);
     const [showUserModal, setShowUserModal] = useState(false);
@@ -568,6 +572,16 @@ export default function Settings() {
                 window.api.settings?.getDbSize?.() || ''
             ]);
             setDbPath(path || ''); setDbSize(size || '');
+            
+            // Load Database status
+            if (window.api.database?.getConnectionStatus) {
+                try {
+                    const stat = await window.api.database.getConnectionStatus();
+                    setDbStatus(stat || { isConnected: true, error: '', hasConfiguredUri: false, isCloud: false });
+                } catch (dbStatErr) {
+                    console.error("Error loading database connection status:", dbStatErr);
+                }
+            }
             
             // Load backup path
             if (window.api.database?.getBackupPath) {
@@ -1498,6 +1512,8 @@ export default function Settings() {
                         products: t('log_module_products') || 'المنتجات',
                         sales_invoices: t('log_module_sales_invoices') || 'فواتير المبيعات',
                         purchase_invoices: t('log_module_purchase_invoices') || 'فواتير المشتريات',
+                        sales_returns: t('log_module_sales_returns') || 'مرتجع مبيعات',
+                        purchase_returns: t('log_module_purchase_returns') || 'مرتجع مشتريات',
                         vouchers: t('log_module_vouchers') || 'السندات',
                         journal_entries: t('log_module_journal_entries') || 'القيود',
                         employees: t('log_module_employees') || 'الموظفون',
@@ -1509,6 +1525,42 @@ export default function Settings() {
                         leaves: t('log_module_leaves') || 'الإجازات',
                         deductions: t('log_module_deductions') || 'الاستقطاعات',
                         rent: t('log_module_rent') || 'الإيجار',
+                        expenses: t('log_module_expenses') || 'المصروفات',
+                        warehouse: t('log_module_warehouse') || 'المخزن',
+                    };
+                    const getFriendlyDescription = (log, actionText, moduleText) => {
+                        if (!log.entity_ref) return '—';
+                        if (log.action === 'login') {
+                            return `تسجيل دخول الحساب (${log.entity_ref})`;
+                        }
+                        
+                        let actionWord = '';
+                        if (log.action === 'create') actionWord = 'إضافة';
+                        else if (log.action === 'update') actionWord = 'تعديل';
+                        else if (log.action === 'delete') actionWord = 'حذف';
+                        else actionWord = actionText;
+
+                        let itemWord = moduleText;
+                        if (log.module === 'products') itemWord = 'المنتج';
+                        else if (log.module === 'customers') itemWord = 'العميل';
+                        else if (log.module === 'suppliers') itemWord = 'المورد';
+                        else if (log.module === 'sales_invoices') itemWord = 'فاتورة المبيعات';
+                        else if (log.module === 'purchase_invoices') itemWord = 'فاتورة المشتريات';
+                        else if (log.module === 'sales_returns') itemWord = 'مرتجع المبيعات';
+                        else if (log.module === 'purchase_returns') itemWord = 'مرتجع المشتريات';
+                        else if (log.module === 'vouchers') itemWord = 'السند';
+                        else if (log.module === 'journal_entries') itemWord = 'القيد';
+                        else if (log.module === 'employees') itemWord = 'الموظف';
+                        else if (log.module === 'users') itemWord = 'المستخدم';
+                        else if (log.module === 'accounts') itemWord = 'الحساب';
+                        else if (log.module === 'coupons') itemWord = 'الكوبون';
+                        else if (log.module === 'offers') itemWord = 'العرض';
+                        else if (log.module === 'leaves') itemWord = 'طلب الإجازة';
+                        else if (log.module === 'deductions') itemWord = 'الاستقطاع';
+                        else if (log.module === 'expenses') itemWord = 'المصروف';
+                        else if (log.module === 'warehouse') itemWord = 'حركة المخزن';
+                        
+                        return `${actionWord} ${itemWord} (${log.entity_ref})`;
                     };
                     const allModules = [...new Set(Object.keys(moduleLabels))];
 
@@ -1602,7 +1654,7 @@ export default function Settings() {
                                                     <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', width: '25%' }}>{t('user') || 'المستخدم'}</th>
                                                     <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)', width: '15%' }}>{t('log_filter_action') || 'النوع'}</th>
                                                     <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', width: '15%' }}>{t('log_filter_module') || 'الوحدة'}</th>
-                                                    <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', width: '20%' }}>{t('log_entity_ref') || 'المرجع'}</th>
+                                                    <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)', width: '25%' }}>{t('log_details') || 'تفاصيل العملية'}</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -1654,14 +1706,12 @@ export default function Settings() {
                                                                     <span>{modLabel}</span>
                                                                 </div>
                                                             </td>
-                                                            <td style={{ padding: '12px 16px', verticalAlign: 'middle', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.entity_ref}>
-                                                                {log.entity_ref ? (
-                                                                    <span style={{
-                                                                        fontFamily: 'monospace', fontSize: '.78rem', background: 'var(--bg-secondary)', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-light)', display: 'inline-block', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-secondary)'
-                                                                    }}>
-                                                                        {log.entity_ref}
-                                                                    </span>
-                                                                ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                                                            <td style={{ padding: '12px 16px', verticalAlign: 'middle', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.entity_ref}>
+                                                                <span style={{
+                                                                    fontSize: '.85rem', fontWeight: 600, color: 'var(--text-secondary)'
+                                                                }}>
+                                                                    {getFriendlyDescription(log, label, modLabel)}
+                                                                </span>
                                                             </td>
                                                         </tr>
                                                     );
@@ -1692,6 +1742,36 @@ export default function Settings() {
                 })()}
                                             {/* ══ 8. DATABASE ════════════════════════════════════════════════════ */}
                 {sec === 'database' && (isAdmin || user?.permissions?.database?.can_view) && <>
+                    {/* Database Connection Settings */}
+                    <Card title={t('database_connection') || 'اتصال قاعدة البيانات'} icon={Database}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                                <div>
+                                    <div style={{ fontSize: '.875rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: dbStatus.isConnected ? '#10b981' : '#ef4444', display: 'inline-block' }} />
+                                        {t('cloud_database') || 'قاعدة بيانات سحابية (Cloud)'}
+                                    </div>
+                                    <div style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                                        {dbStatus.isConnected 
+                                            ? (t('connected_success') || 'متصل بنجاح بقاعدة البيانات') 
+                                            : `${t('connection_failed') || 'فشل الاتصال'}: ${dbStatus.error}`}
+                                    </div>
+                                </div>
+                                <button
+                                    style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }}
+                                    onClick={() => {
+                                        setNewCloudUri('');
+                                        setCloudError('');
+                                        setCloudModalOpen(true);
+                                    }}
+                                    disabled={saving}
+                                >
+                                    {t('connect_cloud') || 'تحديث رابط الاتصال'}
+                                </button>
+                            </div>
+                        </div>
+                    </Card>
+
                     <Card title={t('backup_and_restore') || 'النسخ الاحتياطي والاستعادة'} icon={Database}>
                         <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
                             {t('backup_hint') || 'قم بأخذ نسخ احتياطية بانتظام لحماية بياناتك.'}
@@ -1706,87 +1786,6 @@ export default function Settings() {
                         </div>
                     </Card>
 
-                    <Card title={t('automatic_backup') || 'النسخة الاحتياطية الآلية'} icon={HardDrive}>
-                        <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
-                            اختر مسار احتياطي بديل لحفظ نسخة من البيانات تلقائياً عند كل عملية تحديث
-                        </p>
-                        <Fld label="مسار النسخة الاحتياطية">
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
-                                <input 
-                                    className="form-input" 
-                                    value={backupPath || ''} 
-                                    readOnly
-                                    placeholder="لم يتم تحديد مسار بعد"
-                                    style={{ ...inp, flex: 1, background: 'var(--bg-secondary)' }} 
-                                />
-                                <button 
-                                    style={{ ...btnStyle, background: 'var(--primary)', color: '#fff', flexShrink: 0 }} 
-                                    onClick={async () => {
-                                        setSaving(true);
-                                        try {
-                                            const res = await window.api.database.selectBackupPath();
-                                            if (res.success && res.path) {
-                                                // اختبر المسار أولاً
-                                                const testRes = await window.api.database.testBackupPath(res.path);
-                                                if (testRes.success) {
-                                                    // عيّن المسار
-                                                    const setRes = await window.api.database.setBackupPath(res.path);
-                                                    if (setRes.success) {
-                                                        setBackupPath(res.path);
-                                                        toast.success('تم تعيين مسار النسخة الاحتياطية بنجاح');
-                                                    } else {
-                                                        toast.error(setRes.error || 'فشل تعيين المسار');
-                                                    }
-                                                } else {
-                                                    toast.error(testRes.error || 'المسار غير قابل للكتابة');
-                                                }
-                                            }
-                                        } catch (e) {
-                                            toast.error('خطأ في اختيار المسار: ' + e.message);
-                                        }
-                                        setSaving(false);
-                                    }}
-                                    disabled={saving}
-                                >
-                                    <FolderOpen size={14} /> اختر المسار
-                                </button>
-                            </div>
-                        </Fld>
-                        {backupPath && (
-                            <div style={{ marginTop: 14, padding: '10px 12px', background: 'rgba(16,185,129,0.08)', borderLeft: '3px solid #10b981', borderRadius: 6 }}>
-                                <div style={{ fontSize: '.825rem', fontWeight: 500, marginBottom: 6, color: '#059669' }}>
-                                    ✓ مسار النسخة الاحتياطية نشط
-                                </div>
-                                <div style={{ fontSize: '.8rem', color: 'var(--text-muted)' }}>
-                                    {backupLastTime && <>آخر نسخة احتياطية: {new Date(backupLastTime).toLocaleString('ar-SA')}</>}
-                                </div>
-                            </div>
-                        )}
-                        {backupPath && (
-                            <button 
-                                style={{ ...btnStyle, marginTop: 10, background: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)' }}
-                                onClick={async () => {
-                                    setSaving(true);
-                                    try {
-                                        const res = await window.api.database.setBackupPath(null);
-                                        if (res.success) {
-                                            setBackupPath(null);
-                                            setBackupLastTime(null);
-                                            toast.success('تم إلغاء النسخة الاحتياطية');
-                                        } else {
-                                            toast.error(res.error);
-                                        }
-                                    } catch (e) {
-                                        toast.error('خطأ: ' + e.message);
-                                    }
-                                    setSaving(false);
-                                }}
-                                disabled={saving}
-                            >
-                                <X size={14} /> إلغاء النسخة الاحتياطية
-                            </button>
-                        )}
-                    </Card>
 
                     {user?.permissions?.products?.can_delete && (
                         <Card title={t('prod_deleteAll') || 'حذف كل المنتجات'} icon={AlertTriangle} action={
@@ -1850,6 +1849,70 @@ export default function Settings() {
                         <button className="btn btn-primary" onClick={saveUser}><Save size={14} /> {t('save') || 'Save'}</button>
                         <button className="btn btn-secondary" onClick={() => setShowUserModal(false)}>{t('cancel') || 'Cancel'}</button>
                     </div>
+                </Modal>
+            )}
+
+            {/* ── Cloud Database URI Settings Modal ───────────────────────────────── */}
+            {cloudModalOpen && (
+                <Modal isOpen={cloudModalOpen} onClose={() => setCloudModalOpen(false)} title={t('database_connection') || 'اتصال قاعدة البيانات'}>
+                    <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!newCloudUri) return;
+                        setCloudError('');
+                        setSaving(true);
+                        try {
+                            const res = await window.api.database.setConnectionUri(newCloudUri);
+                            if (res.success) {
+                                toast.success(t('connection_saved_relaunching') || 'تم حفظ الاتصال بنجاح! يجري إعادة تشغيل التطبيق...');
+                                setCloudModalOpen(false);
+                            } else {
+                                setCloudError(res.error || 'فشل الاتصال بالرابط المدخل');
+                            }
+                        } catch (err) {
+                            setCloudError(err.message);
+                        } finally {
+                            setSaving(false);
+                        }
+                    }}>
+                        <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.5 }}>
+                            {t('switch_to_cloud_desc') || 'أدخل رابط اتصال MongoDB Atlas لربط هذا الجهاز ومزامنة البيانات في الوقت الحقيقي.'}
+                        </p>
+                        {cloudError && (
+                            <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: 6, padding: 10, color: 'var(--danger)', fontSize: '.8rem', marginBottom: 14, wordBreak: 'break-all' }}>
+                                {cloudError}
+                            </div>
+                        )}
+                        <Fld label={t('enter_mongodb_uri') || 'رابط الاتصال (Connection URI):'}>
+                            <textarea
+                                className="form-input"
+                                value={newCloudUri}
+                                onChange={e => setNewCloudUri(e.target.value)}
+                                placeholder="mongodb+srv://user:password@cluster0.mongodb.net/vero"
+                                required
+                                disabled={saving}
+                                style={{ ...inp, height: 80, resize: 'none', fontFamily: 'monospace', direction: 'ltr' }}
+                            />
+                        </Fld>
+                        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+                            <button 
+                                className="btn btn-secondary" 
+                                type="button" 
+                                onClick={() => setCloudModalOpen(false)}
+                                disabled={saving}
+                                style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                            >
+                                {t('cancel') || 'إلغاء'}
+                            </button>
+                            <button 
+                                className="btn btn-primary" 
+                                type="submit"
+                                disabled={saving}
+                                style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }}
+                            >
+                                {saving ? (t('saving') || 'جارٍ الحفظ...') : (t('save') || 'حفظ واختبار')}
+                            </button>
+                        </div>
+                    </form>
                 </Modal>
             )}
 

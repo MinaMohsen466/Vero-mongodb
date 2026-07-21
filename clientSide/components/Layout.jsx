@@ -74,10 +74,10 @@ const menuItems = [
 function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
     const { user, logout, theme, toggleTheme, t, language } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(currentPage === 'pos');
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(currentPage === 'pos' || currentPage === 'settings' || currentPage === 'reports');
 
     useEffect(() => {
-        setSidebarCollapsed(currentPage === 'pos');
+        setSidebarCollapsed(currentPage === 'pos' || currentPage === 'settings' || currentPage === 'reports');
     }, [currentPage]);
 
     // Filter menu items based on user permissions

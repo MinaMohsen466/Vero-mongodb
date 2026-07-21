@@ -40,8 +40,14 @@ module.exports = function(ipcMain, context) {
     });
 
     ipcMain.handle('users:delete', async (event, id) => {
+        let username = String(id);
+        try {
+            const all = await db.users.getAll();
+            const found = all.find(u => u.id === id);
+            if (found) username = found.username;
+        } catch (e) {}
         const result = await db.users.delete(id);
-        if (result.success) await logActivity('delete', 'users', id, String(id), {});
+        if (result.success) await logActivity('delete', 'users', id, username, {});
         return result;
     });
 

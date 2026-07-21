@@ -233,7 +233,10 @@ contextBridge.exposeInMainWorld('api', {
         getBackupPath: () => ipcRenderer.invoke('database:getBackupPath'),
         setBackupPath: (backupPath) => ipcRenderer.invoke('database:setBackupPath', backupPath),
         testBackupPath: (testPath) => ipcRenderer.invoke('database:testBackupPath', testPath),
-        selectBackupPath: () => ipcRenderer.invoke('database:selectBackupPath')
+        selectBackupPath: () => ipcRenderer.invoke('database:selectBackupPath'),
+        getConnectionStatus: () => ipcRenderer.invoke('database:getConnectionStatus'),
+        setConnectionUri: (uri) => ipcRenderer.invoke('database:setConnectionUri', uri),
+        clearConnectionUri: () => ipcRenderer.invoke('database:clearConnectionUri')
     },
 
     // Activity Log

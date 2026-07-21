@@ -16,7 +16,7 @@ const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#3B82F6', '#8B5CF6'
 const MONTHS_AR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function Reports() {
-    const { t, user } = useAuth();
+    const { t, user, theme } = useAuth();
     const [activeReport, setActiveReport] = useState('sales_summary');
     const [customers, setCustomers] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
@@ -577,7 +577,6 @@ function Reports() {
         { id: 'purchases_summary', label: t('rep_purchasesReport') || 'Purchases Report', icon: TrendingDown },
         { id: 'profit_loss', label: t('rep_profitLoss') || 'Profit & Loss', icon: BarChart2 },
         { id: 'aging_report', label: t('rep_aging_report') || 'تقرير أعمار الديون', icon: Calendar },
-        // { id: 'product_profitability', label: t('rep_product_profitability') || 'تقرير ربحية المنتجات والتصنيفات', icon: BarChart3 },
         { id: 'cash_flow', label: t('rep_cash_flow') || 'تقرير حركة التدفقات النقدية والسيولة', icon: DollarSign },
         { id: 'trial_balance', label: t('rep_trialBalance') || 'Trial Balance', icon: FileText },
     ];
@@ -587,32 +586,44 @@ function Reports() {
 
             {/* ── Sidebar ────────────────────────────── */}
             <div style={{
-                width: '210px', flexShrink: 0, background: 'var(--bg-primary)',
-                borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column',
-                padding: '16px 10px', gap: '4px', overflowY: 'auto'
+                width: 220, flexShrink: 0,
+                background: theme === 'dark' ? 'rgba(30, 41, 59, 0.45)' : 'rgba(255, 255, 255, 0.45)',
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
+                borderLeft: '1px solid var(--border)',
+                borderRadius: '16px',
+                margin: '16px 8px 16px 16px',
+                padding: '16px 8px',
+                boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.05)',
+                display: 'flex', flexDirection: 'column', overflowY: 'auto',
+                transition: 'all 0.3s ease'
             }}>
-                <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', padding: '0 8px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    {t('menu_reports')}
-                </p>
-                {reports.map(r => (
-                    <button
-                        key={r.id}
-                        onClick={() => setActiveReport(r.id)}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: '9px',
-                            padding: '9px 12px', borderRadius: '9px', border: 'none',
-                            cursor: 'pointer', textAlign: 'right', fontSize: '0.85rem',
-                            fontWeight: activeReport === r.id ? 700 : 400,
-                            background: activeReport === r.id ? 'rgba(99,102,241,0.1)' : 'transparent',
-                            color: activeReport === r.id ? 'var(--primary)' : 'var(--text-secondary)',
-                            transition: 'all 0.15s'
-                        }}
-                    >
-                        <r.icon size={16} style={{ flexShrink: 0 }} />
-                        <span style={{ flex: 1 }}>{r.label}</span>
-                        {activeReport === r.id && <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--primary)' }} />}
-                    </button>
-                ))}
+                <div style={{ padding: '0 12px 10px', fontSize: '.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                    {t('menu_reports') || 'التقارير'}
+                </div>
+                {reports.map(r => {
+                    const active = activeReport === r.id;
+                    return (
+                        <button
+                            key={r.id}
+                            onClick={() => setActiveReport(r.id)}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', margin: '4px 6px',
+                                borderRadius: 10, border: 'none', cursor: 'pointer', textAlign: 'right', fontSize: '.85rem',
+                                fontWeight: active ? 700 : 500, fontFamily: 'inherit',
+                                background: active ? 'var(--primary-light)' : 'transparent',
+                                color: active ? 'var(--primary)' : 'var(--text-secondary)',
+                                transition: 'all 0.25s ease',
+                                position: 'relative',
+                                borderRight: active ? '3px solid var(--primary)' : '3px solid transparent',
+                                paddingRight: active ? 11 : 14
+                            }}
+                        >
+                            <r.icon size={15} style={{ flexShrink: 0 }} />
+                            <span style={{ flex: 1 }}>{r.label}</span>
+                        </button>
+                    );
+                })}
             </div>
 
             {/* ── Main ───────────────────────────────── */}

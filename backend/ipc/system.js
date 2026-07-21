@@ -402,6 +402,47 @@ module.exports = function(ipcMain, context) {
         }
     });
 
+    ipcMain.handle('database:getConnectionStatus', async () => {
+        try {
+            return db.getConnectionStatus();
+        } catch (e) {
+            console.error('[database:getConnectionStatus] Error:', e);
+            return { isConnected: false, error: e.message, hasConfiguredUri: false };
+        }
+    });
+
+    ipcMain.handle('database:setConnectionUri', async (event, uri) => {
+        try {
+            const result = await db.setConnectionUri(uri);
+            if (result.success) {
+                setTimeout(() => {
+                    app.relaunch();
+                    app.exit(0);
+                }, 1000);
+            }
+            return result;
+        } catch (e) {
+            console.error('[database:setConnectionUri] Error:', e);
+            return { success: false, error: e.message };
+        }
+    });
+
+    ipcMain.handle('database:clearConnectionUri', async () => {
+        try {
+            const result = await db.clearConnectionUri();
+            if (result.success) {
+                setTimeout(() => {
+                    app.relaunch();
+                    app.exit(0);
+                }, 1000);
+            }
+            return result;
+        } catch (e) {
+            console.error('[database:clearConnectionUri] Error:', e);
+            return { success: false, error: e.message };
+        }
+    });
+
     // --- Window Refocus Fix ---
     ipcMain.on('window:refocus', () => {
         if (context.mainWindow) {

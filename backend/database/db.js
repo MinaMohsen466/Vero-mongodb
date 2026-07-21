@@ -81,6 +81,9 @@ class AppDatabase {
         this.lastAutoBackupTime = 0;
         this.cache = new CacheManager(30000); // 30 seconds TTL
         this.isReady = false;
+        this.isConnected = false;
+        this.connectionError = '';
+        this.mongoUri = null;
     }
 
     setAdminConfig(adminConfig) {
@@ -180,35 +183,64 @@ class AppDatabase {
                 if (fs.existsSync(this.configPath)) {
                     config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
                 }
-                config.mongoUri = mongoUri;
+                const key = this.adminConfig && typeof this.adminConfig.getBackupKey === 'function' 
+                    ? this.adminConfig.getBackupKey() 
+                    : crypto.createHash('sha256').update('VeroDB_Secure_Backup_Fixed_Key_Phrase_2026').digest('hex');
+                config.mongoUri = encryptData(mongoUri, key);
                 fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2), 'utf8');
             } catch (configError) {
-                console.error('[DB] Failed to save MongoDB URI to config file:', configError.message);
+                console.error('[DB] Failed to encrypt/save MongoDB URI to config file:', configError.message);
             }
         } else {
             try {
                 if (fs.existsSync(this.configPath)) {
                     const config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
                     if (config.mongoUri) {
-                        mongoUri = config.mongoUri;
+                        if (config.mongoUri.startsWith('mongodb://') || config.mongoUri.startsWith('mongodb+srv://')) {
+                            // Unencrypted legacy config, migrate to encrypted
+                            mongoUri = config.mongoUri;
+                            const key = this.adminConfig && typeof this.adminConfig.getBackupKey === 'function' 
+                                ? this.adminConfig.getBackupKey() 
+                                : crypto.createHash('sha256').update('VeroDB_Secure_Backup_Fixed_Key_Phrase_2026').digest('hex');
+                            config.mongoUri = encryptData(mongoUri, key);
+                            fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2), 'utf8');
+                        } else {
+                            // Decrypt config
+                            const key = this.adminConfig && typeof this.adminConfig.getBackupKey === 'function' 
+                                ? this.adminConfig.getBackupKey() 
+                                : crypto.createHash('sha256').update('VeroDB_Secure_Backup_Fixed_Key_Phrase_2026').digest('hex');
+                            mongoUri = decryptData(config.mongoUri, key);
+                        }
                     }
                 }
-            } catch (e) {}
-        }
-
-        console.log('[DB] Connecting to MongoDB:', mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
-        await mongoose.connect(mongoUri);
-        console.log('[DB] Connected to MongoDB');
-
-        // Sync all sequences
-        for (const [name, model] of Object.entries(collections)) {
-            if (name !== 'counters') {
-                await syncSequence(name, model);
+            } catch (e) {
+                console.error('[DB] Failed to read/decrypt mongoUri from config file:', e.message);
             }
         }
 
-        this.initRepositories();
-        await this.seedDefaultData();
+        this.mongoUri = mongoUri;
+        console.log('[DB] Connecting to MongoDB:', mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
+
+        try {
+            await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
+            console.log('[DB] Connected to MongoDB');
+            this.isConnected = true;
+
+            // Sync all sequences
+            for (const [name, model] of Object.entries(collections)) {
+                if (name !== 'counters') {
+                    await syncSequence(name, model);
+                }
+            }
+            this.initRepositories();
+            await this.seedDefaultData();
+        } catch (connectionError) {
+            console.error('[DB] Database connection failed:', connectionError.message);
+            this.isConnected = false;
+            this.connectionError = connectionError.message;
+            this.initRepositories(); // safe initialization of repository properties
+        }
+
         this.isReady = true;
     }
 
@@ -715,6 +747,70 @@ class AppDatabase {
 
     async changeDbPath(newFolderPath) {
         return { success: true };
+    }
+
+    getConnectionStatus() {
+        return {
+            isConnected: this.isConnected || false,
+            error: this.connectionError || '',
+            hasConfiguredUri: !!(this.mongoUri && this.mongoUri !== 'mongodb://127.0.0.1:27017/vero'),
+            isCloud: !!(this.mongoUri && (this.mongoUri.startsWith('mongodb+srv://') || (!this.mongoUri.includes('127.0.0.1') && !this.mongoUri.includes('localhost'))))
+        };
+    }
+
+    async setConnectionUri(uri) {
+        try {
+            if (!uri) {
+                return { success: false, error: 'الرجاء إدخال رابط اتصال صالح' };
+            }
+            const trimmed = uri.trim();
+            if (!trimmed.startsWith('mongodb://') && !trimmed.startsWith('mongodb+srv://')) {
+                return { success: false, error: 'يجب أن يبدأ الرابط بـ mongodb:// أو mongodb+srv://' };
+            }
+
+            // Test connection first
+            console.log('[DB] Testing connection to:', trimmed.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
+            const testConnection = await mongoose.createConnection(trimmed, { serverSelectionTimeoutMS: 5000 }).asPromise();
+            await testConnection.close();
+            console.log('[DB] Test connection successful');
+
+            // Save connection to config
+            const configDir = path.dirname(this.configPath);
+            if (!fs.existsSync(configDir)) {
+                fs.mkdirSync(configDir, { recursive: true });
+            }
+            let config = {};
+            if (fs.existsSync(this.configPath)) {
+                try {
+                    config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+                } catch (e) {}
+            }
+
+            // Encrypt URI
+            const key = this.adminConfig && typeof this.adminConfig.getBackupKey === 'function' 
+                ? this.adminConfig.getBackupKey() 
+                : crypto.createHash('sha256').update('VeroDB_Secure_Backup_Fixed_Key_Phrase_2026').digest('hex');
+            config.mongoUri = encryptData(trimmed, key);
+            fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2), 'utf8');
+
+            return { success: true };
+        } catch (e) {
+            console.error('[DB] Test connection failed:', e.message);
+            return { success: false, error: e.message };
+        }
+    }
+
+    async clearConnectionUri() {
+        try {
+            if (fs.existsSync(this.configPath)) {
+                let config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+                delete config.mongoUri;
+                fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2), 'utf8');
+            }
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
     }
 
     async testBackupPath(testPath) {
