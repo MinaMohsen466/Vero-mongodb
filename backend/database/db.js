@@ -1,6 +1,15 @@
 const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
+const dns = require('dns');
+
+// Configure Node.js DNS to use public DNS servers (Google DNS & Cloudflare DNS)
+// to fix querySrv ETIMEOUT issues caused by local network/router DNS on mongodb+srv:// links
+try {
+    dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4', '1.0.0.1']);
+} catch (dnsErr) {
+    console.warn('[DB] Could not set custom DNS servers:', dnsErr.message);
+}
 
 // Password security and backup encryption helpers
 const {
@@ -800,7 +809,15 @@ class AppDatabase {
             return { success: true };
         } catch (e) {
             console.error('[DB] Test connection failed:', e.message);
-            return { success: false, error: e.message };
+            let userError = e.message;
+            if (e.message.includes('querySrv') || e.message.includes('ETIMEOUT')) {
+                userError = `خطأ في دقة خادم الأسماء (querySrv ETIMEOUT). تعذر الوصول إلى MongoDB Atlas عبر DNS المحلي. تم تطبيق تغيير خوادم DNS تلقائياً، يرجى إعادة المحاولة الآن.`;
+            } else if (e.message.includes('Authentication failed') || e.message.includes('bad auth')) {
+                userError = `فشل تسجيل الدخول: اسم المستخدم أو كلمة المرور غير صحيحة في رابط الاتصال.`;
+            } else if (e.message.includes('selection timed out') || e.message.includes('IP')) {
+                userError = `تعذر الوصول لخادم قاعدة البيانات. يرجى التأكد من إضافة عنوان IP الخاص بك إلى (IP Access List: 0.0.0.0/0) في MongoDB Atlas، والتأكد من اتصال الجهاز بالإنترنت.`;
+            }
+            return { success: false, error: userError };
         }
     }
 
