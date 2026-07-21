@@ -170,6 +170,20 @@ class AppDatabase {
         let mongoUri = 'mongodb://127.0.0.1:27017/vero';
         if (process.env.MONGODB_URI) {
             mongoUri = process.env.MONGODB_URI;
+            try {
+                const configDir = path.dirname(this.configPath);
+                if (!fs.existsSync(configDir)) {
+                    fs.mkdirSync(configDir, { recursive: true });
+                }
+                let config = {};
+                if (fs.existsSync(this.configPath)) {
+                    config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+                }
+                config.mongoUri = mongoUri;
+                fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2), 'utf8');
+            } catch (configError) {
+                console.error('[DB] Failed to save MongoDB URI to config file:', configError.message);
+            }
         } else {
             try {
                 if (fs.existsSync(this.configPath)) {

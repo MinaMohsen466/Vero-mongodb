@@ -555,7 +555,7 @@ function Products() {
                         const canvas = document.createElement('canvas');
                         let width = img.width;
                         let height = img.height;
-                        const MAX_DIMENSION = 400;
+                        const MAX_DIMENSION = 300;
 
                         if (width > height) {
                             if (width > MAX_DIMENSION) {
@@ -574,7 +574,7 @@ function Products() {
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, width, height);
 
-                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
                         setFormData(prev => ({ ...prev, image: compressedBase64 }));
                     };
                 }

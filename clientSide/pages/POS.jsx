@@ -6,6 +6,7 @@ import InvoicePrintPreview from '../components/InvoicePrintPreview';
 import SearchableSelect from '../components/SearchableSelect';
 import { getCachedProducts, saveCachedProducts, deleteCachedProducts, clearCachedProducts } from '../utils/posCache';
 
+
 const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#3B82F6', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#06B6D4'];
 
 // ─── Searchable Customer Dropdown ────────────────────────────────────────────

@@ -409,7 +409,7 @@ function PurchaseInvoices() {
                         const canvas = document.createElement('canvas');
                         let width = img.width;
                         let height = img.height;
-                        const MAX_DIMENSION = 800;
+                        const MAX_DIMENSION = 600;
 
                         if (width > height) {
                             if (width > MAX_DIMENSION) {
@@ -428,7 +428,7 @@ function PurchaseInvoices() {
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, width, height);
 
-                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
                         setFormData(prev => ({ ...prev, image: compressedBase64 }));
                     };
                 }

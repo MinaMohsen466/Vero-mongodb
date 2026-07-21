@@ -10,6 +10,7 @@ import {
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
+import { clearCachedProducts } from '../utils/posCache';
 
 // ── Compact Toggle ────────────────────────────────────────────────────────────
 const Tog = ({ on, onChange, small }) => {
@@ -664,6 +665,8 @@ export default function Settings() {
                 setIsResetting(true);
                 const res = await window.api.settings.restore(r.filePaths[0]);
                 if (res?.success) { 
+                    // Clear POS cache so restored data is shown fresh
+                    try { await clearCachedProducts(); localStorage.removeItem('last_products_sync_time'); localStorage.removeItem('last_products_sync_db_sig'); } catch(e) {}
                     toast.success(t('restored_success') || 'Restored successfully'); 
                     window.location.reload(); 
                 } else {
@@ -709,6 +712,8 @@ export default function Settings() {
         if (pwdAction === 'resetApp') {
             setIsResetting(true);
             const res = await window.api.settings?.resetApp?.(resetOptions);
+            // Clear POS cache after reset
+            try { await clearCachedProducts(); localStorage.removeItem('last_products_sync_time'); localStorage.removeItem('last_products_sync_db_sig'); } catch(e) {}
             if (res && res.success) {
                 toast.success(t('savedSuccess') || 'Data reset successfully');
                 if (res.relaunch) {
@@ -724,6 +729,8 @@ export default function Settings() {
             try {
                 const result = await window.api.products.deleteAll();
                 if (result && result.success) {
+                    // Clear POS cache after deleting all products
+                    try { await clearCachedProducts(); localStorage.removeItem('last_products_sync_time'); } catch(e) {}
                     toast.success(t('savedSuccess') || 'Products deleted successfully');
                     loadData();
                 } else {
