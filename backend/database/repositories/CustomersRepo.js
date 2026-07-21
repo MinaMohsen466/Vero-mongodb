@@ -3,7 +3,7 @@ const {
   Counter, User, Permission, UserPermission, Customer, Supplier, Account, Product, 
   Invoice, Voucher, JournalEntry, Setting, Employee, EmployeeLeave, EmployeeDeduction, 
   SalaryPayment, Expense, Coupon, Offer, ActivityLog, Return, StockTransfer, 
-  InstallmentPlan, InstallmentPayment, DeletedRecord, getNextSequenceValue 
+  DeletedRecord, getNextSequenceValue 
 } = require('../models');
 
 class CustomersRepo {
@@ -19,6 +19,12 @@ class CustomersRepo {
 
     async create(c) {
         try {
+            // Check for duplicate name
+            const duplicateName = await Customer.findOne({ name: c.name });
+            if (duplicateName) {
+                return { success: false, error: 'اسم العميل موجود بالفعل ومسجل مسبقاً' };
+            }
+
             const lastDoc = await Customer.findOne().sort({ id: -1 }).lean();
             let nextNumVal = 1;
             if (lastDoc && lastDoc.code) {
@@ -27,7 +33,22 @@ class CustomersRepo {
                     nextNumVal = parseInt(match[1], 10) + 1;
                 }
             }
-            const code = c.code || `C${String(nextNumVal).padStart(4, '0')}`;
+            
+            // Loop until a completely unique code is generated
+            let code = c.code;
+            if (!code) {
+                let isUnique = false;
+                while (!isUnique) {
+                    code = `C${String(nextNumVal).padStart(4, '0')}`;
+                    const dup = await Customer.findOne({ code });
+                    if (!dup) {
+                        isUnique = true;
+                    } else {
+                        nextNumVal++;
+                    }
+                }
+            }
+
             const openingBalance = parseFloat(c.opening_balance) || 0;
             const openingDate = c.opening_balance_date || new Date().toISOString().split('T')[0];
             
@@ -52,6 +73,14 @@ class CustomersRepo {
 
     async update(c) {
         try {
+            // Check for duplicate name
+            if (c.name !== undefined) {
+                const duplicateName = await Customer.findOne({ name: c.name, id: { $ne: c.id } });
+                if (duplicateName) {
+                    return { success: false, error: 'اسم العميل موجود بالفعل ومسجل مسبقاً' };
+                }
+            }
+
             const old = await Customer.findOne({ id: c.id });
             if (!old) return { success: false, error: 'Customer not found' };
 
@@ -96,6 +125,34 @@ class CustomersRepo {
             return { success: true };
         } catch (e) {
             return { success: false, error: e.message };
+        }
+    }
+
+    async getNextCode() {
+        try {
+            const lastDoc = await Customer.findOne().sort({ id: -1 }).lean();
+            let nextNumVal = 1;
+            if (lastDoc && lastDoc.code) {
+                const match = lastDoc.code.match(/C(\d+)$/i);
+                if (match) {
+                    nextNumVal = parseInt(match[1], 10) + 1;
+                }
+            }
+            let code = '';
+            let isUnique = false;
+            while (!isUnique) {
+                code = `C${String(nextNumVal).padStart(4, '0')}`;
+                const dup = await Customer.findOne({ code });
+                if (!dup) {
+                    isUnique = true;
+                } else {
+                    nextNumVal++;
+                }
+            }
+            return code;
+        } catch (e) {
+            console.error('Error generating next customer code:', e);
+            return '';
         }
     }
 }

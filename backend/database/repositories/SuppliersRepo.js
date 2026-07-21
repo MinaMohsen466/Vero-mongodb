@@ -3,7 +3,7 @@ const {
   Counter, User, Permission, UserPermission, Customer, Supplier, Account, Product, 
   Invoice, Voucher, JournalEntry, Setting, Employee, EmployeeLeave, EmployeeDeduction, 
   SalaryPayment, Expense, Coupon, Offer, ActivityLog, Return, StockTransfer, 
-  InstallmentPlan, InstallmentPayment, DeletedRecord, getNextSequenceValue 
+  DeletedRecord, getNextSequenceValue 
 } = require('../models');
 
 class SuppliersRepo {
@@ -19,6 +19,12 @@ class SuppliersRepo {
 
     async create(s) {
         try {
+            // Check for duplicate name
+            const duplicateName = await Supplier.findOne({ name: s.name });
+            if (duplicateName) {
+                return { success: false, error: 'اسم المورد موجود بالفعل ومسجل مسبقاً' };
+            }
+
             const lastDoc = await Supplier.findOne().sort({ id: -1 }).lean();
             let nextNumVal = 1;
             if (lastDoc && lastDoc.code) {
@@ -27,7 +33,22 @@ class SuppliersRepo {
                     nextNumVal = parseInt(match[1], 10) + 1;
                 }
             }
-            const code = s.code || `S${String(nextNumVal).padStart(4, '0')}`;
+            
+            // Loop until a completely unique code is generated
+            let code = s.code;
+            if (!code) {
+                let isUnique = false;
+                while (!isUnique) {
+                    code = `S${String(nextNumVal).padStart(4, '0')}`;
+                    const dup = await Supplier.findOne({ code });
+                    if (!dup) {
+                        isUnique = true;
+                    } else {
+                        nextNumVal++;
+                    }
+                }
+            }
+
             const openingBalance = parseFloat(s.opening_balance) || 0;
             const openingDate = s.opening_balance_date || new Date().toISOString().split('T')[0];
             
@@ -52,6 +73,14 @@ class SuppliersRepo {
 
     async update(s) {
         try {
+            // Check for duplicate name
+            if (s.name !== undefined) {
+                const duplicateName = await Supplier.findOne({ name: s.name, id: { $ne: s.id } });
+                if (duplicateName) {
+                    return { success: false, error: 'اسم المورد موجود بالفعل ومسجل مسبقاً' };
+                }
+            }
+
             const old = await Supplier.findOne({ id: s.id });
             if (!old) return { success: false, error: 'Supplier not found' };
 
@@ -95,6 +124,34 @@ class SuppliersRepo {
             return { success: true };
         } catch (e) {
             return { success: false, error: e.message };
+        }
+    }
+
+    async getNextCode() {
+        try {
+            const lastDoc = await Supplier.findOne().sort({ id: -1 }).lean();
+            let nextNumVal = 1;
+            if (lastDoc && lastDoc.code) {
+                const match = lastDoc.code.match(/S(\d+)$/i);
+                if (match) {
+                    nextNumVal = parseInt(match[1], 10) + 1;
+                }
+            }
+            let code = '';
+            let isUnique = false;
+            while (!isUnique) {
+                code = `S${String(nextNumVal).padStart(4, '0')}`;
+                const dup = await Supplier.findOne({ code });
+                if (!dup) {
+                    isUnique = true;
+                } else {
+                    nextNumVal++;
+                }
+            }
+            return code;
+        } catch (e) {
+            console.error('Error generating next supplier code:', e);
+            return '';
         }
     }
 }

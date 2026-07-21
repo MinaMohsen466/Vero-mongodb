@@ -14,7 +14,6 @@ function Dashboard() {
     const [recentInvoices, setRecentInvoices] = useState([]);
     const [lowStockProducts, setLowStockProducts] = useState([]);
     const [receivableCustomers, setReceivableCustomers] = useState([]);
-    const [overdueInstallments, setOverdueInstallments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [settings, setSettings] = useState({});
     const [monthlyData, setMonthlyData] = useState([]);
@@ -61,31 +60,7 @@ function Dashboard() {
                 .slice(0, 5);
             setReceivableCustomers(customersWithBalances);
 
-            // Get overdue installments
-            let overdueList = [];
-            try {
-                if (window.api.installments && typeof window.api.installments.getAll === 'function') {
-                    const plans = await window.api.installments.getAll();
-                    const today = new Date().toISOString().split('T')[0];
-                    (plans || []).forEach(plan => {
-                        if (plan.payments) {
-                            plan.payments.forEach(pmt => {
-                                if (pmt.status === 'pending' && pmt.due_date < today) {
-                                    overdueList.push({
-                                        plan_number: plan.plan_number,
-                                        customer_name: plan.customer_name,
-                                        due_date: pmt.due_date,
-                                        amount: pmt.amount
-                                    });
-                                }
-                            });
-                        }
-                    });
-                }
-            } catch (instError) {
-                console.error("Error loading installments on dashboard:", instError);
-            }
-            setOverdueInstallments(overdueList.sort((a, b) => new Date(a.due_date) - new Date(b.due_date)).slice(0, 5));
+
 
             // Generate monthly data for charts (Last 6 months)
             const mData = [];
@@ -626,51 +601,7 @@ function Dashboard() {
                     </div>
                 )}
 
-                <div style={{ ...glassCard, borderTop: '4px solid #f97316', padding: '20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-light)', paddingBottom: '12px', marginBottom: '16px' }}>
-                        <AlertCircle size={18} style={{ color: '#f97316' }} />
-                        <h4 style={{ fontSize: '1rem', fontWeight: 750, color: '#f97316', margin: 0 }}>
-                            {t('inst_overduePlans') || 'أقساط متأخرة'}
-                        </h4>
-                    </div>
-                    <div>
-                        {overdueInstallments.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
-                                <p style={{ fontSize: '0.85rem', margin: 0 }}>✓ {t('dash_noOverdueInstallments') || 'لا توجد أقساط متأخرة'}</p>
-                            </div>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                {overdueInstallments.map((inst, i) => (
-                                    <div key={i} style={{
-                                        padding: '12px',
-                                        background: '#ffedd5',
-                                        borderRadius: '10px',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        borderLeft: '4px solid #f97316',
-                                        border: '1px solid rgba(249, 115, 22, 0.15)'
-                                    }}>
-                                        <div>
-                                            <p style={{ fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px', fontSize: '0.88rem' }}>{inst.customer_name || inst.plan_number}</p>
-                                            <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', margin: 0 }}>
-                                                {t('inv_dueDate') || 'تاريخ الاستحقاق'}: {new Date(inst.due_date).toLocaleDateString('en-GB')}
-                                            </p>
-                                        </div>
-                                        <span style={{
-                                            padding: '4px 10px',
-                                            background: '#f97316',
-                                            color: 'white',
-                                            borderRadius: '20px',
-                                            fontSize: '0.8rem',
-                                            fontWeight: 750
-                                        }}>{formatCurrency(inst.amount)}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
+
             </div>
         </div>
     );

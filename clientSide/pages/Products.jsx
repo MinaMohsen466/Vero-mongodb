@@ -49,7 +49,7 @@ function Products() {
     const [supplierSearchQuery, setSupplierSearchQuery] = useState('');
     const [formData, setFormData] = useState({
         name: '', description: '', unit: t('prod_piece') || 'قطعة', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [],
-        dozen_price: '', dozen_qty: 1
+        dozen_price: '', dozen_qty: 1, code: ''
     });
     const [showMovementsModal, setShowMovementsModal] = useState(false);
     const [selectedProductForTracking, setSelectedProductForTracking] = useState(null);
@@ -439,7 +439,7 @@ function Products() {
         }
     };
 
-    const openModal = (product = null) => {
+    const openModal = async (product = null) => {
         setEditingProduct(product);
         setSupplierSearchQuery('');
         if (product) {
@@ -463,13 +463,26 @@ function Products() {
                 supplier_id: product.supplier_id || '',
                 supplier_ids: parsedIds,
                 dozen_price: product.dozen_price !== undefined && product.dozen_price !== null ? product.dozen_price : '',
-                dozen_qty: normalizeDozenQty(product.dozen_qty)
+                dozen_qty: normalizeDozenQty(product.dozen_qty),
+                code: product.code || ''
             });
+            setShowModal(true);
         } else {
             setShowCustomUnit(false);
-            setFormData({ name: '', description: '', unit: t('prod_piece') || 'قطعة', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [], dozen_price: '', dozen_qty: 1 });
+            setSaving(true);
+            try {
+                const nextCode = await window.api.products.getNextCode();
+                setFormData({
+                    name: '', description: '', unit: t('prod_piece') || 'قطعة', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [], dozen_price: '', dozen_qty: 1,
+                    code: nextCode
+                });
+                setShowModal(true);
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setSaving(false);
+            }
         }
-        setShowModal(true);
     };
 
     const closeModal = () => { setShowModal(false); setEditingProduct(null); setShowCustomUnit(false); setSupplierSearchQuery(''); };
@@ -857,9 +870,15 @@ function Products() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap-reverse' }}>
                             <div style={{ flex: 1, minWidth: '200px' }}>
-                                <div className="form-group" style={{ marginBottom: '12px' }}>
-                                    <label className="form-label" style={{ fontWeight: '600' }}>{t('prod_name')} *</label>
-                                    <input type="text" className="form-input" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required style={{ height: '40px' }} />
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px', marginBottom: '12px' }}>
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label className="form-label" style={{ fontWeight: '600' }}>{t('code') || 'الكود'} *</label>
+                                        <input type="text" className="form-input" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} required style={{ height: '40px' }} />
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label className="form-label" style={{ fontWeight: '600' }}>{t('prod_name')} *</label>
+                                        <input type="text" className="form-input" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required style={{ height: '40px' }} />
+                                    </div>
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label">{t('prod_category')}</label>

@@ -17,7 +17,6 @@ const SupplierSchema = new mongoose.Schema({
     created_at: { type: Date, default: Date.now }
 });
 SupplierSchema.index({ id: 1 });
-SupplierSchema.index({ code: 1 });
 const Supplier = mongoose.model('Supplier', SupplierSchema);
 
 module.exports = Supplier;

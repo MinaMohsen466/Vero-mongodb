@@ -35,6 +35,7 @@ module.exports = function(ipcMain, context) {
         if (result.success) await logActivity('delete', 'customers', id, existing?.name || String(id), {});
         return result;
     });
+    ipcMain.handle('customers:getNextCode', async () => await db.customers.getNextCode());
 
     // --- Suppliers ---
     ipcMain.handle('suppliers:getAll', async () => await db.suppliers.getAll());
@@ -64,6 +65,7 @@ module.exports = function(ipcMain, context) {
         if (result.success) await logActivity('delete', 'suppliers', id, existing?.name || String(id), {});
         return result;
     });
+    ipcMain.handle('suppliers:getNextCode', async () => await db.suppliers.getNextCode());
 
     // --- Accounts ---
     ipcMain.handle('accounts:getAll', async () => await db.accounts.getAll());
@@ -141,4 +143,5 @@ module.exports = function(ipcMain, context) {
         }
         return result;
     });
+    ipcMain.handle('products:getNextCode', async () => await db.products.getNextCode());
 };

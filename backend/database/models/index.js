@@ -21,8 +21,6 @@ const Offer = require('./Offer');
 const ActivityLog = require('./ActivityLog');
 const Return = require('./Return');
 const StockTransfer = require('./StockTransfer');
-const InstallmentPlan = require('./InstallmentPlan');
-const InstallmentPayment = require('./InstallmentPayment');
 
 module.exports = {
   Counter: CounterModule.Counter,
@@ -50,6 +48,4 @@ module.exports = {
   ActivityLog,
   Return,
   StockTransfer,
-  InstallmentPlan,
-  InstallmentPayment,
 };

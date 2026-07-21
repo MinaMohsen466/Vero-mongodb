@@ -773,6 +773,20 @@ export default function Settings() {
             }
         }
     };
+    const backupToExcel = async () => {
+        const r = await window.api.dialog.saveFile({ 
+            defaultPath: `vero_excel_backup_${new Date().toISOString().slice(0, 10)}.xlsx`, 
+            filters: [{ name: 'Excel Files', extensions: ['xlsx'] }] 
+        });
+        if (!r.canceled && r.filePath) {
+            setIsResetting(true);
+            const res = await window.api.database.backupToExcel(r.filePath);
+            setIsResetting(false);
+            res?.success 
+                ? toast.success(t('savedSuccess') || 'Saved successfully') 
+                : toast.error((t('failed') || 'Failed') + ': ' + (res?.error || ''));
+        }
+    };
     const triggerResetApp = () => {
         setPwdAction('resetApp');
         setPwdValue('');
@@ -1848,13 +1862,20 @@ export default function Settings() {
                         <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
                             {t('backup_hint') || 'قم بأخذ نسخ احتياطية بانتظام لحماية بياناتك.'}
                         </p>
-                        <div style={{ display: 'flex', gap: 10 }}>
-                            <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} onClick={backup}>
-                                <Download size={14} /> {t('backup') || 'نسخ احتياطي'}
-                            </button>
-                            <button style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }} onClick={restore}>
-                                <Upload size={14} /> {t('restore_from_backup') || 'استعادة من نسخة احتياطية'}
-                            </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} onClick={backup}>
+                                    <Download size={14} /> {t('backup') || 'نسخ احتياطي'}
+                                </button>
+                                <button style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }} onClick={restore}>
+                                    <Upload size={14} /> {t('restore_from_backup') || 'استعادة من نسخة احتياطية'}
+                                </button>
+                            </div>
+                            <div style={{ borderTop: '1px dashed var(--border)', paddingTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                <button style={{ ...btnStyle, background: '#107c41', color: '#fff' }} onClick={backupToExcel}>
+                                    <Download size={14} /> {'تصدير كـ ملف إكسيل احتياطي (Excel)'}
+                                </button>
+                            </div>
                         </div>
                     </Card>
 

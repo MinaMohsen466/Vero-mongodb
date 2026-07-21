@@ -21,7 +21,6 @@ const ProductSchema = new mongoose.Schema({
     shop_stock: { type: Number, default: 0 }
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 ProductSchema.index({ id: 1 });
-ProductSchema.index({ code: 1 });
 const Product = mongoose.model('Product', ProductSchema);
 
 module.exports = Product;

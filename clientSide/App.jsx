@@ -34,7 +34,6 @@ const SettingsPage = lazy(() => import('./pages/Settings'));
 const CashBank = lazy(() => import('./pages/CashBank'));
 const HR = lazy(() => import('./pages/HR'));
 const POS = lazy(() => import('./pages/POS'));
-const Installments = lazy(() => import('./pages/Installments'));
 const OffersAndCoupons = lazy(() => import('./pages/OffersAndCoupons'));
 const Expenses = lazy(() => import('./pages/Expenses'));
 const WarehousePage = lazy(() => import('./pages/Warehouse'));
@@ -453,7 +452,6 @@ function App() {
         'hr': HR,
         'expenses': Expenses,
         'pos': POS,
-        'installments': Installments,
         'offers': OffersAndCoupons,
         'warehouse': WarehousePage,
         'sales_returns': SalesReturns,

@@ -25,7 +25,8 @@ contextBridge.exposeInMainWorld('api', {
         getById: (id) => ipcRenderer.invoke('customers:getById', id),
         create: (customer) => ipcRenderer.invoke('customers:create', customer),
         update: (customer) => ipcRenderer.invoke('customers:update', customer),
-        delete: (id) => ipcRenderer.invoke('customers:delete', id)
+        delete: (id) => ipcRenderer.invoke('customers:delete', id),
+        getNextCode: () => ipcRenderer.invoke('customers:getNextCode')
     },
 
     // Suppliers
@@ -34,7 +35,8 @@ contextBridge.exposeInMainWorld('api', {
         getById: (id) => ipcRenderer.invoke('suppliers:getById', id),
         create: (supplier) => ipcRenderer.invoke('suppliers:create', supplier),
         update: (supplier) => ipcRenderer.invoke('suppliers:update', supplier),
-        delete: (id) => ipcRenderer.invoke('suppliers:delete', id)
+        delete: (id) => ipcRenderer.invoke('suppliers:delete', id),
+        getNextCode: () => ipcRenderer.invoke('suppliers:getNextCode')
     },
 
     // Accounts
@@ -58,7 +60,8 @@ contextBridge.exposeInMainWorld('api', {
         delete: (id) => ipcRenderer.invoke('products:delete', id),
         deleteAll: () => ipcRenderer.invoke('products:deleteAll'),
         getMovements: (id, startDate, endDate) => ipcRenderer.invoke('products:getMovements', { id, startDate, endDate }),
-        addWarehouseStock: (id, quantity) => ipcRenderer.invoke('products:addWarehouseStock', { id, quantity })
+        addWarehouseStock: (id, quantity) => ipcRenderer.invoke('products:addWarehouseStock', { id, quantity }),
+        getNextCode: () => ipcRenderer.invoke('products:getNextCode')
     },
 
     // Invoices
@@ -241,7 +244,8 @@ contextBridge.exposeInMainWorld('api', {
         selectBackupPath: () => ipcRenderer.invoke('database:selectBackupPath'),
         getConnectionStatus: () => ipcRenderer.invoke('database:getConnectionStatus'),
         setConnectionUri: (uri) => ipcRenderer.invoke('database:setConnectionUri', uri),
-        clearConnectionUri: () => ipcRenderer.invoke('database:clearConnectionUri')
+        clearConnectionUri: () => ipcRenderer.invoke('database:clearConnectionUri'),
+        backupToExcel: (filePath) => ipcRenderer.invoke('database:backupToExcel', filePath)
     },
 
     // Activity Log

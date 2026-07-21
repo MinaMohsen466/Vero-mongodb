@@ -3,7 +3,7 @@ const {
   Counter, User, Permission, UserPermission, Customer, Supplier, Account, Product, 
   Invoice, Voucher, JournalEntry, Setting, Employee, EmployeeLeave, EmployeeDeduction, 
   SalaryPayment, Expense, Coupon, Offer, ActivityLog, Return, StockTransfer, 
-  InstallmentPlan, InstallmentPayment, DeletedRecord, getNextSequenceValue 
+  DeletedRecord, getNextSequenceValue 
 } = require('../models');
 
 class ProductsRepo {
@@ -98,6 +98,12 @@ class ProductsRepo {
 
     async create(p) {
         try {
+            // Check for duplicate name
+            const duplicateName = await Product.findOne({ name: p.name });
+            if (duplicateName) {
+                return { success: false, error: 'اسم المنتج موجود بالفعل ومسجل مسبقاً' };
+            }
+
             const lastDoc = await Product.findOne().sort({ id: -1 }).lean();
             let nextNumVal = 1;
             if (lastDoc && lastDoc.code) {
@@ -106,7 +112,22 @@ class ProductsRepo {
                     nextNumVal = parseInt(match[1], 10) + 1;
                 }
             }
-            const code = p.code || `P${String(nextNumVal).padStart(4, '0')}`;
+            
+            // Loop until a completely unique code is generated
+            let code = p.code;
+            if (!code) {
+                let isUnique = false;
+                while (!isUnique) {
+                    code = `P${String(nextNumVal).padStart(4, '0')}`;
+                    const dup = await Product.findOne({ code });
+                    if (!dup) {
+                        isUnique = true;
+                    } else {
+                        nextNumVal++;
+                    }
+                }
+            }
+
             const warehouseStock = parseFloat(p.warehouse_stock) || 0;
             const shopStock = parseFloat(p.shop_stock) || 0;
             const totalStock = warehouseStock + shopStock;
@@ -128,6 +149,14 @@ class ProductsRepo {
 
     async update(p) {
         try {
+            // Check for duplicate name
+            if (p.name !== undefined) {
+                const duplicateName = await Product.findOne({ name: p.name, id: { $ne: p.id } });
+                if (duplicateName) {
+                    return { success: false, error: 'اسم المنتج موجود بالفعل ومسجل مسبقاً' };
+                }
+            }
+
             const existing = await Product.findOne({ id: p.id });
             if (!existing) {
                 return { success: false, error: 'المنتج غير موجود' };
@@ -310,6 +339,34 @@ class ProductsRepo {
             return { success: true, movements };
         } catch (e) {
             return { success: false, error: e.message, movements: [] };
+        }
+    }
+
+    async getNextCode() {
+        try {
+            const lastDoc = await Product.findOne().sort({ id: -1 }).lean();
+            let nextNumVal = 1;
+            if (lastDoc && lastDoc.code) {
+                const match = lastDoc.code.match(/P(\d+)$/i);
+                if (match) {
+                    nextNumVal = parseInt(match[1], 10) + 1;
+                }
+            }
+            let code = '';
+            let isUnique = false;
+            while (!isUnique) {
+                code = `P${String(nextNumVal).padStart(4, '0')}`;
+                const dup = await Product.findOne({ code });
+                if (!dup) {
+                    isUnique = true;
+                } else {
+                    nextNumVal++;
+                }
+            }
+            return code;
+        } catch (e) {
+            console.error('Error generating next code:', e);
+            return '';
         }
     }
 }

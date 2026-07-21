@@ -180,7 +180,8 @@ function POS() {
         }
         setSavingCustomer(true);
         try {
-            const formData = { ...newCustomerForm };
+            const nextCode = await window.api.customers.getNextCode();
+            const formData = { ...newCustomerForm, code: nextCode };
             const result = await window.api.customers.create(formData);
             if (result.success) {
                 toast.success(t('customer_added_success') || 'Customer added successfully');

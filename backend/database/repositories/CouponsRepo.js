@@ -3,7 +3,7 @@ const {
   Counter, User, Permission, UserPermission, Customer, Supplier, Account, Product, 
   Invoice, Voucher, JournalEntry, Setting, Employee, EmployeeLeave, EmployeeDeduction, 
   SalaryPayment, Expense, Coupon, Offer, ActivityLog, Return, StockTransfer, 
-  InstallmentPlan, InstallmentPayment, DeletedRecord, getNextSequenceValue 
+  DeletedRecord, getNextSequenceValue 
 } = require('../models');
 
 class CouponsRepo {

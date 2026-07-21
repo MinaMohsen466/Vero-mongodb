@@ -3,7 +3,7 @@ const {
   Counter, User, Permission, UserPermission, Customer, Supplier, Account, Product, 
   Invoice, Voucher, JournalEntry, Setting, Employee, EmployeeLeave, EmployeeDeduction, 
   SalaryPayment, Expense, Coupon, Offer, ActivityLog, Return, StockTransfer, 
-  InstallmentPlan, InstallmentPayment, DeletedRecord, getNextSequenceValue 
+  DeletedRecord, getNextSequenceValue 
 } = require('../models');
 
 class VouchersRepo {
@@ -193,18 +193,7 @@ class VouchersRepo {
                 await Voucher.updateOne({ id: nextId }, { $set: { journal_entry_id: jeId } });
             }
 
-            if (v.invoice_id && v.type === 'receipt') {
-                const invAfter = await Invoice.findOne({ id: v.invoice_id });
-                if (invAfter && invAfter.paid >= invAfter.total) {
-                    const linkedPlan = await InstallmentPlan.findOne({ invoice_id: v.invoice_id, status: { $ne: 'completed' } });
-                    if (linkedPlan) {
-                        await InstallmentPayment.updateMany({ plan_id: linkedPlan.id, status: 'pending' }, {
-                            $set: { status: 'paid', paid_date: v.date, payment_method: v.payment_method || 'cash', notes: 'مدفوع عبر سند قبض ' + num }
-                        });
-                        await InstallmentPlan.updateOne({ id: linkedPlan.id }, { $set: { status: 'completed' } });
-                    }
-                }
-            }
+
 
             return { success: true, id: nextId, voucher_number: num };
         } catch (e) {

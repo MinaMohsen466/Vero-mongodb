@@ -68,8 +68,6 @@ const collections = {
     activity_log: models.ActivityLog,
     returns: models.Return,
     stock_transfers: models.StockTransfer,
-    installment_plans: models.InstallmentPlan,
-    installment_payments: models.InstallmentPayment,
     deleted_records: models.DeletedRecord
 };
 
@@ -84,6 +82,7 @@ class AppDatabase {
         this.isConnected = false;
         this.connectionError = '';
         this.mongoUri = null;
+        this.collections = collections;
     }
 
     setAdminConfig(adminConfig) {
@@ -614,6 +613,11 @@ class AppDatabase {
         }
     }
 
+    async backupToExcel(filePath) {
+        const { exportToExcel } = require('./utils/excelBackup');
+        return await exportToExcel(this, filePath);
+    }
+
     async restore(filePath) {
         try {
             if (!fs.existsSync(filePath)) {
@@ -854,8 +858,6 @@ class AppDatabase {
                     collections.expenses,
                     collections.returns,
                     collections.stock_transfers,
-                    collections.installment_payments,
-                    collections.installment_plans,
                     collections.activity_log,
                     collections.deleted_records
                 ].filter(Boolean);
@@ -863,7 +865,7 @@ class AppDatabase {
                     await model.deleteMany({});
                 }
                 if (collections.counters) {
-                    await collections.counters.deleteMany({ name: { $in: ['invoices', 'vouchers', 'journal_entries', 'salary_payments', 'expenses', 'returns', 'stock_transfers', 'installment_plans'] } });
+                    await collections.counters.deleteMany({ name: { $in: ['invoices', 'vouchers', 'journal_entries', 'salary_payments', 'expenses', 'returns', 'stock_transfers'] } });
                 }
                 if (collections.accounts) {
                     await collections.accounts.updateMany({}, { $set: { balance: 0, initial_balance: 0 } });

@@ -22,7 +22,8 @@ function Customers() {
     const [editingCustomer, setEditingCustomer] = useState(null);
     const [formData, setFormData] = useState({
         name: '', phone: '', email: '', address: '', tax_number: '', credit_limit: 0, notes: '', is_active: 1,
-        opening_balance: 0, opening_balance_date: new Date().toISOString().split('T')[0]
+        opening_balance: 0, opening_balance_date: new Date().toISOString().split('T')[0],
+        code: ''
     });
 
     const searchInputRef = React.useRef(null);
@@ -138,7 +139,7 @@ function Customers() {
         }
     };
 
-    const openModal = (customer = null) => {
+    const openModal = async (customer = null) => {
         if (customer) {
             setEditingCustomer(customer);
             setFormData({
@@ -147,17 +148,28 @@ function Customers() {
                 credit_limit: customer.credit_limit || 0, notes: customer.notes || '',
                 is_active: customer.is_active !== undefined ? customer.is_active : 1,
                 opening_balance: customer.opening_balance || 0,
-                opening_balance_date: customer.opening_balance_date || new Date().toISOString().split('T')[0]
+                opening_balance_date: customer.opening_balance_date || new Date().toISOString().split('T')[0],
+                code: customer.code || ''
             });
+            setShowModal(true);
         } else {
             setEditingCustomer(null);
-            setFormData({
-                name: '', phone: '', email: '', address: '', tax_number: '', credit_limit: 0, notes: '', is_active: 1,
-                opening_balance: 0,
-                opening_balance_date: new Date().toISOString().split('T')[0]
-            });
+            setSaving(true);
+            try {
+                const nextCode = await window.api.customers.getNextCode();
+                setFormData({
+                    name: '', phone: '', email: '', address: '', tax_number: '', credit_limit: 0, notes: '', is_active: 1,
+                    opening_balance: 0,
+                    opening_balance_date: new Date().toISOString().split('T')[0],
+                    code: nextCode
+                });
+                setShowModal(true);
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setSaving(false);
+            }
         }
-        setShowModal(true);
     };
 
     const closeModal = () => { setShowModal(false); setEditingCustomer(null); };
@@ -518,14 +530,17 @@ function Customers() {
             >
                 <form id="customer-form" onSubmit={handleSubmit}>
                     <div className="form-row">
+                        <div className="form-group"><label className="form-label">{t('code') || 'الكود'} *</label><input type="text" className="form-input" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} required /></div>
                         <div className="form-group"><label className="form-label">{t('cust_name')} *</label><input type="text" className="form-input" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required /></div>
-                        <div className="form-group"><label className="form-label">{t('phone')}</label><input type="text" className="form-input" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} /></div>
                     </div>
                     <div className="form-row">
+                        <div className="form-group"><label className="form-label">{t('phone')}</label><input type="text" className="form-input" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} /></div>
                         <div className="form-group"><label className="form-label">{t('email')}</label><input type="email" className="form-input" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></div>
-                        <div className="form-group"><label className="form-label">{t('cust_taxNumber')}</label><input type="text" className="form-input" value={formData.tax_number} onChange={(e) => setFormData({ ...formData, tax_number: e.target.value })} /></div>
                     </div>
-                    <div className="form-group"><label className="form-label">{t('address')}</label><input type="text" className="form-input" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} /></div>
+                    <div className="form-row">
+                        <div className="form-group"><label className="form-label">{t('cust_taxNumber')}</label><input type="text" className="form-input" value={formData.tax_number} onChange={(e) => setFormData({ ...formData, tax_number: e.target.value })} /></div>
+                        <div className="form-group"><label className="form-label">{t('address')}</label><input type="text" className="form-input" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} /></div>
+                    </div>
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">{t('cust_creditLimit')}</label>

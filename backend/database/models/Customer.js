@@ -18,7 +18,6 @@ const CustomerSchema = new mongoose.Schema({
     created_at: { type: Date, default: Date.now }
 });
 CustomerSchema.index({ id: 1 });
-CustomerSchema.index({ code: 1 });
 const Customer = mongoose.model('Customer', CustomerSchema);
 
 module.exports = Customer;

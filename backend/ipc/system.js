@@ -58,6 +58,7 @@ module.exports = function(ipcMain, context) {
     ipcMain.handle('settings:set', async (event, { category, key, value }) => await db.settings.set(category, key, value));
     ipcMain.handle('settings:backup', async () => await db.backup());
     ipcMain.handle('settings:backupToPath', async (event, destPath) => await db.backupToPath(destPath));
+    ipcMain.handle('database:backupToExcel', async (event, filePath) => await db.backupToExcel(filePath));
     ipcMain.handle('settings:getDbPath', async () => await db.getDbPath());
     ipcMain.handle('settings:changeDbPath', async (event, newFolderPath) => {
         const result = await db.changeDbPath(newFolderPath);
