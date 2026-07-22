@@ -440,7 +440,7 @@ function Suppliers() {
                         {filteredSuppliers.length} {t('menu_suppliers')}
                     </span>
                 </div>
-                {user?.permissions?.suppliers?.can_create && (
+                {(user?.role === 'admin' || user?.permissions?.suppliers?.can_create) && (
                     <button className="btn btn-primary" onClick={() => openModal()}>
                         <Plus size={18} /> {t('add')}
                     </button>
@@ -475,7 +475,7 @@ function Suppliers() {
                                             <td><span className={`badge ${supplier.is_active ? 'badge-success' : 'badge-danger'}`}>{supplier.is_active ? t('active') : t('inactive')}</span></td>
                                             <td onClick={(e) => e.stopPropagation()}>
                                                 <div className="table-actions">
-                                                    {user?.permissions?.suppliers?.can_edit && (
+                                                    {(user?.role === 'admin' || user?.permissions?.suppliers?.can_edit) && (
                                                         <>
                                                             <button className="btn btn-ghost btn-sm" onClick={() => openModal(supplier)} title={t('edit')}><Edit2 size={16} /></button>
                                                             <button
@@ -486,7 +486,7 @@ function Suppliers() {
                                                             </button>
                                                         </>
                                                     )}
-                                                    {user?.permissions?.suppliers?.can_delete && (
+                                                    {(user?.role === 'admin' || user?.permissions?.suppliers?.can_delete) && (
                                                         <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(supplier.id)} title={t('delete')}><Trash2 size={16} /></button>
                                                     )}
                                                 </div>

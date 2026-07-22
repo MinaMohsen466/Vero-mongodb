@@ -309,6 +309,7 @@ export default function Settings() {
         { m: 'products', l: t('products') || 'Products', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'products_import', l: t('products_import') || 'استيراد المنتجات (إكسل)', a: ['view'] },
         { m: 'products_export', l: t('products_export') || 'تصدير المنتجات (إكسل)', a: ['view'] },
+        { m: 'excel_backup', l: 'برنامج Excel المصغر والتصدير', a: ['view', 'create'] },
         { m: 'sales_invoices', l: t('sales_invoices') || 'Sales Invoices', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'quotations', l: t('menu_quotations') || 'Quotations', a: ['view', 'create', 'edit', 'delete'] },
         { m: 'sales_returns', l: t('sales_returns') || 'Sales Returns', a: ['view', 'create', 'edit', 'delete'] },
@@ -335,13 +336,23 @@ export default function Settings() {
         { m: 'dashboard_charts', l: t('charts') || 'Charts', a: ['view'] },
     ];
 
+    const ADMIN_PERM_MODS = [
+        { m: 'admin_system_reset', l: 'تصفير التطبيق وإعادة تهيئة النظام', a: ['view', 'edit'] },
+        { m: 'admin_delete_products', l: 'حذف كافة المنتجات ثقيلة الحجم', a: ['view', 'edit'] },
+        { m: 'admin_activity_log', l: 'عرض ومراقبة سجل النشاط التفصيلي', a: ['view'] },
+        { m: 'admin_user_management', l: 'إدارة وإنشاء حسابات المستخدمين', a: ['view', 'create', 'edit', 'delete'] },
+        { m: 'admin_cloud_database', l: 'ربط وإعداد قاعدة البيانات السحابية Cloud', a: ['view', 'edit'] },
+        { m: 'admin_excel_export', l: 'إصدار وتنزيل شيتات Excel المتقدمة', a: ['view', 'create'] },
+    ];
+
     const PERM_KEYS = [
         { key: 'can_view', label: t('view') || 'View', act: 'view' },
         { key: 'can_create', label: t('create') || 'Create', act: 'create' },
         { key: 'can_edit', label: t('edit') || 'Edit', act: 'edit' },
         { key: 'can_delete', label: t('delete') || 'Delete', act: 'delete' },
     ];
-    const isAdmin = user?.role === 'admin';
+    const isSuperAdmin = user?.id === 1 || user?.username === 'admin';
+    const isAdmin = user?.role === 'admin' || isSuperAdmin;
 
     const getModIcon = (mod) => {
         const icons = {
@@ -349,6 +360,9 @@ export default function Settings() {
             customers: Users,
             suppliers: Truck,
             products: Package,
+            products_import: Download,
+            products_export: Download,
+            excel_backup: FileText,
             sales_invoices: ShoppingCart,
             quotations: FileText,
             sales_returns: Undo,
@@ -414,15 +428,18 @@ export default function Settings() {
         deleteSettingsAndUsers: false
     });
     const [isResetting, setIsResetting] = useState(false);
+    const [resetLoadingText, setResetLoadingText] = useState('');
     const [showExcelExportModal, setShowExcelExportModal] = useState(false);
     const [excelExportPath, setExcelExportPath] = useState('');
 
     const handleConfirmExcelExport = async (includeData) => {
         setShowExcelExportModal(false);
         if (!excelExportPath) return;
+        setResetLoadingText(t('exporting_excel_loading') || 'جاري إعداد وتحميل شيت الإكسيل...');
         setIsResetting(true);
         const res = await window.api.database.backupToExcel(excelExportPath, includeData);
         setIsResetting(false);
+        setResetLoadingText('');
         res?.success 
             ? toast.success(t('savedSuccess') || 'Saved successfully') 
             : toast.error((t('failed') || 'Failed') + ': ' + (res?.error || ''));
@@ -470,6 +487,9 @@ export default function Settings() {
         { id: 'company', l: t('company_details') || 'بيانات الشركة', icon: Building2 },
         { id: 'general', l: t('general_settings') || 'الإعدادات العامة', icon: Ico },
         { id: 'print_invoice', l: t('invoice_settings') || 'إعدادات الفاتورة', icon: FileText },
+        ...((isAdmin || user?.permissions?.excel_backup?.can_view || user?.permissions?.excel_backup?.can_create) ? [
+            { id: 'excel_program', l: 'برنامج Excel المصغر والأرشيف', icon: FileText },
+        ] : []),
         ...(isAdmin ? [
             { id: 'users', l: t('users') || 'إدارة المستخدمين', icon: Users },
             { id: 'permissions', l: t('permissions') || 'الصلاحيات', icon: Shield },
@@ -688,7 +708,13 @@ export default function Settings() {
                 window.api.permissions.getByRole('user'),
                 window.api.permissions.getByRole('admin')
             ]);
-            setPermState({ accountant: a || {}, user: u || {}, admin: ad || {} });
+            const adminPerms = { ...(ad || {}) };
+            ADMIN_PERM_MODS.forEach(m => {
+                if (!adminPerms[m.m] || (!adminPerms[m.m].can_view && !adminPerms[m.m].can_edit && !adminPerms[m.m].can_create)) {
+                    adminPerms[m.m] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                }
+            });
+            setPermState({ accountant: a || {}, user: u || {}, admin: adminPerms });
             setPermLoaded(true);
         } catch (e) { console.error(e); }
     };
@@ -700,20 +726,27 @@ export default function Settings() {
     const savePerms = async () => {
         setSaving(true);
         try {
-            const rolesToSave = selRole === 'admin'
-                ? [['admin', permState.admin]]
-                : [['accountant', permState.accountant], ['user', permState.user]];
-            await Promise.all(rolesToSave.map(([r, p]) => window.api.permissions.savePermissions(r, p)));
+            const currentRolePerms = permState[selRole] || {};
+            await window.api.permissions.savePermissions(selRole, currentRolePerms);
             toast.success(t('savedSuccess') || 'Permissions saved successfully');
 
             // Refresh current user's session permissions so changes take effect immediately
-            if (user && rolesToSave.some(([r]) => r === user.role)) {
-                const freshPerms = await window.api.permissions.getByRole(user.role);
+            if (user && user.role === selRole) {
+                const userPermsRes = await window.api.permissions.getUserPermissions(user.id);
+                let freshPerms = {};
+                if (userPermsRes && userPermsRes.hasIndividual) {
+                    freshPerms = userPermsRes.permissions;
+                } else {
+                    freshPerms = await window.api.permissions.getByRole(user.role);
+                }
                 if (freshPerms && Object.keys(freshPerms).length > 0) {
                     updateUser({ ...user, permissions: freshPerms });
                 }
             }
-        } catch { toast.error(t('errorOccurred') || 'An error occurred'); }
+        } catch (e) {
+            console.error('Save role permissions error:', e);
+            toast.error(t('errorOccurred') || 'An error occurred');
+        }
         setSaving(false);
     };
 
@@ -728,30 +761,62 @@ export default function Settings() {
             // Only update state if this user is still selected (race condition guard)
             if (upUserIdRef.current !== u.id) return;
             setUpHasInd(r.hasIndividual);
+            let userPermsState = {};
             if (r.hasIndividual) {
-                setUpState(r.permissions);
+                userPermsState = { ...(r.permissions || {}) };
             } else {
                 const rolePerms = await window.api.permissions.getByRole(u.role);
                 if (upUserIdRef.current !== u.id) return; // check again after second await
-                setUpState(rolePerms || {});
+                userPermsState = { ...(rolePerms || {}) };
             }
+            if (u.role === 'admin' || u.username === 'admin') {
+                ADMIN_PERM_MODS.forEach(m => {
+                    if (!userPermsState[m.m] || (!userPermsState[m.m].can_view && !userPermsState[m.m].can_edit && !userPermsState[m.m].can_create)) {
+                        userPermsState[m.m] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                    }
+                });
+            }
+            setUpState(userPermsState);
         } catch (e) { console.error(e); }
         setUpLoading(false);
     };
 
     const saveUserPerms = async () => {
-        if (!selUser) return; setSaving(true);
-        try { await window.api.permissions.saveUserPermissions(selUser.id, upState); setUpHasInd(true); toast.success(t('savedSuccess') || 'Individual permissions saved'); }
-        catch { toast.error(t('errorOccurred') || 'An error occurred'); } setSaving(false);
+        if (!selUser) return;
+        setSaving(true);
+        try {
+            await window.api.permissions.saveUserPermissions(selUser.id, upState);
+            setUpHasInd(true);
+            toast.success(t('savedSuccess') || 'Individual permissions saved');
+
+            if (user && selUser.id === user.id) {
+                updateUser({ ...user, permissions: upState, has_individual_permissions: true });
+            }
+        } catch (e) {
+            console.error('Save user permissions error:', e);
+            toast.error(t('errorOccurred') || 'An error occurred');
+        }
+        setSaving(false);
     };
 
     const clearUserPerms = async () => {
         if (!selUser || !confirm(`${t('reset_perms_confirm') || 'Reset permissions to default for'} ${selUser.full_name}?`)) return;
         setSaving(true);
         try {
-            await window.api.permissions.clearUserPermissions(selUser.id); setUpHasInd(false);
-            setUpState(await window.api.permissions.getByRole(selUser.role) || {}); toast.success(t('reset_success') || 'Reset successfully');
-        } catch { toast.error(t('errorOccurred') || 'An error occurred'); } setSaving(false);
+            await window.api.permissions.clearUserPermissions(selUser.id);
+            setUpHasInd(false);
+            const rolePerms = await window.api.permissions.getByRole(selUser.role) || {};
+            setUpState(rolePerms);
+            toast.success(t('reset_success') || 'Reset successfully');
+
+            if (user && selUser.id === user.id) {
+                updateUser({ ...user, permissions: rolePerms, has_individual_permissions: false });
+            }
+        } catch (e) {
+            console.error('Clear user permissions error:', e);
+            toast.error(t('errorOccurred') || 'An error occurred');
+        }
+        setSaving(false);
     };
 
     const saveUser = async () => {
@@ -774,6 +839,7 @@ export default function Settings() {
         const r = await window.api.dialog.openFile({ properties: ['openFile'], filters: [{ name: 'DB', extensions: ['db'] }] });
         if (!r.canceled && r.filePaths[0]) {
             if (confirm(t('restore_confirm') || 'Current data will be replaced. Are you sure?')) {
+                setResetLoadingText(t('restoring_db_loading') || 'جاري استعادة قاعدة البيانات...');
                 setIsResetting(true);
                 const res = await window.api.settings.restore(r.filePaths[0]);
                 if (res?.success) { 
@@ -783,6 +849,7 @@ export default function Settings() {
                     window.location.reload(); 
                 } else {
                     setIsResetting(false);
+                    setResetLoadingText('');
                     toast.error((t('failed') || 'Failed') + ': ' + (res?.error || ''));
                 }
             }
@@ -832,6 +899,7 @@ export default function Settings() {
 
         setPwdModalOpen(false);
         if (pwdAction === 'resetApp') {
+            setResetLoadingText(t('resetting_app_loading') || 'جاري تهيئة قاعدة البيانات وبدء شركة جديدة...');
             setIsResetting(true);
             const res = await window.api.settings?.resetApp?.(resetOptions);
             // Clear POS cache after reset
@@ -845,6 +913,7 @@ export default function Settings() {
                 }
             } else {
                 setIsResetting(false);
+                setResetLoadingText('');
                 toast.error(res?.error || t('errorOccurred') || 'An error occurred during reset');
             }
         } else if (pwdAction === 'deleteAllProducts') {
@@ -1420,6 +1489,45 @@ export default function Settings() {
                                         </tbody>
                                     </table>
                                 </div>
+                                {isSuperAdmin && (
+                                    <div style={{ marginTop: 24 }}>
+                                        <Card title="صلاحيات مدير النظام الإدارية الحصرية (الأدمن الرئيسي)" icon={Shield}
+                                            action={<span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,.12)', color: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 700 }}>خاص بالأدمن الرئيسي</span>}
+                                        >
+                                            <div style={{ fontSize: '.8rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+                                                صلاحيات التحكم المتقدمة بالعمليات الحساسة وإصدار ملفات إكسيل وإدارة السحابة وتصفير البيانات.
+                                            </div>
+                                            <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid rgba(239,68,68,0.2)', background: 'var(--surface)' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+                                                    <thead>
+                                                        <tr style={{ background: 'rgba(239,68,68,0.06)', borderBottom: '1px solid rgba(239,68,68,0.15)' }}>
+                                                            <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, fontSize: '.8rem', color: '#ef4444', width: '40%' }}>صلاحية مدير النظام</th>
+                                                            {PERM_KEYS.map(pk => <th key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600, fontSize: '.8rem', color: 'var(--text-secondary)', width: '15%' }}>{pk.label}</th>)}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {ADMIN_PERM_MODS.map((m, i) => (
+                                                            <tr key={m.m} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
+                                                                <td style={{ padding: '12px 16px', fontWeight: 600, fontSize: '.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                                    <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                        <Shield size={14} style={{ color: '#ef4444' }} />
+                                                                    </div>
+                                                                    <span>{m.l}</span>
+                                                                </td>
+                                                                {PERM_KEYS.map(pk => (
+                                                                    <td key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                                                        <PermCell has={!!permState[selRole]?.[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
+                                                                            onToggle={() => togglePerm(selRole, m.m, pk.key)} />
+                                                                    </td>
+                                                                ))}
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </Card>
+                                    </div>
+                                )}
                             </Card>
                         )}
                         {permLoaded && <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
@@ -1528,6 +1636,45 @@ export default function Settings() {
                                             </tbody>
                                         </table>
                                     </div>
+                                    {isSuperAdmin && (
+                                        <div style={{ marginTop: 24, marginBottom: 16 }}>
+                                            <Card title="صلاحيات مدير النظام الإدارية الحصرية (الأدمن الرئيسي)" icon={Shield}
+                                                action={<span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,.12)', color: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 700 }}>خاص بالأدمن الرئيسي</span>}
+                                            >
+                                                <div style={{ fontSize: '.8rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+                                                    صلاحيات التحكم المتقدمة بالعمليات الحساسة وإصدار ملفات إكسيل وإدارة السحابة وتصفير البيانات.
+                                                </div>
+                                                <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid rgba(239,68,68,0.2)', background: 'var(--surface)' }}>
+                                                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+                                                        <thead>
+                                                            <tr style={{ background: 'rgba(239,68,68,0.06)', borderBottom: '1px solid rgba(239,68,68,0.15)' }}>
+                                                                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, fontSize: '.8rem', color: '#ef4444', width: '40%' }}>صلاحية مدير النظام</th>
+                                                                {PERM_KEYS.map(pk => <th key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600, fontSize: '.8rem', color: 'var(--text-secondary)', width: '15%' }}>{pk.label}</th>)}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {ADMIN_PERM_MODS.map((m, i) => (
+                                                                <tr key={m.m} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
+                                                                    <td style={{ padding: '12px 16px', fontWeight: 600, fontSize: '.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                                        <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                            <Shield size={14} style={{ color: '#ef4444' }} />
+                                                                        </div>
+                                                                        <span>{m.l}</span>
+                                                                    </td>
+                                                                    {PERM_KEYS.map(pk => (
+                                                                        <td key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                                                            <PermCell has={!!upState[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
+                                                                                onToggle={() => setUpState(p => ({ ...p, [m.m]: { ...p[m.m], [pk.key]: !p[m.m]?.[pk.key] } }))} />
+                                                                        </td>
+                                                                    ))}
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </Card>
+                                        </div>
+                                    )}
                                     <div style={{ display: 'flex', gap: 10 }}>
                                         <button style={{ ...btnStyle, background: 'linear-gradient(135deg, var(--primary), #3b82f6)', color: '#fff', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)', transition: 'all .2s' }} disabled={saving} onClick={saveUserPerms}>
                                             <Save size={15} /> {saving ? (t('saving') || 'Saving...') : (t('save_individual_permissions') || 'Save Individual Permissions')}
@@ -1783,6 +1930,42 @@ export default function Settings() {
                     );
                 })()}
 
+                {/* ══ EXCEL PROGRAM & BACKUP ════════════════════════════════════════════════ */}
+                {sec === 'excel_program' && (isAdmin || user?.permissions?.excel_backup?.can_view || user?.permissions?.excel_backup?.can_create) && (
+                    <>
+                        <Card title="برنامج Excel المصغر والنسخ الاحتياطي للأرشيف" icon={FileText}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                <p style={{ fontSize: '.9rem', color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>
+                                    يمكنك إصدار وتنزيل **برنامج إكسيل مصغر تفاعلي مستقل (Vero Mini-Excel Program)** يتيح لك الاستمرار في تسجيل المبيعات والمشتريات ومتابعة المخزون والعملاء والموردين أوفلاين، مع ربط دقيق لكافة الحسابات.
+                                </p>
+
+                                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+                                    {(isAdmin || user?.permissions?.excel_backup?.can_create) && (
+                                        <button
+                                            style={{ ...btnStyle, background: '#107c41', color: '#fff', padding: '10px 20px', boxShadow: '0 4px 14px rgba(16,124,65,0.25)' }}
+                                            onClick={backupToExcel}
+                                        >
+                                            <Download size={16} /> تصدير وإصدار شيت برنامج Excel المصغر (.xlsx)
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginTop: 8 }}>
+                                    <div style={{ fontWeight: 700, fontSize: '.95rem', color: 'var(--text-primary)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <Check size={18} style={{ color: '#107c41' }} /> مميزات برنامج Excel المصغر المدمج:
+                                    </div>
+                                    <ul style={{ paddingRight: 20, margin: 0, fontSize: '.875rem', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+                                        <li><strong>تثبيت اسم العميل/المورد افتراضياً:</strong> يتم اختيار "عميل نقدي" أو "مورد عام" تلقائياً في خانة العميل/المورد، وتكرار نفس اسم العميل بالسطر التالي فوراً لإدخال أصناف متعددة لنفس الفاتورة.</li>
+                                        <li><strong>تحديد حالة الدفع ومعالجة المديونيات:</strong> اختيار حالة الدفع ("مدفوع" / "أجل") حيث يتم ترحيل الآجل تلقائياً لمديونية العميل أو دائنية المورد دون خصمه من الخزينة النقدية.</li>
+                                        <li><strong>تسميع الرصيد الافتتاحي:</strong> ترحيل صافي المديونيات الحالية مباشرة إلى الرصيد الافتتاحي عند البدء من جديد بشيت جديد.</li>
+                                        <li><strong>المطابقة الذكية للأكواد والأسماء:</strong> استنتاج أسماء وأكواد المنتجات والأسعار تلقائياً من صفحة المنتجات بدون أخطاء.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </Card>
+                    </>
+                )}
+
                 {/* ══ AI ASSISTANT ════════════════════════════════════════════════════ */}
                 {sec === 'ai_assistant' && (isAdmin || user?.permissions?.ai_assistant?.can_edit) && (
                     <>
@@ -1837,7 +2020,7 @@ export default function Settings() {
                     </>
                 )}
 
-                                            {/* ══ 8. DATABASE ════════════════════════════════════════════════════ */}
+                {/* ══ 8. DATABASE ════════════════════════════════════════════════════ */}
                 {sec === 'database' && (isAdmin || user?.permissions?.database?.can_view) && <>
                     {/* Database Connection Settings */}
                     <Card title={t('database_connection') || 'اتصال قاعدة البيانات'} icon={Database}>
@@ -1880,11 +2063,6 @@ export default function Settings() {
                                 </button>
                                 <button style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }} onClick={restore}>
                                     <Upload size={14} /> {t('restore_from_backup') || 'استعادة من نسخة احتياطية'}
-                                </button>
-                            </div>
-                            <div style={{ borderTop: '1px dashed var(--border)', paddingTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                                <button style={{ ...btnStyle, background: '#107c41', color: '#fff' }} onClick={backupToExcel}>
-                                    <Download size={14} /> {'تصدير كـ ملف إكسيل احتياطي (Excel)'}
                                 </button>
                             </div>
                         </div>
@@ -2222,7 +2400,7 @@ export default function Settings() {
                         }
                     `}} />
                     <div style={{ fontSize: '1.2rem', fontWeight: 700, textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
-                        {t('resetting_app_loading') || 'جاري تهيئة قاعدة البيانات وبدء شركة جديدة...'}
+                        {resetLoadingText || t('processing_loading') || 'جاري المعالجة والتحميل...'}
                     </div>
                     <div style={{ fontSize: '.9rem', color: 'rgba(255, 255, 255, 0.7)', fontWeight: 500 }}>
                         {t('please_wait') || 'يرجى الانتظار، لا تقم بإغلاق التطبيق'}

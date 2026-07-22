@@ -43,6 +43,22 @@ class ProductsRepo {
                 return { success: true, count: 0 };
             }
 
+            const existingDocs = await Product.find({}, { code: 1, id: 1 }).lean();
+            const existingCodes = new Set(existingDocs.map(d => d.code?.trim()?.toLowerCase()).filter(Boolean));
+            const usedInBatch = new Set();
+
+            let maxNumVal = 0;
+            existingDocs.forEach(d => {
+                if (d.code) {
+                    const match = d.code.match(/P(\d+)$/i);
+                    if (match) {
+                        const n = parseInt(match[1], 10);
+                        if (n > maxNumVal) maxNumVal = n;
+                    }
+                }
+            });
+            let nextNumVal = maxNumVal + 1;
+
             const sequenceDocument = await Counter.findByIdAndUpdate(
                 'products',
                 { $inc: { seq: productsArray.length } },
@@ -50,18 +66,24 @@ class ProductsRepo {
             );
             let nextId = sequenceDocument.seq - productsArray.length + 1;
 
-            const lastDoc = await Product.findOne().sort({ id: -1 }).lean();
-            let nextNumVal = 1;
-            if (lastDoc && lastDoc.code) {
-                const match = lastDoc.code.match(/P(\d+)$/i);
-                if (match) {
-                    nextNumVal = parseInt(match[1], 10) + 1;
-                }
-            }
-
             const docsToInsert = [];
             for (const p of productsArray) {
-                const code = p.code || `P${String(nextNumVal++).padStart(4, '0')}`;
+                let code = (p.code || '').trim();
+                const codeLower = code.toLowerCase();
+
+                // If code is missing or already exists in DB/Batch, generate a new unique code
+                if (!code || existingCodes.has(codeLower) || usedInBatch.has(codeLower)) {
+                    let uniqueFound = false;
+                    while (!uniqueFound) {
+                        code = `P${String(nextNumVal++).padStart(4, '0')}`;
+                        const genLower = code.toLowerCase();
+                        if (!existingCodes.has(genLower) && !usedInBatch.has(genLower)) {
+                            uniqueFound = true;
+                        }
+                    }
+                }
+                usedInBatch.add(code.toLowerCase());
+
                 const warehouseStock = parseFloat(p.warehouse_stock) || 0;
                 const shopStock = parseFloat(p.shop_stock) || 0;
                 const totalStock = warehouseStock + shopStock;

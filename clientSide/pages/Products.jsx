@@ -65,6 +65,14 @@ function Products() {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
 
+    const [showImportConflictModal, setShowImportConflictModal] = useState(false);
+    const [importConflicts, setImportConflicts] = useState([]);
+    const [currentConflictIdx, setCurrentConflictIdx] = useState(0);
+    const [pendingNewProducts, setPendingNewProducts] = useState([]);
+    const [resolvedUpdateProducts, setResolvedUpdateProducts] = useState([]);
+    const [resolvedNewProducts, setResolvedNewProducts] = useState([]);
+    const [isProcessingImport, setIsProcessingImport] = useState(false);
+
     const [topSalesCount, setTopSalesCount] = useState(() => {
         const saved = localStorage.getItem('top_sales_count');
         return saved !== null ? parseInt(saved, 10) : 10;
@@ -211,17 +219,17 @@ function Products() {
                     return headers.findIndex(h => normalizedKeys.some(k => h.includes(k)));
                 };
 
-                const codeIdx = findColIndex(['code', 'الكود', 'كود']);
-                const nameIdx = findColIndex(['name', 'الاسم', 'اسم']);
-                const descIdx = findColIndex(['description', 'الوصف', 'وصف']);
-                const catIdx = findColIndex(['category', 'القسم', 'التصنيف', 'قسم', 'تصنيف']);
-                const unitIdx = findColIndex(['unit', 'الوحدة', 'وحدة']);
-                const purchasePriceIdx = findColIndex(['purchase', 'شراء', 'الشراء', 'سعر الشراء']);
-                const dozenPriceIdx = findColIndex(['dozen price', 'سعر الدرزن', 'درزن']);
-                const dozenQtyIdx = findColIndex(['dozen qty', 'الكمية في الدرزن', 'كمية الدرزن', 'الكمية فى الدرزن', 'العدد في الدرزن', 'العدد فى الدرزن']);
-                const salePriceIdx = findColIndex(['sale', 'بيع', 'البيع', 'سعر البيع']);
-                const stockIdx = findColIndex(['stock', 'الكمية', 'المخزون', 'رصيد', 'كمية المخزن', 'مخزون المحل', 'الكمية بالمخزون']);
-                const minStockIdx = findColIndex(['min', 'الحد الأدنى', 'الحد الادنى']);
+                const codeIdx = findColIndex(['code', 'الكود', 'كود', 'رمز الصنف', 'باركود', 'الباركود', 'كود المنتج', 'رقم المنتج', 'رقم الصنف']);
+                const nameIdx = findColIndex(['name', 'الاسم', 'اسم', 'اسم المنتج', 'اسم الصنف', 'الصنف', 'المنتج', 'بيان الصنف', 'اسم المادة', 'المادة', 'الوصف العام']);
+                const descIdx = findColIndex(['description', 'الوصف', 'وصف', 'تفاصيل', 'بيان', 'ملاحظات']);
+                const catIdx = findColIndex(['category', 'القسم', 'التصنيف', 'قسم', 'تصنيف', 'الفئة', 'المجموعة', 'اسم القسم']);
+                const unitIdx = findColIndex(['unit', 'الوحدة', 'وحدة', 'نوع الوحدة']);
+                const purchasePriceIdx = findColIndex(['purchase', 'شراء', 'الشراء', 'سعر الشراء', 'تكلفة', 'التكلفة', 'سعر التكلفة']);
+                const dozenPriceIdx = findColIndex(['dozen price', 'سعر الدرزن', 'درزن', 'جملة', 'سعر الجملة']);
+                const dozenQtyIdx = findColIndex(['dozen qty', 'الكمية في الدرزن', 'كمية الدرزن', 'الكمية فى الدرزن', 'العدد في الدرزن', 'العدد فى الدرزن', 'عدد الدرزن']);
+                const salePriceIdx = findColIndex(['sale', 'بيع', 'البيع', 'سعر البيع', 'سعر القطعة', 'المفرق', 'سعر المفرق']);
+                const stockIdx = findColIndex(['stock', 'الكمية', 'المخزون', 'رصيد', 'كمية المخزن', 'مخزون المحل', 'الكمية بالمخزون', 'الرصيد', 'العدد', 'الكميه']);
+                const minStockIdx = findColIndex(['min', 'الحد الأدنى', 'الحد الادنى', 'أقل كمية', 'اقل كمية']);
 
                 const getVal = (row, idx, fallbackIdx) => {
                     const realIdx = idx !== -1 ? idx : fallbackIdx;
@@ -237,7 +245,7 @@ function Products() {
                     }
                     
                     const codeVal = getVal(values, codeIdx, 0);
-                    const nameVal = getVal(values, nameIdx, 1);
+                    let nameVal = getVal(values, nameIdx, 1);
                     const descVal = getVal(values, descIdx, 2);
                     const catVal = getVal(values, catIdx, 3);
                     const unitVal = getVal(values, unitIdx, 4);
@@ -248,6 +256,18 @@ function Products() {
                     const saleVal = getVal(values, salePriceIdx, hasDozenHeaders ? 8 : 6);
                     const stockVal = getVal(values, stockIdx, hasDozenHeaders ? 9 : 7);
                     const minStockVal = getVal(values, minStockIdx, hasDozenHeaders ? 10 : 8);
+
+                    let pName = nameVal !== undefined && nameVal !== null ? String(nameVal).trim() : '';
+                    if (!pName) {
+                        // Fallback: search row for first non-numeric text cell
+                        for (let c = 0; c < values.length; c++) {
+                            const valStr = String(values[c] || '').trim();
+                            if (valStr && isNaN(valStr) && valStr.length > 1) {
+                                pName = valStr;
+                                break;
+                            }
+                        }
+                    }
 
                     const dPrice = dozenPriceVal !== undefined && dozenPriceVal !== null ? parseExcelNumber(dozenPriceVal) : 0;
                     const dQty = dozenQtyVal !== undefined && dozenQtyVal !== null && dozenQtyVal !== ''
@@ -260,7 +280,7 @@ function Products() {
 
                     const productData = {
                         code: codeVal !== undefined && codeVal !== null ? String(codeVal).trim() : '',
-                        name: nameVal !== undefined && nameVal !== null ? String(nameVal).trim() : '',
+                        name: pName,
                         description: descVal !== undefined && descVal !== null ? String(descVal).trim() : '',
                         category: catVal !== undefined && catVal !== null ? String(catVal).trim() : '',
                         unit: unitVal !== undefined && unitVal !== null ? String(unitVal).trim() : t('prod_piece') || 'قطعة',
@@ -280,23 +300,125 @@ function Products() {
                 }
                 
                 if (productsToImport.length > 0) {
-                    const result = await window.api.products.bulkCreate(productsToImport);
-                    if (result && result.success) {
-                        toast.success(productsToImport.length + ' ' + (t('savedSuccess')));
-                        loadProducts();
+                    const currentDbProds = await window.api.products.getAll();
+                    const nameMap = new Map();
+                    const codeMap = new Map();
+                    (currentDbProds || []).forEach(p => {
+                        if (p.name) nameMap.set(p.name.trim().toLowerCase(), p);
+                        if (p.code) codeMap.set(p.code.trim().toLowerCase(), p);
+                    });
+
+                    const uniqueList = [];
+                    const conflictList = [];
+
+                    productsToImport.forEach(imp => {
+                        const normName = (imp.name || '').trim().toLowerCase();
+                        const normCode = (imp.code || '').trim().toLowerCase();
+
+                        const match = (normCode && codeMap.get(normCode)) || (normName && nameMap.get(normName));
+                        if (match) {
+                            conflictList.push({ imported: imp, existing: match });
+                        } else {
+                            uniqueList.push(imp);
+                        }
+                    });
+
+                    if (conflictList.length > 0) {
+                        setPendingNewProducts(uniqueList);
+                        setImportConflicts(conflictList);
+                        setCurrentConflictIdx(0);
+                        setResolvedUpdateProducts([]);
+                        setResolvedNewProducts([]);
+                        setShowImportConflictModal(true);
                     } else {
-                        toast.error(result?.error || t('errorOccurred'));
+                        const result = await window.api.products.bulkCreate(uniqueList);
+                        if (result && result.success) {
+                            toast.success(`تم استيراد وحفظ ${uniqueList.length} منتج جديد بنجاح`);
+                            loadProducts();
+                        } else {
+                            toast.error(result?.error || 'حدث خطأ أثناء حفظ المنتجات المستوردة');
+                        }
                     }
                 } else {
-                    toast.error(t('errorOccurred') || 'No products found to import');
+                    toast.error('لم يتم العثور على أي منتجات صالحة للاستيراد في الملف. يرجى التأكد من احتواء الشيت على عمود باسم المنتج.');
                 }
             } catch (error) {
                 console.error('Import error:', error);
-                toast.error(t('errorOccurred'));
+                toast.error('حدث خطأ أثناء قراءة ملف الإكسيل: ' + (error.message || 'فشل القراءة'));
             }
             e.target.value = null;
         };
         reader.readAsArrayBuffer(file);
+    };
+
+    const finishImportProcess = async (toUpdate, toCreate) => {
+        setIsProcessingImport(true);
+        let updatedCount = 0;
+        let createdCount = 0;
+        try {
+            for (const item of toUpdate) {
+                const res = await window.api.products.update(item);
+                if (res && res.success) updatedCount++;
+            }
+
+            if (toCreate.length > 0) {
+                const res = await window.api.products.bulkCreate(toCreate);
+                if (res && res.success) createdCount = res.count || toCreate.length;
+            }
+
+            toast.success(`تم إكمال الاستيراد بنجاح: تم إضافة ${createdCount} منتج جديد، وتحديث ${updatedCount} منتج.`);
+            loadProducts();
+        } catch (err) {
+            console.error('Error completing import:', err);
+            toast.error('حدث خطأ أثناء معالجة الاستيراد');
+        }
+        setIsProcessingImport(false);
+        setShowImportConflictModal(false);
+        setImportConflicts([]);
+        setPendingNewProducts([]);
+        setResolvedUpdateProducts([]);
+        setResolvedNewProducts([]);
+    };
+
+    const handleConflictDecision = async (decision, applyToAll = false) => {
+        let newUpdates = [...resolvedUpdateProducts];
+        let newCreates = [...resolvedNewProducts];
+
+        const conflictsToProcess = applyToAll
+            ? importConflicts.slice(currentConflictIdx)
+            : [importConflicts[currentConflictIdx]];
+
+        conflictsToProcess.forEach(item => {
+            if (decision === 'replace') {
+                newUpdates.push({
+                    ...item.existing,
+                    name: item.imported.name || item.existing.name,
+                    code: item.imported.code || item.existing.code,
+                    category: item.imported.category || item.existing.category,
+                    unit: item.imported.unit || item.existing.unit,
+                    purchase_price: item.imported.purchase_price !== 0 ? item.imported.purchase_price : item.existing.purchase_price,
+                    sale_price: item.imported.sale_price !== 0 ? item.imported.sale_price : item.existing.sale_price,
+                    shop_stock: (item.existing.shop_stock || 0) + (item.imported.shop_stock || 0),
+                    min_stock: item.imported.min_stock !== 0 ? item.imported.min_stock : item.existing.min_stock,
+                    dozen_price: item.imported.dozen_price !== 0 ? item.imported.dozen_price : item.existing.dozen_price,
+                    dozen_qty: item.imported.dozen_qty || item.existing.dozen_qty
+                });
+            } else if (decision === 'create_new') {
+                newCreates.push({
+                    ...item.imported,
+                    code: '' // Let bulkCreate generate a new unique code
+                });
+            }
+        });
+
+        if (applyToAll || currentConflictIdx >= importConflicts.length - 1) {
+            const allNewToCreate = [...pendingNewProducts, ...newCreates];
+            await finishImportProcess(newUpdates, allNewToCreate);
+        } else {
+            setResolvedUpdateProducts(newUpdates);
+            setResolvedNewProducts(newCreates);
+            setCurrentConflictIdx(prev => prev + 1);
+        }
     };
 
     useShortcuts({
@@ -671,12 +793,12 @@ function Products() {
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    {user?.permissions?.products_export?.can_view && (
+                    {(user?.role === 'admin' || user?.permissions?.products_export?.can_view) && (
                         <button className="btn btn-secondary" onClick={handleExportProducts} title={t('prod_export')}>
                             <Download size={18} /> {t('prod_export')}
                         </button>
                     )}
-                    {user?.permissions?.products_import?.can_view && (
+                    {(user?.role === 'admin' || user?.permissions?.products_import?.can_view) && (
                         <>
                             <input type="file" accept=".xlsx,.xls,.csv" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImportProducts} />
                             <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} title={t('prod_import')}>
@@ -684,7 +806,7 @@ function Products() {
                             </button>
                         </>
                     )}
-                    {user?.permissions?.products?.can_create && (
+                    {(user?.role === 'admin' || user?.permissions?.products?.can_create) && (
                         <button className="btn btn-primary" onClick={() => openModal()}><Plus size={18} /> {t('prod_add')}</button>
                     )}
                 </div>
@@ -736,10 +858,10 @@ function Products() {
                                                         >
                                                             <BarChart2 size={16} />
                                                         </button>
-                                                        {user?.permissions?.products?.can_edit && (
+                                                        {(user?.role === 'admin' || user?.permissions?.products?.can_edit) && (
                                                             <button className="btn btn-ghost btn-sm" onClick={() => openModal(p)}><Edit2 size={16} /></button>
                                                         )}
-                                                        {user?.permissions?.products?.can_delete && (
+                                                        {(user?.role === 'admin' || user?.permissions?.products?.can_delete) && (
                                                             <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(p.id)}><Trash2 size={16} /></button>
                                                         )}
                                                     </div>
@@ -1246,16 +1368,115 @@ function Products() {
         <>
             {mainContent}
 
-            {/* Invoice Preview Modal - opens when clicking invoice number in tracking */}
-            {viewingInvoice && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 10001 }}>
-                    <InvoicePrintPreview
-                        invoice={viewingInvoice}
-                        settings={invoiceSettings}
-                        type={viewingInvoice._type || 'sales'}
-                        onClose={() => setViewingInvoice(null)}
-                    />
-                </div>
+            {/* Conflict Modal for Duplicate Products in Import */}
+            {showImportConflictModal && importConflicts[currentConflictIdx] && (
+                <Modal
+                    isOpen={showImportConflictModal}
+                    onClose={() => setShowImportConflictModal(false)}
+                    title={`⚠️ تنبيه: توجد منتجات متشابهة (${currentConflictIdx + 1} من ${importConflicts.length})`}
+                    size="lg"
+                    footer={
+                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => handleConflictDecision('replace', true)}
+                                    disabled={isProcessingImport}
+                                    style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#7dd3fc', fontWeight: 600 }}
+                                >
+                                    ⚡ استبدال وتحديث المتبقي بالكامل
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => handleConflictDecision('skip', true)}
+                                    disabled={isProcessingImport}
+                                    style={{ background: '#f3f4f6', color: '#4b5563', fontWeight: 600 }}
+                                >
+                                    ⏭️ تخطي المتبقي بالكامل
+                                </button>
+                            </div>
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setShowImportConflictModal(false)}
+                                disabled={isProcessingImport}
+                            >
+                                إلغاء الاستيراد
+                            </button>
+                        </div>
+                    }
+                >
+                    <div>
+                        <div style={{ background: '#fffbe6', border: '1px solid #ffe58f', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.9rem', color: '#873800' }}>
+                            <strong>المنتج المراد استيراده ينطبق مع منتج موجود في النظام (بالاسم أو الكود).</strong> يرجى اختيار الإجراء المناسب:
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                            {/* Existing DB Product */}
+                            <div style={{ border: '1px solid #d9d9d9', borderRadius: '8px', padding: '14px', background: 'var(--bg-secondary)' }}>
+                                <div style={{ fontWeight: 700, borderBottom: '1px solid var(--border)', paddingBottom: '8px', marginBottom: '10px', color: 'var(--text-main)' }}>
+                                    📋 المنتج الحالي في النظام
+                                </div>
+                                <div style={{ fontSize: '0.88rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <div><strong>الاسم:</strong> {importConflicts[currentConflictIdx].existing.name}</div>
+                                    <div><strong>الكود:</strong> {importConflicts[currentConflictIdx].existing.code || '-'}</div>
+                                    <div><strong>القسم:</strong> {importConflicts[currentConflictIdx].existing.category || '-'}</div>
+                                    <div><strong>سعر الشراء:</strong> {formatCurrency(importConflicts[currentConflictIdx].existing.purchase_price)}</div>
+                                    <div><strong>سعر البيع:</strong> {formatCurrency(importConflicts[currentConflictIdx].existing.sale_price)}</div>
+                                    <div><strong>كمية المحل:</strong> {importConflicts[currentConflictIdx].existing.shop_stock || 0}</div>
+                                </div>
+                            </div>
+
+                            {/* Imported Product */}
+                            <div style={{ border: '1px solid #b7eb8f', borderRadius: '8px', padding: '14px', background: '#f6ffed' }}>
+                                <div style={{ fontWeight: 700, borderBottom: '1px solid #d9f7be', paddingBottom: '8px', marginBottom: '10px', color: '#274f10' }}>
+                                    📥 المنتج المستورد من الملف
+                                </div>
+                                <div style={{ fontSize: '0.88rem', display: 'flex', flexDirection: 'column', gap: '6px', color: '#135200' }}>
+                                    <div><strong>الاسم:</strong> {importConflicts[currentConflictIdx].imported.name}</div>
+                                    <div><strong>الكود:</strong> {importConflicts[currentConflictIdx].imported.code || '-'}</div>
+                                    <div><strong>القسم:</strong> {importConflicts[currentConflictIdx].imported.category || '-'}</div>
+                                    <div><strong>سعر الشراء:</strong> {formatCurrency(importConflicts[currentConflictIdx].imported.purchase_price)}</div>
+                                    <div><strong>سعر البيع:</strong> {formatCurrency(importConflicts[currentConflictIdx].imported.sale_price)}</div>
+                                    <div><strong>الكمية بالملف:</strong> {importConflicts[currentConflictIdx].imported.shop_stock || 0}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={() => handleConflictDecision('replace')}
+                                disabled={isProcessingImport}
+                                style={{ background: '#2563eb', borderColor: '#2563eb', padding: '10px 18px', fontWeight: 700 }}
+                            >
+                                🔄 استبدال وتحديث المنتج الحالي
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => handleConflictDecision('skip')}
+                                disabled={isProcessingImport}
+                                style={{ padding: '10px 18px', fontWeight: 600 }}
+                            >
+                                ⏭️ تخطي الإدراج
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => handleConflictDecision('create_new')}
+                                disabled={isProcessingImport}
+                                style={{ background: '#f0fdf4', color: '#15803d', borderColor: '#86efac', padding: '10px 18px', fontWeight: 600 }}
+                            >
+                                ➕ إدراج كـ منتج جديد (كود جديد)
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
             )}
         </>
     );

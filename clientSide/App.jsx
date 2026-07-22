@@ -42,8 +42,21 @@ const PurchaseReturns = lazy(() => import('./pages/PurchaseReturns'));
 const Quotations = lazy(() => import('./pages/Quotations'));
 
 const LoadingScreen = () => (
-    <div className="loading" style={{ height: '100vh' }}>
-        <div className="spinner"></div>
+    <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg-main, #f8fafc)',
+        zIndex: 999999
+    }}>
+        <div className="spinner" style={{ width: 44, height: 44, borderWidth: 3 }}></div>
     </div>
 );
 
@@ -544,7 +557,9 @@ function App() {
         return (
             <AuthContext.Provider value={loginContextValue}>
                 <Toaster position="top-center" reverseOrder={false} />
-                <Login onLogin={login} />
+                <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                    <Login onLogin={login} />
+                </div>
             </AuthContext.Provider>
         );
     }

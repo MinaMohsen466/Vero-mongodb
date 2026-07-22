@@ -441,13 +441,26 @@ function PurchaseInvoices() {
 
     const formatCurrency = (amount) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (settings.general?.currency_symbol || (t('currency_kd') || 'KD'));
 
+    const getStatusLabel = (status) => {
+        if (status === 'paid') return t('inv_paid') || 'مدفوعة';
+        if (status === 'partial') return t('inv_partial') || 'مدفوعة جزئياً';
+        if (status === 'cancelled') return t('inv_cancelled') || 'ملغاة';
+        return t('inv_pending') || 'آجلة (غير مدفوعة)';
+    };
+
     const filteredInvoices = invoices.filter(inv => {
-        const matchesSearch = 
-            inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            inv.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        const q = searchQuery.toLowerCase().trim();
+        const statusLbl = (getStatusLabel(inv.status) || '').toLowerCase();
+        const matchesSearch = !q ||
+            inv.invoice_number?.toLowerCase().includes(q) || 
+            inv.supplier_name?.toLowerCase().includes(q) ||
+            statusLbl.includes(q) ||
+            (inv.status === 'pending' && (q.includes('آجل') || q.includes('اجل') || q.includes('غير مدفوع'))) ||
+            (inv.status === 'partial' && (q.includes('جزئ') || q.includes('جزئي'))) ||
+            (inv.status === 'paid' && q.includes('مدفوع')) ||
             (inv.items || []).some(item => 
-                item.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.description?.toLowerCase().includes(searchQuery.toLowerCase())
+                item.product_name?.toLowerCase().includes(q) ||
+                item.description?.toLowerCase().includes(q)
             );
         const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
         const matchesSupplier = !supplierFilter || String(inv.supplier_id) === supplierFilter;
@@ -461,13 +474,6 @@ function PurchaseInvoices() {
         if (dateB !== dateA) return dateB - dateA;
         return b.id - a.id;
     });
-
-    const getStatusLabel = (status) => {
-        if (status === 'paid') return t('inv_paid');
-        if (status === 'partial') return t('inv_partial');
-        if (status === 'cancelled') return t('inv_cancelled');
-        return t('inv_pending');
-    };
 
     const exportCSV = async () => {
         const rows = [[
@@ -516,10 +522,11 @@ function PurchaseInvoices() {
                     <Search size={16} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 </div>
                 <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-                    style={{ width: '130px', margin: 0 }}>
-                    <option value="all">{t('all') || 'All Statuses'}</option>
-                    <option value="paid">{t('inv_paid') || 'Paid'}</option>
-                    <option value="pending">{t('inv_credit') || 'Credit'}</option>
+                    style={{ width: '160px', margin: 0 }}>
+                    <option value="all">{t('all') || 'كل الحالات'}</option>
+                    <option value="paid">{t('inv_paid') || 'مدفوعة'}</option>
+                    <option value="pending">{t('inv_pending') || 'آجلة (غير مدفوعة)'}</option>
+                    <option value="partial">{t('inv_partial') || 'مدفوعة جزئياً'}</option>
                 </select>
                 <div style={{ width: '200px' }}>
                     <SearchableSelect
@@ -542,7 +549,7 @@ function PurchaseInvoices() {
                 <button className="btn btn-secondary" onClick={exportCSV} style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#059669' }}>
                     <Download size={16} /> CSV
                 </button>
-                {user?.permissions?.purchase_invoices?.can_create && (
+                {(user?.role === 'admin' || user?.permissions?.purchase_invoices?.can_create) && (
                     <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> {t('pinv_add')}</button>
                 )}
             </div>
@@ -594,16 +601,16 @@ function PurchaseInvoices() {
                                             </td>
                                             <td>
                                                 <div className="table-actions">
-                                                    {user?.permissions?.purchase_invoices?.can_view && (
+                                                    {(user?.role === 'admin' || user?.permissions?.purchase_invoices?.can_view) && (
                                                         <button className="btn btn-ghost btn-sm" onClick={() => viewInvoice(inv.id)} title={t('inv_view')}><Eye size={16} /></button>
                                                     )}
-                                                    {user?.permissions?.purchase_invoices?.can_edit && (
+                                                    {(user?.role === 'admin' || user?.permissions?.purchase_invoices?.can_edit) && (
                                                         <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(inv.id)} title={t('edit')}><Edit size={16} /></button>
                                                     )}
-                                                    {user?.permissions?.purchase_invoices?.can_view && (
+                                                    {(user?.role === 'admin' || user?.permissions?.purchase_invoices?.can_view) && (
                                                         <button className="btn btn-ghost btn-sm" onClick={() => viewInvoice(inv.id)} title={t('inv_print')}><Printer size={16} /></button>
                                                     )}
-                                                    {user?.permissions?.purchase_invoices?.can_delete && (
+                                                    {(user?.role === 'admin' || user?.permissions?.purchase_invoices?.can_delete) && (
                                                         <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(inv.id)} title={t('delete')}><Trash2 size={16} /></button>
                                                     )}
                                                 </div>

@@ -146,6 +146,36 @@ class ExpensesRepo {
                 return { success: false, error: 'مصروف الراتب مرتبط بسجل الرواتب. احذف صرف الراتب من شاشة الرواتب.' };
             }
 
+            if (payment.category === 'bad_debt' && payment.reference && payment.reference.startsWith('BAD-DEBT-CUST-')) {
+                const custId = parseInt(payment.reference.replace('BAD-DEBT-CUST-', ''), 10);
+                if (custId) {
+                    // Revert customer invoices with bad debt notes back to their pre-write-off status and clean notes reliably
+                    const customerInvoices = await Invoice.find({ customer_id: custId }).lean();
+                    for (const inv of customerInvoices) {
+                        if (inv.notes && (inv.notes.includes('شطب') || inv.notes.includes('إعدام') || inv.notes.includes('دين معدوم'))) {
+                            let cleanNotes = (inv.notes || '').replace(/\[?تم شطب\/إعدام مبلغ .*? كدين معدوم\]?/g, '').replace(/\[?تم شطب.*?\]?/g, '').trim();
+                            
+                            const vouchers = await Voucher.find({ invoice_id: inv.id }).lean();
+                            let voucherPaid = vouchers.reduce((sum, v) => sum + (v.applied_amount || v.amount || 0), 0);
+                            let newStatus = inv.status === 'written_off'
+                                ? (voucherPaid >= inv.total ? 'paid' : voucherPaid > 0 ? 'partial' : 'pending')
+                                : inv.status;
+
+                            await Invoice.updateOne(
+                                { id: inv.id },
+                                { $set: { status: newStatus, paid: voucherPaid, notes: cleanNotes || null } }
+                            );
+                        }
+                    }
+
+                    if (this.db && this.db.customers && typeof this.db.customers.recalculateCustomerBalance === 'function') {
+                        await this.db.customers.recalculateCustomerBalance(custId);
+                    } else {
+                        await Customer.updateOne({ id: custId }, { $inc: { balance: payment.amount } });
+                    }
+                }
+            }
+
             if (payment.journal_entry_id) {
                 const je = await JournalEntry.findOne({ id: payment.journal_entry_id });
                 if (je) {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     BarChart3, FileText, TrendingUp, TrendingDown, Printer, Calendar,
-    DollarSign, ShoppingBag, BarChart2, Download, Plus, Search
+    DollarSign, ShoppingBag, BarChart2, Download, Plus, Search, RotateCcw
 } from 'lucide-react';
 import {
     BarChart, Bar, LineChart, Line, PieChart as RechartsPie, Pie, Cell,
@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../App';
 import SearchableSelect from '../components/SearchableSelect';
+import { toast } from 'react-hot-toast';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#3B82F6', '#8B5CF6', '#EC4899', '#14B8A6'];
@@ -16,7 +17,8 @@ const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#3B82F6', '#8B5CF6'
 const MONTHS_AR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function Reports() {
-    const { t, user, theme } = useAuth();
+    const { t, user, theme, language } = useAuth();
+    const isAr = language === 'ar';
     const [activeReport, setActiveReport] = useState('sales_summary');
     const [customers, setCustomers] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
@@ -209,7 +211,7 @@ function Reports() {
 
                 const customerAging = {};
                 (allCustomers || []).forEach(c => {
-                    customerAging[c.id] = { id: c.id, name: c.name, phone: c.phone, total: 0, bracket1: 0, bracket2: 0, bracket3: 0, bracket4: 0 };
+                    customerAging[c.id] = { id: c.id, name: c.name, phone: c.phone, total: 0, bracket1: 0, bracket2: 0, bracket3: 0, bracket4: 0, currentBalance: c.balance || 0 };
                 });
 
                 (sales || []).forEach(inv => {
@@ -218,7 +220,7 @@ function Reports() {
                         if (unpaid <= 0) return;
                         const cId = inv.customer_id;
                         if (!customerAging[cId]) {
-                            customerAging[cId] = { id: cId, name: inv.customer_name || `Customer #${cId}`, phone: '', total: 0, bracket1: 0, bracket2: 0, bracket3: 0, bracket4: 0 };
+                            customerAging[cId] = { id: cId, name: inv.customer_name || `Customer #${cId}`, phone: '', total: 0, bracket1: 0, bracket2: 0, bracket3: 0, bracket4: 0, currentBalance: 0 };
                         }
                         const age = getAgeDays(inv.date);
                         customerAging[cId].total += unpaid;
@@ -229,9 +231,18 @@ function Reports() {
                     }
                 });
 
+                // Add remaining opening balance (if balance > unpaid invoices total)
+                Object.values(customerAging).forEach(c => {
+                    if (c.currentBalance > c.total) {
+                        const diff = c.currentBalance - c.total;
+                        c.bracket4 += diff;
+                        c.total += diff;
+                    }
+                });
+
                 const supplierAging = {};
                 (allSuppliers || []).forEach(s => {
-                    supplierAging[s.id] = { id: s.id, name: s.name, phone: s.phone, total: 0, bracket1: 0, bracket2: 0, bracket3: 0, bracket4: 0 };
+                    supplierAging[s.id] = { id: s.id, name: s.name, phone: s.phone, total: 0, bracket1: 0, bracket2: 0, bracket3: 0, bracket4: 0, currentBalance: s.balance || 0 };
                 });
 
                 (purchases || []).forEach(inv => {
@@ -240,7 +251,7 @@ function Reports() {
                         if (unpaid <= 0) return;
                         const sId = inv.supplier_id;
                         if (!supplierAging[sId]) {
-                            supplierAging[sId] = { id: sId, name: inv.supplier_name || `Supplier #${sId}`, phone: '', total: 0, bracket1: 0, bracket2: 0, bracket3: 0, bracket4: 0 };
+                            supplierAging[sId] = { id: sId, name: inv.supplier_name || `Supplier #${sId}`, phone: '', total: 0, bracket1: 0, bracket2: 0, bracket3: 0, bracket4: 0, currentBalance: 0 };
                         }
                         const age = getAgeDays(inv.date);
                         supplierAging[sId].total += unpaid;
@@ -248,6 +259,15 @@ function Reports() {
                         else if (age <= 60) supplierAging[sId].bracket2 += unpaid;
                         else if (age <= 90) supplierAging[sId].bracket3 += unpaid;
                         else supplierAging[sId].bracket4 += unpaid;
+                    }
+                });
+
+                // Add remaining opening balance for suppliers
+                Object.values(supplierAging).forEach(s => {
+                    if (s.currentBalance > s.total) {
+                        const diff = s.currentBalance - s.total;
+                        s.bracket4 += diff;
+                        s.total += diff;
                     }
                 });
 
@@ -427,6 +447,29 @@ function Reports() {
                         value: filteredExpenses.filter(ex => ex.category === cat.id).reduce((sum, ex) => sum + (parseFloat(ex.amount) || 0), 0)
                     })).filter(c => c.value > 0)
                 };
+            } else if (activeReport === 'year_end_closing') {
+                const [pl, tb, custs, supps] = await Promise.all([
+                    window.api.reports.profitLoss(filters.start_date, filters.end_date),
+                    window.api.reports.trialBalance(filters.end_date),
+                    window.api.customers.getAll(),
+                    window.api.suppliers.getAll()
+                ]);
+                const yr = filters.start_date ? filters.start_date.substring(0, 4) : String(currentYear);
+                const nextYr = parseInt(yr) + 1;
+                data = {
+                    type: 'year_end_closing',
+                    year: yr,
+                    nextYear: nextYr,
+                    netProfit: pl.netProfit || 0,
+                    totalRevenue: pl.totalRevenue || 0,
+                    totalExpenses: (pl.cogs || 0) + (pl.totalExpenses || 0),
+                    grossProfit: pl.grossProfit || 0,
+                    cogs: pl.cogs || 0,
+                    operatingExpenses: pl.totalExpenses || 0,
+                    customerBalances: (custs || []).map(c => ({ id: c.id, name: c.name, phone: c.phone, balance: c.balance || 0 })),
+                    supplierBalances: (supps || []).map(s => ({ id: s.id, name: s.name, phone: s.phone, balance: s.balance || 0 })),
+                    tb
+                };
             }
 
             setReportData(data);
@@ -578,7 +621,9 @@ function Reports() {
         { id: 'profit_loss', label: t('rep_profitLoss') || 'Profit & Loss', icon: BarChart2 },
         { id: 'aging_report', label: t('rep_aging_report') || 'تقرير أعمار الديون', icon: Calendar },
         { id: 'cash_flow', label: t('rep_cash_flow') || 'تقرير حركة التدفقات النقدية والسيولة', icon: DollarSign },
+        { id: 'product_profitability', label: isAr ? 'ربحية المنتجات والأقسام' : 'Product Profitability', icon: ShoppingBag },
         { id: 'trial_balance', label: t('rep_trialBalance') || 'Trial Balance', icon: FileText },
+        { id: 'year_end_closing', label: isAr ? 'الإقفال السنوي وتدوير السنوات المالية' : 'Year-End Closing & Roll Forward', icon: RotateCcw }
     ];
 
     return (
@@ -688,12 +733,37 @@ function Reports() {
                                 </button>
                             </>
                         )}
-                        {/* Date quick-picks */}
-                        <div style={{ display: 'flex', gap: '6px', marginRight: 'auto' }}>
+                        {/* Date quick-picks & Fiscal Year Selector */}
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginRight: 'auto', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--surface-alt)', padding: '3px 8px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                                <Calendar size={14} color="var(--primary)" />
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                                    {isAr ? 'السنة المالية:' : 'Fiscal Year:'}
+                                </span>
+                                <select
+                                    style={{
+                                        background: 'transparent', border: 'none', fontSize: '0.78rem', fontWeight: 700,
+                                        color: 'var(--primary)', cursor: 'pointer', outline: 'none', padding: '2px 4px'
+                                    }}
+                                    value={filters.start_date ? filters.start_date.substring(0, 4) : String(currentYear)}
+                                    onChange={e => {
+                                        const yr = e.target.value;
+                                        if (yr) {
+                                            setFilters(f => ({ ...f, start_date: `${yr}-01-01`, end_date: `${yr}-12-31` }));
+                                        }
+                                    }}
+                                >
+                                    {Array.from({ length: Math.max(currentYear - 2026 + 3, 3) }, (_, i) => String(2026 + i)).map(yr => (
+                                        <option key={yr} value={yr}>{yr}</option>
+                                    ))}
+                                </select>
+                            </div>
+
                             {[
                                 { label: t('rep_thisMonth') || 'This Month', s: `${today.slice(0, 7)}-01`, e: today },
                                 { label: t('rep_thisYear') || 'This Year', s: firstDay, e: today },
-                                { label: t('rep_firstQuarter') || 'First Quarter', s: `${currentYear}-01-01`, e: `${currentYear}-03-31` },
+                                { label: isAr ? 'عام 2026' : 'Year 2026', s: '2026-01-01', e: '2026-12-31' },
+                                { label: isAr ? 'عام 2027' : 'Year 2027', s: '2027-01-01', e: '2027-12-31' },
                             ].map(q => (
                                 <button key={q.label} onClick={() => setFilters(f => ({ ...f, start_date: q.s, end_date: q.e }))}
                                     style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -1258,9 +1328,32 @@ function Reports() {
                                                 <div style={{ background: '#FEF2F2', padding: 8, borderRadius: 6, textAlign: 'center' }}><strong>31-60 {t('day') || 'يوم'}</strong><div style={{ color: '#DC2626', fontWeight: 700 }}>{fmt(reportData.totals?.payBracket2)}</div></div>
                                                 <div style={{ background: '#FEF2F2', padding: 8, borderRadius: 6, textAlign: 'center' }}><strong>61-90 {t('day') || 'يوم'}</strong><div style={{ color: '#DC2626', fontWeight: 700 }}>{fmt(reportData.totals?.payBracket3)}</div></div>
                                                 <div style={{ background: '#FEF2F2', padding: 8, borderRadius: 6, textAlign: 'center' }}><strong>90+ {t('day') || 'يوم'}</strong><div style={{ color: '#DC2626', fontWeight: 700 }}>{fmt(reportData.totals?.payBracket4)}</div></div>
-                                            </div>
+                                             </div>
                                         </div>
                                     </div>
+
+                                    {/* Aging Chart */}
+                                    {(reportData.totals?.receivables > 0 || reportData.totals?.payables > 0) && (
+                                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+                                            <h3 style={{ marginBottom: '16px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>📊 {isAr ? 'توزيع أعمار الديون والالتزامات حسب المدة' : 'Debt & Payables Aging Chart'}</h3>
+                                            <ResponsiveContainer width="100%" height={240}>
+                                                <BarChart data={[
+                                                    { bracket: '1-30 ' + (t('day') || 'يوم'), rec: reportData.totals?.recBracket1 || 0, pay: reportData.totals?.payBracket1 || 0 },
+                                                    { bracket: '31-60 ' + (t('day') || 'يوم'), rec: reportData.totals?.recBracket2 || 0, pay: reportData.totals?.payBracket2 || 0 },
+                                                    { bracket: '61-90 ' + (t('day') || 'يوم'), rec: reportData.totals?.recBracket3 || 0, pay: reportData.totals?.payBracket3 || 0 },
+                                                    { bracket: '90+ ' + (t('day') || 'يوم'), rec: reportData.totals?.recBracket4 || 0, pay: reportData.totals?.payBracket4 || 0 },
+                                                ]}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                                                    <XAxis dataKey="bracket" fontSize={11} />
+                                                    <YAxis fontSize={11} />
+                                                    <Tooltip formatter={(v) => fmt(v)} />
+                                                    <Legend />
+                                                    <Bar dataKey="rec" name={t('rep_totalReceivables') || 'العملاء (مدين)'} fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                                                    <Bar dataKey="pay" name={t('rep_totalPayables') || 'الموردين (دائن)'} fill="#EF4444" radius={[4, 4, 0, 0]} />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    )}
 
                                     {/* Receivables Table */}
                                     <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', marginBottom: '24px' }}>
@@ -1358,6 +1451,24 @@ function Reports() {
                                             </div>
                                         ))}
                                     </div>
+
+                                    {/* Category Profitability Chart */}
+                                    {reportData.categories?.length > 0 && (
+                                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+                                            <h3 style={{ marginBottom: '16px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>📊 {t('rep_categoryProfitChart') || 'مقارنة المبيعات والأرباح حسب التصنيف'}</h3>
+                                            <ResponsiveContainer width="100%" height={260}>
+                                                <BarChart data={reportData.categories}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                                                    <XAxis dataKey="category" fontSize={11} />
+                                                    <YAxis fontSize={11} />
+                                                    <Tooltip formatter={(v) => fmt(v)} />
+                                                    <Legend />
+                                                    <Bar dataKey="revenue" name={t('rep_totalSales') || 'إجمالي المبيعات'} fill="#6366F1" radius={[4, 4, 0, 0]} />
+                                                    <Bar dataKey="grossProfit" name={t('rep_profit') || 'صافي الربح'} fill="#10B981" radius={[4, 4, 0, 0]} />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    )}
 
                                     {/* Category Profitability Table */}
                                     <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', marginBottom: '24px' }}>
@@ -1462,6 +1573,26 @@ function Reports() {
                                                 {t('rep_netChangeFlow') || 'صافي التدفق'}: <span style={{ color: reportData.netChange >= 0 ? '#10B981' : '#EF4444', fontWeight: 'bold' }}>{reportData.netChange >= 0 ? '+' : ''}{fmt(reportData.netChange)}</span>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    {/* Cash Flow Bar Chart */}
+                                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+                                        <h3 style={{ marginBottom: '16px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>📊 {t('rep_inflowVsOutflow') || 'مقارنة التدفقات النقدية المقبوضة والمصروفة (الصندوق والبنك)'}</h3>
+                                        <ResponsiveContainer width="100%" height={220}>
+                                            <BarChart data={[
+                                                { name: t('cb_cash') || 'الصندوق (نقداً)', inflow: reportData.cashInflow, outflow: reportData.cashOutflow },
+                                                { name: t('cb_bank') || 'البنك (تحويل/شبكة)', inflow: reportData.bankInflow, outflow: reportData.bankOutflow },
+                                                { name: t('rep_total') || 'الإجمالي الكلي', inflow: reportData.totalReceipts, outflow: reportData.totalOutflow },
+                                            ]}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                                                <XAxis dataKey="name" fontSize={11} />
+                                                <YAxis fontSize={11} />
+                                                <Tooltip formatter={(v) => fmt(v)} />
+                                                <Legend />
+                                                <Bar dataKey="inflow" name={t('rep_totalCashInflow') || 'المقبوضات (الوارد)'} fill="#10B981" radius={[4, 4, 0, 0]} />
+                                                <Bar dataKey="outflow" name={t('rep_totalCashOutflow') || 'المدفوعات (الصادر)'} fill="#EF4444" radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
                                     </div>
 
                                     {/* Breakdowns & Pie Chart of Expenses */}
@@ -1646,6 +1777,140 @@ function Reports() {
                                                 </tr>
                                             </tfoot>
                                         </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── Year-End Closing & Roll Forward ── */}
+                            {activeReport === 'year_end_closing' && reportData && reportData.type === 'year_end_closing' && (
+                                <div>
+                                    <div style={{
+                                        background: 'linear-gradient(135deg, #3b82f615, #6366f115)',
+                                        border: '1px solid #6366f130',
+                                        borderRadius: '16px',
+                                        padding: '20px 24px',
+                                        marginBottom: '24px'
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+                                            <div>
+                                                <h2 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                    <RotateCcw size={24} color="#6366f1" />
+                                                    {isAr ? `تقرير الإقفال السنوي والدورة المالية لسنة ${reportData.year}` : `Year-End Closing Report for Year ${reportData.year}`}
+                                                </h2>
+                                                <p style={{ margin: '6px 0 0 0', fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                                    {isAr
+                                                        ? `ملخص تصفية حسابات سنة ${reportData.year} وتدوير الأرصدة الافتتاحية للعام الجديد ${reportData.nextYear}`
+                                                        : `Closing summary of year ${reportData.year} and opening balance rollover for year ${reportData.nextYear}`}
+                                                </p>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '10px' }}>
+                                                <button
+                                                    onClick={() => toast.success(isAr ? `تمت معاينة وتثبيت الإقفال السنوي لسنة ${reportData.year} بنجاح` : `Year ${reportData.year} closing confirmed successfully`)}
+                                                    className="btn btn-primary"
+                                                    style={{ padding: '10px 18px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}
+                                                >
+                                                    <RotateCcw size={16} />
+                                                    {isAr ? `تثبيت إقفال سنة ${reportData.year} وتدوير ${reportData.nextYear}` : `Confirm ${reportData.year} Closing`}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Stat Cards Grid */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '24px' }}>
+                                        <StatCard label={isAr ? 'السنة المالية المغلقة' : 'Closed Fiscal Year'} val={reportData.year} color="#6366f1" />
+                                        <StatCard label={isAr ? 'السنة المالية الجديدة' : 'New Fiscal Year'} val={reportData.nextYear} color="#3b82f6" />
+                                        <StatCard label={isAr ? 'إجمالي المبيعات/الإيرادات' : 'Total Revenue'} val={fmt(reportData.totalRevenue)} color="#10b981" />
+                                        <StatCard label={isAr ? 'إجمالي التكاليف والمصروفات' : 'Total Expenses & COGS'} val={fmt(reportData.totalExpenses)} color="#ef4444" />
+                                        <StatCard label={isAr ? 'صافي أرباح السنة المحولة' : 'Net Profit Transferred'} val={fmt(reportData.netProfit)} color={reportData.netProfit >= 0 ? '#10b981' : '#ef4444'} />
+                                    </div>
+
+                                    {/* Accounting Rollover Explanation Cards */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                                        {/* Income Statement Closure */}
+                                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '14px', padding: '18px' }}>
+                                            <h3 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span>⏳</span> {isAr ? '1. إقفال الحسابات المؤقتة (قائمة الدخل)' : '1. Temporary Accounts Closure'}
+                                            </h3>
+                                            <ul style={{ margin: 0, paddingInlineStart: '20px', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                                                <li><strong>{isAr ? 'المبيعات والمشتريات والمصروفات:' : 'Sales, Purchases, Expenses:'}</strong> {isAr ? `تُصفر تلقائياً مع بداية 1 يناير ${reportData.nextYear}` : `Reset to 0 on Jan 1, ${reportData.nextYear}`}</li>
+                                                <li><strong>{isAr ? 'صافي الربح/الخسارة:' : 'Net Profit/Loss:'}</strong> {isAr ? `يتم إقفاله ونقله لحساب "الأرباح المرحلة/المدورة" بمبلغ ${fmt(reportData.netProfit)}` : `Transferred to Retained Earnings balance: ${fmt(reportData.netProfit)}`}</li>
+                                                <li><strong>{isAr ? 'استرجاع البيانات:' : 'Data Retrieval:'}</strong> {isAr ? `تظل جميع فواتير وتفاصيل سنة ${reportData.year} محدوثة ومحفوظة بالكامل في الأرشيف` : `All ${reportData.year} invoices remain preserved in the system archive`}</li>
+                                            </ul>
+                                        </div>
+
+                                        {/* Balance Sheet Rollover */}
+                                        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '14px', padding: '18px' }}>
+                                            <h3 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span>🔄</span> {isAr ? `2. تدوير الحسابات الدائمة (أرصدة ${reportData.nextYear})` : `2. Roll Forward Permanent Balances to ${reportData.nextYear}`}
+                                            </h3>
+                                            <ul style={{ margin: 0, paddingInlineStart: '20px', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                                                <li><strong>{isAr ? 'أرصدة العملاء والموردين:' : 'Customer & Supplier Balances:'}</strong> {isAr ? `تُرحل الأرصدة النهائية لعام ${reportData.year} لتصبح "رصيد افتتاحي" لعام ${reportData.nextYear}` : `Ending balances become Opening Balances for ${reportData.nextYear}`}</li>
+                                                <li><strong>{isAr ? 'رصيد النقدية والبنوك:' : 'Cash & Bank Balances:'}</strong> {isAr ? `ينتقل الرصيد الختامي كاملاً لافتتاحية ${reportData.nextYear}` : `Ending cash balance rolls forward to ${reportData.nextYear}`}</li>
+                                                <li><strong>{isAr ? 'رصيد مخزون البضاعة:' : 'Inventory Value:'}</strong> {isAr ? `تصبح بضاعة آخر المدة لـ ${reportData.year} هي بضاعة أول المدة لـ ${reportData.nextYear}` : `Ending inventory becomes Beginning Inventory for ${reportData.nextYear}`}</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+
+                                    {/* Balances Preview Table */}
+                                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '14px', overflow: 'hidden' }}>
+                                        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <h3 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                                                📋 {isAr ? `الأرصدة المرحلة كأرصدة افتتاحية لعام ${reportData.nextYear}` : `Balances Rolled Forward to ${reportData.nextYear}`}
+                                            </h3>
+                                            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                                                {isAr ? `إجمالي العملاء: ${reportData.customerBalances?.length || 0} | إجمالي الموردين: ${reportData.supplierBalances?.length || 0}` : `Customers: ${reportData.customerBalances?.length || 0} | Suppliers: ${reportData.supplierBalances?.length || 0}`}
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0' }}>
+                                            {/* Customer Balances */}
+                                            <div style={{ borderInlineEnd: '1px solid var(--border)', padding: '16px' }}>
+                                                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: '#6366f1' }}>👥 {isAr ? 'أرصدة العملاء الرحلة (مدين/دائن)' : 'Customer Opening Balances'}</h4>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                                                    <thead>
+                                                        <tr style={{ background: 'var(--surface-alt)' }}>
+                                                            <th style={{ padding: '6px 8px', textAlign: isAr ? 'right' : 'left' }}>{isAr ? 'العميل' : 'Customer'}</th>
+                                                            <th style={{ padding: '6px 8px', textAlign: 'center' }}>{isAr ? 'الرصيد المرحل' : 'Balance'}</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {reportData.customerBalances?.slice(0, 10).map(c => (
+                                                            <tr key={c.id} style={{ borderBottom: '1px solid var(--border-light)' }}>
+                                                                <td style={{ padding: '6px 8px' }}>{c.name}</td>
+                                                                <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 600, color: c.balance > 0 ? '#10b981' : '#ef4444' }}>{fmt(c.balance)}</td>
+                                                            </tr>
+                                                        ))}
+                                                        {reportData.customerBalances?.length === 0 && (
+                                                            <tr><td colSpan="2" style={{ padding: '12px', textAlign: 'center', color: 'var(--text-muted)' }}>{isAr ? 'لا توجد أرصدة عملاء قائمة' : 'No open customer balances'}</td></tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* Supplier Balances */}
+                                            <div style={{ padding: '16px' }}>
+                                                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: '#3b82f6' }}>🏢 {isAr ? 'أرصدة الموردين المرحة (مستحقات)' : 'Supplier Opening Balances'}</h4>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                                                    <thead>
+                                                        <tr style={{ background: 'var(--surface-alt)' }}>
+                                                            <th style={{ padding: '6px 8px', textAlign: isAr ? 'right' : 'left' }}>{isAr ? 'المورد' : 'Supplier'}</th>
+                                                            <th style={{ padding: '6px 8px', textAlign: 'center' }}>{isAr ? 'الرصيد المرحل' : 'Balance'}</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {reportData.supplierBalances?.slice(0, 10).map(s => (
+                                                            <tr key={s.id} style={{ borderBottom: '1px solid var(--border-light)' }}>
+                                                                <td style={{ padding: '6px 8px' }}>{s.name}</td>
+                                                                <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 600, color: s.balance > 0 ? '#ef4444' : '#10b981' }}>{fmt(s.balance)}</td>
+                                                            </tr>
+                                                        ))}
+                                                        {reportData.supplierBalances?.length === 0 && (
+                                                            <tr><td colSpan="2" style={{ padding: '12px', textAlign: 'center', color: 'var(--text-muted)' }}>{isAr ? 'لا توجد أرصدة موردين قائمة' : 'No open supplier balances'}</td></tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             )}

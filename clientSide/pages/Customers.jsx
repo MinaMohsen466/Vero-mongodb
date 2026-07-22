@@ -14,6 +14,11 @@ function Customers() {
     const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'active', 'inactive'
     const [showModal, setShowModal] = useState(false);
     const [showInvoicesModal, setShowInvoicesModal] = useState(false);
+    const [showWriteOffModal, setShowWriteOffModal] = useState(false);
+    const [writeOffAmount, setWriteOffAmount] = useState('');
+    const [writeOffReason, setWriteOffReason] = useState('');
+    const [writeOffDate, setWriteOffDate] = useState(new Date().toISOString().split('T')[0]);
+    const [writingOff, setWritingOff] = useState(false);
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [customerInvoices, setCustomerInvoices] = useState([]);
     const [allTransactions, setAllTransactions] = useState([]);
@@ -174,6 +179,37 @@ function Customers() {
 
     const closeModal = () => { setShowModal(false); setEditingCustomer(null); };
 
+    const handleWriteOffSubmit = async (e) => {
+        e.preventDefault();
+        if (!selectedCustomer) return;
+        const amt = parseFloat(writeOffAmount);
+        if (!amt || amt <= 0) {
+            toast.error('يرجى كتابة مبلغ صحيح أكبر من صفر لإعدام الدين');
+            return;
+        }
+        setWritingOff(true);
+        try {
+            const res = await window.api.customers.writeOffDebt({
+                id: selectedCustomer.id,
+                amount: amt,
+                reason: writeOffReason,
+                date: writeOffDate
+            });
+            if (res.success) {
+                toast.success('تم إعدام وشطب الدين وتسجيل المصروف بنجاح');
+                setShowWriteOffModal(false);
+                setShowInvoicesModal(false);
+                await loadCustomers();
+            } else {
+                toast.error(res.error || 'حدث خطأ أثناء شطب الدين');
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error('حدث خطأ غير متوقع');
+        }
+        setWritingOff(false);
+    };
+
     const handlePrintStatement = async () => {
         if (!selectedCustomer) return;
         try {
@@ -310,13 +346,15 @@ function Customers() {
     const showCustomerInvoices = async (customer) => {
         setSelectedCustomer(customer);
         try {
-            const [invoices, vouchers, returnsData] = await Promise.all([
+            const [invoices, vouchers, returnsData, expensesData] = await Promise.all([
                 window.api.invoices.getByCustomer(customer.id),
                 window.api.vouchers.getAll('receipt'),
-                window.api.returns.getAll('sales_return')
+                window.api.returns.getAll('sales_return'),
+                window.api.expenses.getAll()
             ]);
             const receiptVouchers = (vouchers || []).filter(v => Number(v.customer_id) === Number(customer.id));
             const customerReturns = (returnsData || []).filter(r => Number(r.customer_id) === Number(customer.id));
+            const badDebtExpenses = (expensesData || []).filter(e => e.category === 'bad_debt' && e.reference === `BAD-DEBT-CUST-${customer.id}`);
             let seq = 0;
             const rows = [];
 
@@ -340,7 +378,7 @@ function Customers() {
                     seq: seq++
                 });
                 const hasVoucherPayment = receiptVouchers.some(v => Number(v.invoice_id) === Number(inv.id));
-                const paidWithoutVoucher = !hasVoucherPayment && ((inv.status === 'paid' && !(inv.paid > 0)) || inv.paid > 0);
+                const paidWithoutVoucher = !hasVoucherPayment && inv.status !== 'written_off' && ((inv.status === 'paid' && !(inv.paid > 0)) || inv.paid > 0);
                 if (paidWithoutVoucher) {
                     rows.push({
                         date: inv.date,
@@ -358,6 +396,16 @@ function Customers() {
                     description: v.description || `${t('receipt_voucher') || 'سند قبض'} ${v.voucher_number}`,
                     debit: 0,
                     credit: v.amount || 0,
+                    seq: seq++
+                });
+            });
+
+            badDebtExpenses.forEach(exp => {
+                rows.push({
+                    date: exp.date,
+                    description: `⚠️ شطب / إعدام دين متعثر (ديون معدومة): ${exp.description || ''}`,
+                    debit: 0,
+                    credit: exp.amount || 0,
                     seq: seq++
                 });
             });
@@ -441,7 +489,7 @@ function Customers() {
                         {filteredCustomers.length} {t('menu_customers')}
                     </span>
                 </div>
-                {user?.permissions?.customers?.can_create && (
+                {(user?.role === 'admin' || user?.permissions?.customers?.can_create) && (
                     <button className="btn btn-primary" onClick={() => openModal()}>
                         <Plus size={18} /> {t('add')}
                     </button>
@@ -494,7 +542,7 @@ function Customers() {
                                             <td><span className={`badge ${customer.is_active ? 'badge-success' : 'badge-danger'}`}>{customer.is_active ? t('active') : t('inactive')}</span></td>
                                             <td onClick={(e) => e.stopPropagation()}>
                                                 <div className="table-actions">
-                                                    {user?.permissions?.customers?.can_edit && (
+                                                    {(user?.role === 'admin' || user?.permissions?.customers?.can_edit) && (
                                                         <>
                                                             <button className="btn btn-ghost btn-sm" onClick={() => openModal(customer)} title={t('edit')}><Edit2 size={16} /></button>
                                                             <button
@@ -505,7 +553,7 @@ function Customers() {
                                                             </button>
                                                         </>
                                                     )}
-                                                    {user?.permissions?.customers?.can_delete && (
+                                                    {(user?.role === 'admin' || user?.permissions?.customers?.can_delete) && (
                                                         <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(customer.id)} title={t('delete')}><Trash2 size={16} /></button>
                                                     )}
                                                 </div>
@@ -578,10 +626,26 @@ function Customers() {
             {/* Customer Statement Modal */}
             <Modal isOpen={showInvoicesModal} onClose={() => setShowInvoicesModal(false)} title={`${t('rep_customerStatement') || 'Customer Statement'}: ${selectedCustomer?.name || ''}`} size="lg"
                 footer={
-                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: '10px' }}>
-                        <button className="btn btn-primary" onClick={handlePrintStatement} disabled={customerInvoices.length === 0}>
-                            <Printer size={18} /> {t('print') || 'Print'}
-                        </button>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: '10px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button className="btn btn-primary" onClick={handlePrintStatement} disabled={customerInvoices.length === 0}>
+                                <Printer size={18} /> {t('print') || 'Print'}
+                            </button>
+                            <button
+                                className="btn btn-secondary"
+                                style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                                onClick={() => {
+                                    const liveBal = customerInvoices.length > 0 ? (customerInvoices[customerInvoices.length - 1]?.balance || 0) : (selectedCustomer?.balance || 0);
+                                    setWriteOffAmount(String(liveBal > 0 ? liveBal : ''));
+                                    setWriteOffReason('');
+                                    setWriteOffDate(new Date().toISOString().split('T')[0]);
+                                    setShowWriteOffModal(true);
+                                }}
+                                disabled={(customerInvoices.length > 0 ? (customerInvoices[customerInvoices.length - 1]?.balance || 0) : (selectedCustomer?.balance || 0)) <= 0}
+                            >
+                                ⚠️ شطب / إعدام دين متعثر
+                            </button>
+                        </div>
                         <button className="btn btn-secondary" onClick={() => setShowInvoicesModal(false)}>{t('close')}</button>
                     </div>
                 }>
@@ -672,6 +736,65 @@ function Customers() {
                         </div>
                     </>
                 )}
+            </Modal>
+
+            {/* Write Off Bad Debt Modal */}
+            <Modal
+                isOpen={showWriteOffModal}
+                onClose={() => setShowWriteOffModal(false)}
+                title={`⚠️ شطب وإعدام دين متعثر/معدوم للعميل: ${selectedCustomer?.name || ''}`}
+                footer={
+                    <>
+                        <button type="button" className="btn btn-secondary" onClick={() => setShowWriteOffModal(false)} disabled={writingOff}>
+                            {t('cancel')}
+                        </button>
+                        <button type="submit" form="write-off-form" className="btn btn-primary" style={{ background: '#ef4444', borderColor: '#ef4444' }} disabled={writingOff}>
+                            {writingOff ? 'جاري الشطب والإعدام...' : 'تأكيد شطب وإعدام الدين'}
+                        </button>
+                    </>
+                }
+            >
+                <form id="write-off-form" onSubmit={handleWriteOffSubmit}>
+                    <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', color: '#991b1b', fontSize: '0.85rem' }}>
+                        <strong>ملاحظة هامة:</strong> سيؤدي هذا الإجراء إلى تخفيض دين العميل بمقدار المبلغ المحدد وتسجيل المبلغ كاملاً كمصروف (ديون معدومة) في قائمة الأرباح والخسائر وفي شيت الإكسيل.
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">الرصيد المتبقي المستحق على العميل</label>
+                        <input type="text" className="form-input" value={formatCurrency(selectedCustomer?.balance || 0)} readOnly style={{ background: 'var(--bg-secondary)', fontWeight: 700, color: '#ef4444' }} />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">المبلغ المراد شطبه وإعدامه *</label>
+                        <input
+                            type="number"
+                            className="form-input"
+                            value={writeOffAmount}
+                            onChange={e => setWriteOffAmount(e.target.value)}
+                            min="0.001"
+                            step="0.001"
+                            required
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">تاريخ شطب الدين *</label>
+                        <input
+                            type="date"
+                            className="form-input"
+                            value={writeOffDate}
+                            onChange={e => setWriteOffDate(e.target.value)}
+                            required
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">سبب الشطب/الإعدام (مثال: امتناع عن الدفع / وفاة العميل / إفلاس)</label>
+                        <textarea
+                            className="form-textarea"
+                            rows="3"
+                            value={writeOffReason}
+                            onChange={e => setWriteOffReason(e.target.value)}
+                            placeholder="اكتب سبب إعدام الدين للحفظ في السجلات والتقارير..."
+                        />
+                    </div>
+                </form>
             </Modal>
         </div>
     );

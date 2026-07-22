@@ -149,9 +149,11 @@ const EmployeesTab = ({ t }) => {
                         style={{ paddingRight: 40, width: 280 }} />
                     <Search size={16} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 </div>
-                <button className="btn btn-primary" onClick={openNew}>
-                    <Plus size={18} /> {t('hr_add_emp') || 'Add Employee'}
-                </button>
+                {(user?.role === 'admin' || user?.permissions?.hr?.can_create !== false) && (
+                    <button className="btn btn-primary" onClick={openNew}>
+                        <Plus size={18} /> {t('hr_add_emp') || 'Add Employee'}
+                    </button>
+                )}
             </div>
 
             <div className="card">
@@ -187,8 +189,12 @@ const EmployeesTab = ({ t }) => {
                                             <td><span className={`badge ${emp.is_active ? 'badge-success' : 'badge-danger'}`}>{emp.is_active ? (t('active') || 'Active') : (t('inactive') || 'Inactive')}</span></td>
                                             <td>
                                                 <div className="table-actions">
-                                                    <button className="btn btn-ghost btn-sm" onClick={() => openEdit(emp)} title={t("edit") || "Edit"}><Edit2 size={16} /></button>
-                                                    <button className="btn btn-ghost btn-sm text-danger" onClick={() => del(emp.id)} title={t("delete") || "Delete"}><Trash2 size={16} /></button>
+                                                    {(user?.role === 'admin' || user?.permissions?.hr?.can_edit !== false) && (
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => openEdit(emp)} title={t("edit") || "Edit"}><Edit2 size={16} /></button>
+                                                    )}
+                                                    {(user?.role === 'admin' || user?.permissions?.hr?.can_delete !== false) && (
+                                                        <button className="btn btn-ghost btn-sm text-danger" onClick={() => del(emp.id)} title={t("delete") || "Delete"}><Trash2 size={16} /></button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>

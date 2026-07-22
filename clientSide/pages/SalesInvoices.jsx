@@ -537,13 +537,28 @@ function SalesInvoices() {
 
     const formatCurrency = (amount) => new Intl.NumberFormat('en-GB', { minimumFractionDigits: 3 }).format(amount || 0) + ' ' + (settings.general?.currency_symbol || (t('currency_kd') || 'KD'));
 
+    const getStatusLabel = (status) => {
+        if (status === 'paid') return t('inv_paid') || 'مدفوعة';
+        if (status === 'partial') return t('inv_partial') || 'مدفوعة جزئياً';
+        if (status === 'written_off') return 'دين معدوم (مشطوبة)';
+        if (status === 'cancelled') return t('inv_cancelled') || 'ملغاة';
+        return t('inv_pending') || 'آجلة (غير مدفوعة)';
+    };
+
     const filteredInvoices = invoices.filter(inv => {
-        const matchesSearch = 
-            inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            inv.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        const q = searchQuery.toLowerCase().trim();
+        const statusLbl = (getStatusLabel(inv.status) || '').toLowerCase();
+        const matchesSearch = !q ||
+            inv.invoice_number?.toLowerCase().includes(q) || 
+            inv.customer_name?.toLowerCase().includes(q) ||
+            statusLbl.includes(q) ||
+            (inv.status === 'pending' && (q.includes('آجل') || q.includes('اجل') || q.includes('غير مدفوع'))) ||
+            (inv.status === 'partial' && (q.includes('جزئ') || q.includes('جزئي'))) ||
+            (inv.status === 'written_off' && (q.includes('معدوم') || q.includes('شطب') || q.includes('متعثر'))) ||
+            (inv.status === 'paid' && q.includes('مدفوع')) ||
             (inv.items || []).some(item => 
-                item.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.description?.toLowerCase().includes(searchQuery.toLowerCase())
+                item.product_name?.toLowerCase().includes(q) ||
+                item.description?.toLowerCase().includes(q)
             );
         const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
         const matchesCustomer = !customerFilter || String(inv.customer_id) === customerFilter;
@@ -557,13 +572,6 @@ function SalesInvoices() {
         if (dateB !== dateA) return dateB - dateA;
         return b.id - a.id;
     });
-
-    const getStatusLabel = (status) => {
-        if (status === 'paid') return t('inv_paid');
-        if (status === 'partial') return t('inv_partial');
-        if (status === 'cancelled') return t('inv_cancelled');
-        return t('inv_pending');
-    };
 
     const exportCSV = async () => {
         const rows = [[
@@ -613,10 +621,12 @@ function SalesInvoices() {
                 </div>
                 {/* Status Filter */}
                 <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-                    style={{ width: '130px', margin: 0 }}>
-                    <option value="all">{t('all') || 'All Statuses'}</option>
-                    <option value="paid">{t('inv_paid') || 'Paid'}</option>
-                    <option value="pending">{t('inv_credit') || 'Credit'}</option>
+                    style={{ width: '160px', margin: 0 }}>
+                    <option value="all">{t('all') || 'كل الحالات'}</option>
+                    <option value="paid">{t('inv_paid') || 'مدفوعة'}</option>
+                    <option value="pending">{t('inv_pending') || 'آجلة (غير مدفوعة)'}</option>
+                    <option value="partial">{t('inv_partial') || 'مدفوعة جزئياً'}</option>
+                    <option value="written_off">ديون معدومة (مشطوبة)</option>
                 </select>
                 {/* Customer Filter */}
                 <div style={{ width: '200px' }}>
@@ -643,7 +653,7 @@ function SalesInvoices() {
                 <button className="btn btn-secondary" onClick={exportCSV} style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#059669' }}>
                     <Download size={16} /> CSV
                 </button>
-                {user?.permissions?.sales_invoices?.can_create && (
+                {(user?.role === 'admin' || user?.permissions?.sales_invoices?.can_create) && (
                     <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> {t('sinv_add')}</button>
                 )}
             </div>
@@ -675,7 +685,12 @@ function SalesInvoices() {
                                             </td>
                                             <td>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    <span className={`badge ${inv.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{getStatusLabel(inv.status)}</span>
+                                                    <span
+                                                        className={`badge ${inv.status === 'paid' ? 'badge-success' : inv.status === 'written_off' ? 'badge-danger' : 'badge-warning'}`}
+                                                        style={inv.status === 'written_off' ? { background: '#fef2f2', color: '#991b1b', border: '1px solid #fca5a5' } : {}}
+                                                    >
+                                                        {getStatusLabel(inv.status)}
+                                                    </span>
                                                     {(inv.status === 'paid' || inv.status === 'partial') && inv.payment_method && inv.payment_method !== 'credit' && (
                                                         <span style={{ fontSize: '11px', color: '#666', background: '#f5f5f5', padding: '2px 6px', borderRadius: '4px', border: '1px solid #ddd', whiteSpace: 'nowrap' }}>
                                                             {inv.payment_method === 'bank' ? (t('inv_bank') || 'بنكي') : inv.payment_method === 'cash' ? (t('inv_cash') || 'نقدي') : inv.payment_method}
@@ -685,16 +700,16 @@ function SalesInvoices() {
                                             </td>
                                             <td>
                                                 <div className="table-actions">
-                                                    {user?.permissions?.sales_invoices?.can_view && (
+                                                    {(user?.role === 'admin' || user?.permissions?.sales_invoices?.can_view) && (
                                                         <button className="btn btn-ghost btn-sm" onClick={() => viewInvoice(inv.id)} title={t('inv_view')}><Eye size={16} /></button>
                                                     )}
-                                                    {user?.permissions?.sales_invoices?.can_edit && (
+                                                    {(user?.role === 'admin' || user?.permissions?.sales_invoices?.can_edit) && (
                                                         <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(inv.id)} title={t('edit')}><Edit size={16} /></button>
                                                     )}
-                                                    {user?.permissions?.sales_invoices?.can_view && (
+                                                    {(user?.role === 'admin' || user?.permissions?.sales_invoices?.can_view) && (
                                                         <button className="btn btn-ghost btn-sm" onClick={() => viewInvoice(inv.id)} title={t('inv_print')}><Printer size={16} /></button>
                                                     )}
-                                                    {user?.permissions?.sales_invoices?.can_delete && (
+                                                    {(user?.role === 'admin' || user?.permissions?.sales_invoices?.can_delete) && (
                                                         <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(inv.id)} title={t('delete')}><Trash2 size={16} /></button>
                                                     )}
                                                 </div>

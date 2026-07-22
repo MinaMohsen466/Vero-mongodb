@@ -349,7 +349,7 @@ function Vouchers() {
                         />
                     </div>
                 </div>
-                {user?.permissions?.[activeTab === 'receipt' ? 'receipt_vouchers' : 'payment_vouchers']?.can_create && (
+                {(user?.role === 'admin' || user?.permissions?.[activeTab === 'receipt' ? 'receipt_vouchers' : 'payment_vouchers']?.can_create) && (
                     <button className="btn btn-primary" onClick={() => openModal(activeTab)}>
                         <Plus size={18} /> {activeTab === 'receipt' ? t('vouch_addReceipt') : t('vouch_addPayment')}
                     </button>
@@ -394,12 +394,12 @@ function Vouchers() {
                                             <td>{voucher.invoice_id ? `#${voucher.invoice_id}` : '-'}</td>
                                             <td>
                                                 <div className="table-actions">
-                                                    {user?.permissions?.[activeTab === 'receipt' ? 'receipt_vouchers' : 'payment_vouchers']?.can_edit && (
+                                                    {(user?.role === 'admin' || user?.permissions?.[activeTab === 'receipt' ? 'receipt_vouchers' : 'payment_vouchers']?.can_edit) && (
                                                         <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(voucher)} title={t('edit')}>
                                                             <Edit size={16} />
                                                         </button>
                                                     )}
-                                                    {user?.permissions?.[activeTab === 'receipt' ? 'receipt_vouchers' : 'payment_vouchers']?.can_delete && (
+                                                    {(user?.role === 'admin' || user?.permissions?.[activeTab === 'receipt' ? 'receipt_vouchers' : 'payment_vouchers']?.can_delete) && (
                                                         <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(voucher.id)} title={t('delete')}>
                                                             <Trash2 size={16} />
                                                         </button>

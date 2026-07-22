@@ -59,6 +59,7 @@ export default function Expenses() {
     const { t, language } = useAuth();
     const [expenses, setExpenses] = useState([]);
     const [accounts, setAccounts] = useState([]);
+    const [employees, setEmployees] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [loading, setLoading] = useState(false);
     const [visibleExpensesCount, setVisibleExpensesCount] = useState(50);
@@ -77,6 +78,7 @@ export default function Expenses() {
         description: '',
         payment_method: 'cash',
         payment_account_id: '',
+        employee_id: '',
         notes: '',
     });
 
@@ -112,10 +114,13 @@ export default function Expenses() {
 
     const loadAccounts = async () => {
         try {
-            const data = await window.api.accounts.getAll();
-            const all = (data || []).filter(a => a.can_post);
-            setAccounts(all);
-        } catch (e) { setAccounts([]); }
+            const [accsData, empsData] = await Promise.all([
+                window.api.accounts.getAll(),
+                window.api.employees ? window.api.employees.getAll() : Promise.resolve([])
+            ]);
+            setAccounts((accsData || []).filter(a => a.can_post));
+            setEmployees(empsData || []);
+        } catch (e) { setAccounts([]); setEmployees([]); }
     };
 
     useEffect(() => {
@@ -238,10 +243,12 @@ export default function Expenses() {
                         </p>
                     </div>
                 </div>
-                <button className="btn btn-primary" onClick={openAdd} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Plus size={18} />
-                    {isAr ? 'إضافة مصروف' : 'Add Expense'}
-                </button>
+                {(user?.role === 'admin' || user?.permissions?.expenses?.can_create !== false) && (
+                    <button className="btn btn-primary" onClick={openAdd} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Plus size={18} />
+                        {isAr ? 'إضافة مصروف' : 'Add Expense'}
+                    </button>
+                )}
             </div>
 
             {/* ── Summary cards ── */}
@@ -536,6 +543,32 @@ export default function Expenses() {
                                 })}
                             </div>
                         </div>
+
+                        {/* Employee selector when category is salary */}
+                        {form.category === 'salary' && employees.length > 0 && (
+                            <div className="form-group">
+                                <label className="form-label">{isAr ? 'اسم الموظف' : 'Employee Name'}</label>
+                                <select
+                                    className="form-input"
+                                    value={form.employee_id || ''}
+                                    onChange={e => {
+                                        const empId = e.target.value;
+                                        const emp = employees.find(em => String(em.id) === String(empId));
+                                        setForm(f => ({
+                                            ...f,
+                                            employee_id: empId,
+                                            description: emp ? `${isAr ? 'راتب الموظف:' : 'Salary:'} ${emp.full_name}` : f.description,
+                                            amount: (emp && emp.base_salary !== undefined && emp.base_salary !== null && emp.base_salary !== '') ? String(emp.base_salary) : f.amount
+                                        }));
+                                    }}
+                                >
+                                    <option value="">{isAr ? '-- اختر موظفاً (اختياري) --' : '-- Select Employee --'}</option>
+                                    {employees.map(emp => (
+                                        <option key={emp.id} value={emp.id}>{emp.full_name} ({emp.job_title || '-'})</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
 
                         {/* Date + Amount */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

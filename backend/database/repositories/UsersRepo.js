@@ -39,11 +39,17 @@ class UsersRepo {
                     }
                     user.has_individual_permissions = true;
                 }
-                if (user.role === 'admin') {
-                    permMap['settings'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
-                    permMap['permissions'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
-                    permMap['dashboard'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
-                    permMap['offers'] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                if (user.role === 'admin' || user.username === 'admin') {
+                    const adminMods = [
+                        'settings', 'permissions', 'dashboard', 'offers',
+                        'admin_system_reset', 'admin_delete_products', 'admin_activity_log',
+                        'admin_user_management', 'admin_cloud_database', 'admin_excel_export'
+                    ];
+                    for (const mod of adminMods) {
+                        if (!permMap[mod] || (!permMap[mod].can_view && !permMap[mod].can_edit && !permMap[mod].can_create)) {
+                            permMap[mod] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+                        }
+                    }
                 }
                 user.permissions = permMap;
                 return { success: true, user };

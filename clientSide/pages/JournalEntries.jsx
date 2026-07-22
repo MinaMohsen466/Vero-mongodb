@@ -131,7 +131,7 @@ function JournalEntries() {
         <div>
             <div className="page-header">
                 <span style={{ color: 'var(--text-muted)' }}>{t('total')} {entries.length} {t('entries_count') || 'entries'}</span>
-                {user?.permissions?.journal_entries?.can_create && (
+                {(user?.role === 'admin' || user?.permissions?.journal_entries?.can_create) && (
                     <button className="btn btn-primary" onClick={openModal}><Plus size={18} /> {t('new_entry') || 'New Entry'}</button>
                 )}
             </div>
@@ -156,10 +156,10 @@ function JournalEntries() {
                                                 <td>{formatCurrency(debit)}</td>
                                                 <td>{formatCurrency(credit)}</td>
                                                 <td><div className="table-actions">
-                                                    {user?.permissions?.journal_entries?.can_view && (
+                                                    {(user?.role === 'admin' || user?.permissions?.journal_entries?.can_view) && (
                                                         <button className="btn btn-ghost btn-sm" onClick={() => viewEntry(entry)}><Eye size={16} /></button>
                                                     )}
-                                                    {user?.permissions?.journal_entries?.can_delete && (
+                                                    {(user?.role === 'admin' || user?.permissions?.journal_entries?.can_delete) && (
                                                         <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(entry.id)}><Trash2 size={16} /></button>
                                                     )}
                                                 </div></td>

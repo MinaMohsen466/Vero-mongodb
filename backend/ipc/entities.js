@@ -36,6 +36,14 @@ module.exports = function(ipcMain, context) {
         return result;
     });
     ipcMain.handle('customers:getNextCode', async () => await db.customers.getNextCode());
+    ipcMain.handle('customers:writeOffDebt', async (event, payload) => {
+        if (!checkPermission('customers', 'can_edit')) {
+            return { success: false, error: 'عذراً، لا تمتلك الصلاحية الكافية لشطب وإعدام ديون العملاء.' };
+        }
+        const result = await db.customers.writeOffDebt(payload);
+        if (result.success) await logActivity('update', 'customers', payload.id, `إعدام دين للعميل #${payload.id}`, payload);
+        return result;
+    });
 
     // --- Suppliers ---
     ipcMain.handle('suppliers:getAll', async () => await db.suppliers.getAll());

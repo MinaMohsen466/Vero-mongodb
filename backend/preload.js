@@ -26,7 +26,8 @@ contextBridge.exposeInMainWorld('api', {
         create: (customer) => ipcRenderer.invoke('customers:create', customer),
         update: (customer) => ipcRenderer.invoke('customers:update', customer),
         delete: (id) => ipcRenderer.invoke('customers:delete', id),
-        getNextCode: () => ipcRenderer.invoke('customers:getNextCode')
+        getNextCode: () => ipcRenderer.invoke('customers:getNextCode'),
+        writeOffDebt: (payload) => ipcRenderer.invoke('customers:writeOffDebt', payload)
     },
 
     // Suppliers
