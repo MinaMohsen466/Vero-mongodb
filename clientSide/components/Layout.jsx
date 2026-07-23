@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../App';
 import appIcon from '../assets/icon.png';
 import UserProfilePanel from './UserProfilePanel';
@@ -6,7 +6,7 @@ import AiAssistantBubble from './AiAssistantBubble';
 import {
     Home, Users, Truck, ShoppingCart, ShoppingBag, FileText,
     CreditCard, BookOpen, BarChart3, Settings, LogOut,
-    Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight, ChevronDown, UserCheck, Menu, Monitor, Ticket, Tag, TrendingDown, Warehouse, Undo, RotateCcw, Search
+    Moon, Sun, Building2, Package, Wallet, ChevronLeft, ChevronRight, ChevronDown, UserCheck, Menu, Monitor, Ticket, TrendingDown, Warehouse, Undo, RotateCcw, Search
 } from 'lucide-react';
 
 const menuItems = [
@@ -83,15 +83,28 @@ function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
 
     // Filter menu items based on user permissions
     const userPerms = user?.permissions || {};
-    const isAdmin = user?.role === 'admin';
+    const isSuperAdmin = user?.id === 1 || user?.username === 'admin';
+
+    const checkPerm = useCallback((moduleName) => {
+        if (isSuperAdmin || user?.role === 'admin') return true;
+        if (moduleName) {
+            if (moduleName === 'settings') {
+                const settingsSubModules = ['settings', 'excel_backup', 'ai_assistant', 'permissions', 'database', 'activity_log', 'users'];
+                return settingsSubModules.some(m => userPerms[m]?.can_view);
+            }
+            if (userPerms[moduleName] && userPerms[moduleName].can_view !== undefined) {
+                return !!userPerms[moduleName].can_view;
+            }
+            return false;
+        }
+        return true;
+    }, [isSuperAdmin, userPerms, user?.role]);
 
     const filteredMenuItems = useMemo(() => {
         const result = [];
         for (const item of menuItems) {
             if (item.type === 'group') {
-                const visibleChildren = item.children.filter(child => {
-                    return isAdmin || userPerms[child.permModule]?.can_view === true;
-                });
+                const visibleChildren = item.children.filter(child => checkPerm(child.permModule));
                 if (visibleChildren.length > 0) {
                     result.push({
                         ...item,
@@ -99,13 +112,13 @@ function Layout({ children, currentPage, setCurrentPage, onHelpClick }) {
                     });
                 }
             } else {
-                if (isAdmin || userPerms[item.permModule]?.can_view === true) {
+                if (checkPerm(item.permModule)) {
                     result.push(item);
                 }
             }
         }
         return result;
-    }, [userPerms, isAdmin]);
+    }, [menuItems, checkPerm]);
 
     const [expandedGroups, setExpandedGroups] = useState(() => {
         const initialStates = {};

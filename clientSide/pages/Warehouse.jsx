@@ -4,7 +4,7 @@ import Modal from '../components/Modal';
 import SearchableSelect from '../components/SearchableSelect';
 import {
     Plus, Trash2, Search, Filter, ArrowLeftRight, Package,
-    Calendar, FileText, X, Info, ChevronRight, AlertCircle, CheckCircle
+    Calendar, X, Info, AlertCircle, CheckCircle
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 

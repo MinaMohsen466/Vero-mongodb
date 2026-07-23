@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     BarChart3, FileText, TrendingUp, TrendingDown, Printer, Calendar,
     DollarSign, ShoppingBag, BarChart2, Download, Plus, Search, RotateCcw
 } from 'lucide-react';
 import {
-    BarChart, Bar, LineChart, Line, PieChart as RechartsPie, Pie, Cell,
+    BarChart, Bar, PieChart as RechartsPie, Pie, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { useAuth } from '../App';

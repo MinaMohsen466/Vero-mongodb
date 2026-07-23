@@ -3,7 +3,7 @@ const {
   Counter, User, Permission, UserPermission, Customer, Supplier, Account, Product, 
   Invoice, Voucher, JournalEntry, Setting, Employee, EmployeeLeave, EmployeeDeduction, 
   SalaryPayment, Expense, Coupon, Offer, ActivityLog, Return, StockTransfer, 
-  DeletedRecord, getNextSequenceValue 
+  DeletedRecord, getNextSequenceValue, syncSequence 
 } = require('../models');
 
 class PermissionsRepo {
@@ -24,7 +24,7 @@ class PermissionsRepo {
                 'admin_system_reset', 'admin_delete_products', 'admin_activity_log', 'admin_user_management', 'admin_cloud_database', 'admin_excel_export'
             ];
             for (const mod of allMods) {
-                if (!result[mod] || (mod.startsWith('admin_') && !result[mod].can_view && !result[mod].can_edit && !result[mod].can_create)) {
+                if (result[mod] === undefined) {
                     result[mod] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
                 }
             }
@@ -34,18 +34,52 @@ class PermissionsRepo {
 
     async savePermissions(role, permissions) {
         try {
+            await syncSequence('permissionId', Permission);
+
+            // Clean up any legacy docs with id: null
+            try {
+                const nullDocs = await Permission.find({ $or: [{ id: null }, { id: { $exists: false } }] });
+                for (const doc of nullDocs) {
+                    const maxDoc = await Permission.findOne({ id: { $ne: null } }).sort({ id: -1 }).lean();
+                    const nextId = (maxDoc && typeof maxDoc.id === 'number') ? maxDoc.id + 1 : 1;
+                    await Permission.updateOne({ _id: doc._id }, { $set: { id: nextId } });
+                }
+            } catch (err) {}
+
             for (const [module, actions] of Object.entries(permissions)) {
-                await Permission.updateOne({ role, module }, {
-                    $set: {
+                const existing = await Permission.findOne({ role, module });
+                if (existing) {
+                    await Permission.updateOne({ _id: existing._id }, {
+                        $set: {
+                            can_view: actions.can_view ? true : false,
+                            can_create: actions.can_create ? true : false,
+                            can_edit: actions.can_edit ? true : false,
+                            can_delete: actions.can_delete ? true : false
+                        }
+                    });
+                } else {
+                    const maxDoc = await Permission.findOne().sort({ id: -1 }).lean();
+                    const maxId = (maxDoc && typeof maxDoc.id === 'number') ? maxDoc.id : 0;
+                    const seqId = await getNextSequenceValue('permissionId');
+                    const id = Math.max(seqId, maxId + 1);
+                    if (id > seqId) {
+                        await Counter.findByIdAndUpdate('permissionId', { $set: { seq: id } }, { upsert: true });
+                    }
+
+                    await Permission.create({
+                        id,
+                        role,
+                        module,
                         can_view: actions.can_view ? true : false,
                         can_create: actions.can_create ? true : false,
                         can_edit: actions.can_edit ? true : false,
                         can_delete: actions.can_delete ? true : false
-                    }
-                }, { upsert: true });
+                    });
+                }
             }
             return { success: true };
         } catch (e) {
+            console.error('Error saving role permissions:', e);
             return { success: false, error: e.message };
         }
     }
@@ -61,13 +95,13 @@ class PermissionsRepo {
         }
         // Ensure admin special modules default to enabled if missing or empty
         const userDoc = await User.findOne({ id: userId }).lean();
-        if (userDoc && (userDoc.role === 'admin' || userDoc.username === 'admin')) {
+        if (userDoc && (userDoc.id === 1 || userDoc.username === 'admin')) {
             const adminSpecialMods = [
                 'admin_system_reset', 'admin_delete_products', 'admin_activity_log',
                 'admin_user_management', 'admin_cloud_database', 'admin_excel_export'
             ];
             for (const mod of adminSpecialMods) {
-                if (!result[mod] || (!result[mod].can_view && !result[mod].can_edit && !result[mod].can_create)) {
+                if (result[mod] === undefined) {
                     result[mod] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
                 }
             }
@@ -77,18 +111,52 @@ class PermissionsRepo {
 
     async saveUserPermissions(userId, permissions) {
         try {
+            await syncSequence('userPermissionId', UserPermission);
+
+            // Clean up any legacy docs with id: null
+            try {
+                const nullUserDocs = await UserPermission.find({ $or: [{ id: null }, { id: { $exists: false } }] });
+                for (const doc of nullUserDocs) {
+                    const maxDoc = await UserPermission.findOne({ id: { $ne: null } }).sort({ id: -1 }).lean();
+                    const nextId = (maxDoc && typeof maxDoc.id === 'number') ? maxDoc.id + 1 : 1;
+                    await UserPermission.updateOne({ _id: doc._id }, { $set: { id: nextId } });
+                }
+            } catch (err) {}
+
             for (const [module, actions] of Object.entries(permissions)) {
-                await UserPermission.updateOne({ user_id: userId, module }, {
-                    $set: {
+                const existing = await UserPermission.findOne({ user_id: userId, module });
+                if (existing) {
+                    await UserPermission.updateOne({ _id: existing._id }, {
+                        $set: {
+                            can_view: actions.can_view ? true : false,
+                            can_create: actions.can_create ? true : false,
+                            can_edit: actions.can_edit ? true : false,
+                            can_delete: actions.can_delete ? true : false
+                        }
+                    });
+                } else {
+                    const maxDoc = await UserPermission.findOne().sort({ id: -1 }).lean();
+                    const maxId = (maxDoc && typeof maxDoc.id === 'number') ? maxDoc.id : 0;
+                    const seqId = await getNextSequenceValue('userPermissionId');
+                    const id = Math.max(seqId, maxId + 1);
+                    if (id > seqId) {
+                        await Counter.findByIdAndUpdate('userPermissionId', { $set: { seq: id } }, { upsert: true });
+                    }
+
+                    await UserPermission.create({
+                        id,
+                        user_id: userId,
+                        module,
                         can_view: actions.can_view ? true : false,
                         can_create: actions.can_create ? true : false,
                         can_edit: actions.can_edit ? true : false,
                         can_delete: actions.can_delete ? true : false
-                    }
-                }, { upsert: true });
+                    });
+                }
             }
             return { success: true };
         } catch (e) {
+            console.error('Error saving user permissions:', e);
             return { success: false, error: e.message };
         }
     }

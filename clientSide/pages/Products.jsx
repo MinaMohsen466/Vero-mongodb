@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Search, Package, Image as ImageIcon, BarChart2, TrendingUp, TrendingDown, X, Calendar, RefreshCw, Upload, Download } from 'lucide-react';
 import Modal from '../components/Modal';
-import InvoicePrintPreview from '../components/InvoicePrintPreview';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -46,7 +45,6 @@ function Products() {
     const [showCustomUnit, setShowCustomUnit] = useState(false);
     const [categoryFilter, setCategoryFilter] = useState('');
     const [suppliers, setSuppliers] = useState([]);
-    const [supplierSearchQuery, setSupplierSearchQuery] = useState('');
     const [formData, setFormData] = useState({
         name: '', description: '', unit: t('prod_piece') || 'قطعة', category: '', purchase_price: '', sale_price: '', warehouse_stock: '', shop_stock: '', min_stock: '', image: '', supplier_id: '', supplier_ids: [],
         dozen_price: '', dozen_qty: 1, code: ''
@@ -57,8 +55,6 @@ function Products() {
     const [loadingMovements, setLoadingMovements] = useState(false);
     const [trackStartDate, setTrackStartDate] = useState('');
     const [trackEndDate, setTrackEndDate] = useState('');
-    const [viewingInvoice, setViewingInvoice] = useState(null);
-    const [invoiceSettings, setInvoiceSettings] = useState({});
     const searchInputRef = React.useRef(null);
     const fileInputRef = React.useRef(null);
 

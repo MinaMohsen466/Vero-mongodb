@@ -13,6 +13,16 @@ export const isColorUnit = (unit) => {
     return ['drum', 'gallon', 'liter', 'drumlit', 'لتر', 'جالون', 'درام'].some(term => normalizedUnit.includes(term));
 };
 
+export const hasPerm = (user, moduleName, action = 'can_view') => {
+    if (!user) return false;
+    if (user.id === 1 || user.username === 'admin') return true;
+    if (user.permissions && user.permissions[moduleName]) {
+        const val = user.permissions[moduleName][action];
+        if (val !== undefined && val !== null) return !!val;
+    }
+    return user.role === 'admin';
+};
+
 // Lazy load components
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -359,6 +369,9 @@ function App() {
                         const updated = { ...parsed, permissions: mergedPerms };
                         localStorage.setItem('accapp_user', JSON.stringify(updated));
                         setUser(updated);
+                        if (window.api?.users?.setCurrentUser) {
+                            window.api.users.setCurrentUser(updated);
+                        }
                     } catch (err) {
                         console.error("Failed to auto-refresh user permissions on startup:", err);
                     }
@@ -439,6 +452,9 @@ function App() {
     const updateUser = useCallback((newUserData) => {
         setUser(newUserData);
         localStorage.setItem('accapp_user', JSON.stringify(newUserData));
+        if (window.api?.users?.setCurrentUser) {
+            window.api.users.setCurrentUser(newUserData);
+        }
     }, []);
 
     const toggleTheme = useCallback(() => {
@@ -479,7 +495,8 @@ function App() {
 
     // Create contextValue BEFORE any conditionals - MUST be called every render
     const contextValue = useMemo(() => ({
-        user, login, logout, updateUser, theme, toggleTheme, t, language, setLanguage, setCurrentPage
+        user, login, logout, updateUser, theme, toggleTheme, t, language, setLanguage, setCurrentPage,
+        hasPerm: (moduleName, action = 'can_view') => hasPerm(user, moduleName, action)
     }), [user, login, logout, updateUser, theme, toggleTheme, t, language, setLanguage, setCurrentPage]);
 
     useShortcuts({

@@ -4,7 +4,7 @@ import Modal from '../components/Modal';
 import {
     Plus, Trash2, DollarSign, Home, Coffee,
     Zap, Wrench, MoreHorizontal, Filter, X, Search,
-    TrendingDown, Calendar, FileText
+    TrendingDown, FileText
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -56,7 +56,7 @@ const SummaryCard = ({ label, value, icon: Icon, color, currency }) => (
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function Expenses() {
-    const { t, language } = useAuth();
+    const { t, language, user } = useAuth();
     const [expenses, setExpenses] = useState([]);
     const [accounts, setAccounts] = useState([]);
     const [employees, setEmployees] = useState([]);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Eye, Trash2, Search, Printer, X, Download } from 'lucide-react';
+import { Plus, Eye, Trash2, Search } from 'lucide-react';
 import Modal from '../components/Modal';
 import SearchableSelect from '../components/SearchableSelect';
 import { useAuth } from '../App';

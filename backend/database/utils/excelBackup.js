@@ -166,9 +166,9 @@ async function exportToExcel(db, filePath, includeData = true) {
         if (!hasCashCust) {
             customers.unshift({ id: 'CUST-CASH', code: 'CUST-CASH', name: 'عميل نقدي', phone: '', opening_balance: 0, balance: 0 });
         }
-        let hasGenSupp = suppliers.some(s => s.name === 'مورد عام' || s.code === 'SUPP-GEN');
+        let hasGenSupp = suppliers.some(s => s.name === 'مورد نقدي' || s.code === 'SUPP-CASH' || s.name === 'مورد عام' || s.code === 'SUPP-GEN');
         if (!hasGenSupp) {
-            suppliers.unshift({ id: 'SUPP-GEN', code: 'SUPP-GEN', name: 'مورد عام', phone: '', opening_balance: 0, balance: 0 });
+            suppliers.unshift({ id: 'SUPP-CASH', code: 'SUPP-CASH', name: 'مورد نقدي', phone: '', opening_balance: 0, balance: 0 });
         }
 
         // Build mappings
@@ -468,8 +468,8 @@ async function exportToExcel(db, filePath, includeData = true) {
 
         // Row 2: Example/Instruction row
         suppliersSheet.addRow({
-            code: 'SUPP-GEN',
-            name: 'مورد عام',
+            code: 'SUPP-CASH',
+            name: 'مورد نقدي',
             phone: '0000000',
             opening_balance: 0,
             cash_purchases: { formula: `=IFERROR(IF(A2="","",SUMIF(المشتريات!H3:H20002, B2, المشتريات!F3:F20002)),0)`, result: 0 },
@@ -498,7 +498,7 @@ async function exportToExcel(db, filePath, includeData = true) {
                 const finalBalance = (s.balance !== undefined && s.balance !== null) ? s.balance : computedLiveBalance;
                 const exportOpeningBalance = finalBalance;
 
-                const sDisplay = (s.name === 'مورد عام' || s.code === 'SUPP-GEN') ? 'مورد عام' : `${s.name} (${s.code || `SUPP-${s.id}`})`;
+                const sDisplay = (s.name === 'مورد نقدي' || s.code === 'SUPP-CASH' || s.name === 'مورد عام' || s.code === 'SUPP-GEN') ? 'مورد نقدي' : `${s.name} (${s.code || `SUPP-${s.id}`})`;
 
                 suppliersSheet.addRow({
                     code: s.code || `SUPP-${s.id}`,
@@ -572,7 +572,7 @@ async function exportToExcel(db, filePath, includeData = true) {
 
                     const rowData = {
                         date: formatDate(inv.date),
-                        entityName: inv.type === 'sales' ? (customerMap[inv.customer_id] || 'عميل نقدي') : (supplierMap[inv.supplier_id] || 'مورد عام'),
+                        entityName: inv.type === 'sales' ? (customerMap[inv.customer_id] || 'عميل نقدي') : (supplierMap[inv.supplier_id] || 'مورد نقدي'),
                         entityId: inv.type === 'sales' ? inv.customer_id : inv.supplier_id,
                         productCode: productCode,
                         productName: productName,
@@ -679,9 +679,9 @@ async function exportToExcel(db, filePath, includeData = true) {
         }
         styleWorksheet(salesSheet, salesSheet.columns, 20001, [2, 3, 4, 5, 6]);
 
-        // Named Ranges: only cover rows with actual data
-        const customerLastRow = Math.max(customers.length + 2, 3);
-        const supplierLastRow = Math.max(suppliers.length + 2, 3);
+        // Named Ranges: cover full sheet ranges (5002 rows) so manually added items in Excel show in dropdowns
+        const customerLastRow = Math.max(customers.length + 2, 5002);
+        const supplierLastRow = Math.max(suppliers.length + 2, 5002);
         const productLastRow = Math.max(products.length + 2, 3);
         const employeeLastRow = Math.max(employees.length + 2, 3);
 
@@ -743,7 +743,7 @@ async function exportToExcel(db, filePath, includeData = true) {
             total: { formula: `=IF(OR(C2="",D2=""),"",C2*D2)`, result: 50 },
             cash_amount: { formula: `=IF(OR(C2="",D2=""),"", IF(I2="أجل", 0, C2*D2))`, result: 50 },
             credit_amount: { formula: `=IF(OR(C2="",D2=""),"", IF(I2="أجل", C2*D2, 0))`, result: 0 },
-            supplier_name: 'مورد عام',
+            supplier_name: 'مورد نقدي',
             payment_status: 'مدفوع',
             date: '2026-07-21',
             notes: 'مثال: ملاحظة شراء تجريبية'
@@ -756,7 +756,7 @@ async function exportToExcel(db, filePath, includeData = true) {
 
             if (dbItem) {
                 const supp = suppliers.find(s => s.name === dbItem.entityName || s.id === dbItem.entityId);
-                const suppLabel = supp ? ((supp.name === 'مورد عام' || supp.code === 'SUPP-GEN') ? 'مورد عام' : `${supp.name} (${supp.code || `SUPP-${supp.id}`})`) : (dbItem.entityName || 'مورد عام');
+                const suppLabel = supp ? ((supp.name === 'مورد نقدي' || supp.code === 'SUPP-CASH' || supp.name === 'مورد عام' || supp.code === 'SUPP-GEN') ? 'مورد نقدي' : `${supp.name} (${supp.code || `SUPP-${supp.id}`})`) : (dbItem.entityName || 'مورد نقدي');
                 const isCredit = dbItem.paymentStatus === 'أجل';
                 const itemTotal = dbItem.quantity * dbItem.unitPrice;
 
@@ -783,10 +783,10 @@ async function exportToExcel(db, filePath, includeData = true) {
                     notes: dbItem.notes
                 });
             } else {
-                // Auto-fill supplier: Row 3 defaults to 'مورد عام' or H2, subsequent rows inherit previous row's supplier (H_{rowNum-1})
+                // Auto-fill supplier: Row 3 defaults to 'مورد نقدي' or H2, subsequent rows inherit previous row's supplier (H_{rowNum-1})
                 const suppFormula = rowNum === 3 
-                    ? `=IF(B3<>"","مورد عام", "")`
-                    : `=IF(B${rowNum}<>"", IF(H${rowNum-1}="","مورد عام", H${rowNum-1}), "")`;
+                    ? `=IF(B3<>"","مورد نقدي", "")`
+                    : `=IF(B${rowNum}<>"", IF(H${rowNum-1}="","مورد نقدي", H${rowNum-1}), "")`;
 
                 purchasesSheet.addRow({
                     product_code: { formula: `=IF(B${rowNum}="","",IFERROR(INDEX(المنتجات!A:A,MATCH(B${rowNum},المنتجات!B:B,0)),""))` },

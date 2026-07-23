@@ -34,32 +34,33 @@ module.exports = function(ipcMain, context) {
 
             // 2. Determine current user and permissions
             const user = context.currentUser || { username: 'guest', role: 'guest', permissions: {} };
-            const isAdmin = user.role === 'admin';
+            const isSuperAdmin = user.id === 1 || user.username === 'admin';
             const userPerms = user.permissions || {};
 
-            if (!isAdmin && userPerms.ai_assistant?.can_view !== true) {
+            const hasP = (mod, act) => {
+                if (isSuperAdmin) return true;
+                if (userPerms[mod] && userPerms[mod][act] !== undefined) return !!userPerms[mod][act];
+                return user.role === 'admin';
+            };
+
+            if (!hasP('ai_assistant', 'can_view')) {
                 return { success: false, error: 'عذراً، لا تمتلك صلاحية استخدام المساعد الذكي.' };
             }
 
             // 3. Prepare module permissions summary for AI system instruction
-            const productsPerm = userPerms.products || { can_view: false, can_create: false, can_edit: false, can_delete: false };
-            const customersPerm = userPerms.customers || { can_view: false, can_create: false, can_edit: false, can_delete: false };
-            const suppliersPerm = userPerms.suppliers || { can_view: false, can_create: false, can_edit: false, can_delete: false };
-            const hrPerm = userPerms.hr || { can_view: false, can_create: false, can_edit: false, can_delete: false };
-
             const permSummary = `
 User Name: ${user.full_name || user.username}
 User Role: ${user.role}
 Permissions Summary:
-- Products: View: ${isAdmin || productsPerm.can_view}, Create: ${isAdmin || productsPerm.can_create}, Edit: ${isAdmin || productsPerm.can_edit}, Delete: ${isAdmin || productsPerm.can_delete}
-- Customers: View: ${isAdmin || customersPerm.can_view}, Create: ${isAdmin || customersPerm.can_create}, Edit: ${isAdmin || customersPerm.can_edit}, Delete: ${isAdmin || customersPerm.can_delete}
-- Suppliers: View: ${isAdmin || suppliersPerm.can_view}, Create: ${isAdmin || suppliersPerm.can_create}, Edit: ${isAdmin || suppliersPerm.can_edit}, Delete: ${isAdmin || suppliersPerm.can_delete}
-- Employees/HR: View: ${isAdmin || hrPerm.can_view}, Create: ${isAdmin || hrPerm.can_create}, Edit: ${isAdmin || hrPerm.can_edit}, Delete: ${isAdmin || hrPerm.can_delete}
+- Products: View: ${hasP('products', 'can_view')}, Create: ${hasP('products', 'can_create')}, Edit: ${hasP('products', 'can_edit')}, Delete: ${hasP('products', 'can_delete')}
+- Customers: View: ${hasP('customers', 'can_view')}, Create: ${hasP('customers', 'can_create')}, Edit: ${hasP('customers', 'can_edit')}, Delete: ${hasP('customers', 'can_delete')}
+- Suppliers: View: ${hasP('suppliers', 'can_view')}, Create: ${hasP('suppliers', 'can_create')}, Edit: ${hasP('suppliers', 'can_edit')}, Delete: ${hasP('suppliers', 'can_delete')}
+- Employees/HR: View: ${hasP('hr', 'can_view')}, Create: ${hasP('hr', 'can_create')}, Edit: ${hasP('hr', 'can_edit')}, Delete: ${hasP('hr', 'can_delete')}
 `;
 
             // Fetch products mapping to resolve IDs
             let productsSummary = [];
-            if (isAdmin || productsPerm.can_view) {
+            if (hasP('products', 'can_view')) {
                 try {
                     const allProducts = await db.products.getAll();
                     productsSummary = (allProducts || []).map(p => ({
@@ -76,7 +77,7 @@ Permissions Summary:
 
             // Fetch customers mapping to resolve IDs
             let customersSummary = [];
-            if (isAdmin || customersPerm.can_view) {
+            if (hasP('customers', 'can_view')) {
                 try {
                     const allCustomers = await db.customers.getAll();
                     customersSummary = (allCustomers || []).map(c => ({
@@ -91,7 +92,7 @@ Permissions Summary:
 
             // Fetch suppliers mapping to resolve IDs
             let suppliersSummary = [];
-            if (isAdmin || suppliersPerm.can_view) {
+            if (hasP('suppliers', 'can_view')) {
                 try {
                     const allSuppliers = await db.suppliers.getAll();
                     suppliersSummary = (allSuppliers || []).map(s => ({
@@ -106,7 +107,7 @@ Permissions Summary:
 
             // Fetch employees mapping to resolve IDs
             let employeesSummary = [];
-            if (isAdmin || hrPerm.can_view) {
+            if (hasP('hr', 'can_view')) {
                 try {
                     const allEmployees = await db.employees.getAll();
                     employeesSummary = (allEmployees || []).map(emp => ({

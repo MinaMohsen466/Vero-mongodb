@@ -38,6 +38,7 @@ const getDeptList = (t) => [
 
 // ============ EMPLOYEES TAB ============
 const EmployeesTab = ({ t }) => {
+    const { user } = useAuth();
     const [employees, setEmployees] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [editing, setEditing] = useState(null);

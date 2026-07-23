@@ -39,16 +39,18 @@ class UsersRepo {
                     }
                     user.has_individual_permissions = true;
                 }
-                if (user.role === 'admin' || user.username === 'admin') {
+                if (user.role === 'admin' || user.id === 1 || user.username === 'admin') {
                     const adminMods = [
-                        'settings', 'permissions', 'dashboard', 'offers',
+                        'settings', 'permissions', 'dashboard', 'offers', 'excel_backup', 'customers', 'suppliers',
+                        'products', 'products_import', 'products_export', 'sales_invoices', 'quotations', 'sales_returns',
+                        'purchase_invoices', 'purchase_returns', 'receipt_vouchers', 'payment_vouchers', 'chart_of_accounts',
+                        'cash_bank', 'journal_entries', 'hr', 'expenses', 'pos', 'warehouse', 'reports', 'users', 'ai_assistant',
+                        'database', 'financial_summary', 'stock_alerts', 'customer_receivables',
                         'admin_system_reset', 'admin_delete_products', 'admin_activity_log',
                         'admin_user_management', 'admin_cloud_database', 'admin_excel_export'
                     ];
                     for (const mod of adminMods) {
-                        if (!permMap[mod] || (!permMap[mod].can_view && !permMap[mod].can_edit && !permMap[mod].can_create)) {
-                            permMap[mod] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
-                        }
+                        permMap[mod] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
                     }
                 }
                 user.permissions = permMap;

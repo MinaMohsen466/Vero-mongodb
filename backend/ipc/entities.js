@@ -3,8 +3,12 @@ module.exports = function(ipcMain, context) {
 
     const checkPermission = (moduleName, action) => {
         if (!context.currentUser) return false;
-        if (context.currentUser.role === 'admin') return true;
-        return context.currentUser.permissions?.[moduleName]?.[action] === true;
+        if (context.currentUser.role === 'admin' || context.currentUser.id === 1 || context.currentUser.username === 'admin') return true;
+        if (context.currentUser.permissions && context.currentUser.permissions[moduleName]) {
+            const val = context.currentUser.permissions[moduleName][action];
+            if (val !== undefined && val !== null) return !!val;
+        }
+        return context.currentUser.role === 'admin';
     };
 
     // --- Customers ---

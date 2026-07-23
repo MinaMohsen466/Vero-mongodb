@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Settings as Ico, Users, Building2, Database, Plus, Edit2, Trash2, Printer, Shield,
-    Image, FolderOpen, HardDrive, FileText, Palette, Globe, AlertTriangle, Save,
-    RefreshCw, Download, Upload, Eye, EyeOff, ChevronRight, X, Check,
+    Image, FileText, Palette, Globe, AlertTriangle, Save,
+    RefreshCw, Download, Upload, Eye, EyeOff, X, Check, ChevronLeft, ChevronRight, ChevronDown,
     Home, Truck, Package, Wallet, Monitor, ShoppingCart, ShoppingBag, CreditCard,
     BookOpen, UserCheck, TrendingDown, Warehouse, Ticket, BarChart3, Clock, Calendar,
-    ArrowLeftRight, User, Key, Undo, RotateCcw, Barcode
+    User, Key, Undo, RotateCcw, Barcode
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
@@ -298,61 +298,111 @@ let activityLogCache = {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Settings() {
     const auth = useAuth() || {};
-    const { user, updateUser, t = (k) => k, theme } = auth;
+    const { user, updateUser, t = (k) => k, theme, language } = auth;
 
-    const roleName = r => r === 'admin' ? (t('admin_role') || 'Admin') : r === 'accountant' ? (t('accountant_role') || 'Accountant') : (t('user_role') || 'User');
+    // Safe translation helper: falls back to default Arabic text if translation key is returned
+    const tr = (key, fallback) => {
+        const val = t(key);
+        return (val && val !== key) ? val : fallback;
+    };
 
-    const PERM_MODS = [
-        { m: 'dashboard', l: t('dashboard') || 'Dashboard', a: ['view'] },
-        { m: 'customers', l: t('customers') || 'Customers', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'suppliers', l: t('suppliers') || 'Suppliers', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'products', l: t('products') || 'Products', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'products_import', l: t('products_import') || 'استيراد المنتجات (إكسل)', a: ['view'] },
-        { m: 'products_export', l: t('products_export') || 'تصدير المنتجات (إكسل)', a: ['view'] },
-        { m: 'excel_backup', l: 'برنامج Excel المصغر والتصدير', a: ['view', 'create'] },
-        { m: 'sales_invoices', l: t('sales_invoices') || 'Sales Invoices', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'quotations', l: t('menu_quotations') || 'Quotations', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'sales_returns', l: t('sales_returns') || 'Sales Returns', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'purchase_invoices', l: t('purchase_invoices') || 'Purchase Invoices', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'purchase_returns', l: t('purchase_returns') || 'Purchase Returns', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'receipt_vouchers', l: t('receipt_vouchers') || 'Receipt Vouchers', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'payment_vouchers', l: t('payment_vouchers') || 'Payment Vouchers', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'chart_of_accounts', l: t('chart_of_accounts') || 'Chart of Accounts', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'cash_bank', l: t('cash_bank') || 'Cash & Bank', a: ['view', 'create'] },
-        { m: 'journal_entries', l: t('journal_entries') || 'Journal Entries', a: ['view', 'create', 'delete'] },
-        { m: 'hr', l: t('hr') || 'HR', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'expenses', l: t('expenses') || 'Expenses', a: ['view', 'create', 'delete'] },
-        { m: 'pos', l: t('pos') || 'POS', a: ['view', 'create'] },
-        { m: 'warehouse', l: t('warehouse') || 'Warehouse', a: ['view', 'create', 'delete'] },
-        { m: 'offers', l: t('offers') || 'Offers & Coupons', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'reports', l: t('reports') || 'Reports', a: ['view'] },
-        { m: 'settings', l: t('settings') || 'Settings', a: ['view', 'edit'] },
-        { m: 'permissions', l: t('permissions') || 'Permissions', a: ['view', 'edit'] },
-        { m: 'ai_assistant', l: t('ai_assistant') || 'المساعد الذكي', a: ['view', 'edit'] },
-        { m: 'database', l: t('database_management') || 'Database', a: ['view'] },
-        { m: 'financial_summary', l: t('financial_summary') || 'Financial Summary', a: ['view'] },
-        { m: 'stock_alerts', l: t('stock_alerts') || 'Stock Alerts', a: ['view'] },
-        { m: 'customer_receivables', l: t('customer_receivables') || 'Customer Receivables', a: ['view'] },
-        { m: 'dashboard_charts', l: t('charts') || 'Charts', a: ['view'] },
+    const roleName = r => r === 'admin' ? tr('admin_role', 'مدير النظام') : r === 'accountant' ? tr('accountant_role', 'محاسب') : tr('user_role', 'مستخدم');
+
+    const PERM_CATEGORIES = [
+        {
+            id: 'sales_purchases',
+            title: tr('cat_sales_purchases', 'المبيعات والمشتريات'),
+            icon: ShoppingCart,
+            modules: [
+                { m: 'dashboard', l: tr('dashboard', 'الرئيسية (لوحة التحكم)'), a: ['view'] },
+                { m: 'sales_invoices', l: tr('sales_invoices', 'فواتير المبيعات'), a: ['view', 'create', 'edit', 'delete'] },
+                { m: 'sales_returns', l: tr('sales_returns', 'مرتجع المبيعات'), a: ['view', 'create', 'edit', 'delete'] },
+                { m: 'quotations', l: tr('menu_quotations', 'عروض الأسعار'), a: ['view', 'create', 'edit', 'delete'] },
+                { m: 'purchase_invoices', l: tr('purchase_invoices', 'فواتير المشتريات'), a: ['view', 'create', 'edit', 'delete'] },
+                { m: 'purchase_returns', l: tr('purchase_returns', 'مرتجع المشتريات'), a: ['view', 'create', 'edit', 'delete'] },
+                { m: 'pos', l: tr('pos', 'نقطة البيع (POS)'), a: ['view', 'create'] }
+            ]
+        },
+        {
+            id: 'accounts_finance',
+            title: tr('cat_accounts_finance', 'الحسابات والمالية'),
+            icon: Building2,
+            modules: [
+                { m: 'chart_of_accounts', l: tr('chart_of_accounts', 'شجرة الحسابات'), a: ['view', 'create', 'edit', 'delete'] },
+                { m: 'cash_bank', l: tr('cash_bank', 'الصناديق والبنوك'), a: ['view', 'create'] },
+                { m: 'journal_entries', l: tr('journal_entries', 'القيود اليومية'), a: ['view', 'create', 'delete'] },
+                { m: 'receipt_vouchers', l: tr('receipt_vouchers', 'سندات القبض'), a: ['view', 'create', 'edit', 'delete'] },
+                { m: 'payment_vouchers', l: tr('payment_vouchers', 'سندات الصرف'), a: ['view', 'create', 'edit', 'delete'] }
+            ]
+        },
+        {
+            id: 'products_warehouse',
+            title: tr('cat_products_warehouse', 'المنتجات والمخازن'),
+            icon: Package,
+            modules: [
+                { m: 'products', l: tr('products', 'إدارة المنتجات'), a: ['view', 'create', 'edit', 'delete'] },
+                { m: 'products_import', l: tr('products_import', 'استيراد المنتجات (إكسل)'), a: ['view'] },
+                { m: 'products_export', l: tr('products_export', 'تصدير المنتجات (إكسل)'), a: ['view'] },
+                { m: 'warehouse', l: tr('warehouse', 'إدارة المستودعات والمخزن'), a: ['view', 'create', 'delete'] }
+            ]
+        },
+        {
+            id: 'hr_expenses',
+            title: tr('cat_hr_expenses', 'الموظفون والمصروفات'),
+            icon: UserCheck,
+            modules: [
+                { m: 'hr', l: tr('hr', 'شؤون الموظفين'), a: ['view', 'create', 'edit', 'delete'] },
+                { m: 'expenses', l: tr('expenses', 'المصروفات والأرباح'), a: ['view', 'create', 'delete'] }
+            ]
+        },
+        {
+            id: 'marketing_reports',
+            title: tr('cat_marketing_reports', 'التقارير والخصومات والمساعد'),
+            icon: BarChart3,
+            modules: [
+                { m: 'offers', l: tr('offers', 'العروض والكوبونات'), a: ['view', 'create', 'edit', 'delete'] },
+                { m: 'reports', l: tr('reports', 'التقارير الشاملة'), a: ['view'] },
+                { m: 'ai_assistant', l: tr('ai_assistant', 'المساعد الذكي (AI)'), a: ['view'] }
+            ]
+        },
+        {
+            id: 'settings_system',
+            title: tr('cat_settings_system', 'إعدادات النظام والبرنامج'),
+            icon: Ico,
+            modules: [
+                { m: 'settings', l: tr('general_company_settings', 'الإعدادات العامة والشركة'), a: ['view', 'edit'] },
+                { m: 'excel_backup', l: tr('excel_mini_program', 'برنامج Excel المصغر والتصدير'), a: ['view', 'create'] },
+                { m: 'users', l: tr('users', 'إدارة المستخدمين'), a: ['view', 'create', 'edit', 'delete'] },
+                { m: 'permissions', l: tr('permissions', 'الصلاحيات وإدارة الأدوار'), a: ['view', 'edit'] },
+                { m: 'database', l: tr('database_management', 'إعدادات قاعدة البيانات والربط السحابي'), a: ['view'] },
+                { m: 'activity_log', l: tr('activity_log', 'سجل النشاط'), a: ['view'] },
+                { m: 'stock_alerts', l: tr('stock_alerts', 'تنبيهات المخزون'), a: ['view'] }
+            ]
+        }
     ];
 
-    const ADMIN_PERM_MODS = [
-        { m: 'admin_system_reset', l: 'تصفير التطبيق وإعادة تهيئة النظام', a: ['view', 'edit'] },
-        { m: 'admin_delete_products', l: 'حذف كافة المنتجات ثقيلة الحجم', a: ['view', 'edit'] },
-        { m: 'admin_activity_log', l: 'عرض ومراقبة سجل النشاط التفصيلي', a: ['view'] },
-        { m: 'admin_user_management', l: 'إدارة وإنشاء حسابات المستخدمين', a: ['view', 'create', 'edit', 'delete'] },
-        { m: 'admin_cloud_database', l: 'ربط وإعداد قاعدة البيانات السحابية Cloud', a: ['view', 'edit'] },
-        { m: 'admin_excel_export', l: 'إصدار وتنزيل شيتات Excel المتقدمة', a: ['view', 'create'] },
-    ];
+    const PERM_MODS = PERM_CATEGORIES.flatMap(cat => cat.modules);
 
     const PERM_KEYS = [
-        { key: 'can_view', label: t('view') || 'View', act: 'view' },
-        { key: 'can_create', label: t('create') || 'Create', act: 'create' },
-        { key: 'can_edit', label: t('edit') || 'Edit', act: 'edit' },
-        { key: 'can_delete', label: t('delete') || 'Delete', act: 'delete' },
+        { key: 'can_view', label: tr('view', 'عرض'), act: 'view' },
+        { key: 'can_create', label: tr('create', 'إضافة'), act: 'create' },
+        { key: 'can_edit', label: tr('edit', 'تعديل'), act: 'edit' },
+        { key: 'can_delete', label: tr('delete', 'حذف'), act: 'delete' },
     ];
     const isSuperAdmin = user?.id === 1 || user?.username === 'admin';
-    const isAdmin = user?.role === 'admin' || isSuperAdmin;
+    const canAccess = (mod, act = 'can_view') => {
+        if (isSuperAdmin) return true;
+        if (mod === 'excel_backup') {
+            return gen.allow_manager_excel === 'yes';
+        }
+        if (user?.role === 'admin') return true;
+        if (user?.permissions && user.permissions[mod]) {
+            const val = user.permissions[mod][act];
+            if (val !== undefined && val !== null) return !!val;
+        }
+        return false;
+    };
+    const isAdmin = isSuperAdmin || user?.role === 'admin';
 
     const getModIcon = (mod) => {
         const icons = {
@@ -395,8 +445,22 @@ export default function Settings() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [users, setUsers] = useState([]);
-    const [dbPath, setDbPath] = useState('');
-    const [dbSize, setDbSize] = useState('');
+
+    const [expandedCats, setExpandedCats] = useState({
+        sales_purchases: true,
+        accounts_finance: false,
+        products_warehouse: false,
+        hr_expenses: false,
+        marketing_reports: false,
+        settings_system: false
+    });
+
+    const toggleCat = (catId) => {
+        setExpandedCats(prev => ({
+            ...prev,
+            [catId]: !prev[catId]
+        }));
+    };
     const [dbStatus, setDbStatus] = useState({ isConnected: true, error: '', hasConfiguredUri: false, isCloud: false });
     const [cloudModalOpen, setCloudModalOpen] = useState(false);
     const [newCloudUri, setNewCloudUri] = useState('');
@@ -415,11 +479,8 @@ export default function Settings() {
     const [permMode, setPermMode] = useState('role'); // 'role' | 'user'
     const [permSearch, setPermSearch] = useState('');
     const [selRole, setSelRole] = useState('accountant'); // selected role in role mode
-    const [backupPath, setBackupPath] = useState(null);
-    const [backupLastTime, setBackupLastTime] = useState(null);
     const [pwdModalOpen, setPwdModalOpen] = useState(false);
     const [pwdAction, setPwdAction] = useState(null); // 'resetApp' | 'deleteAllProducts'
-    const [pwdValue, setPwdValue] = useState('');
     const [confirmPhraseValue, setConfirmPhraseValue] = useState('');
     const [resetOptions, setResetOptions] = useState({
         deleteTransactions: true,
@@ -467,7 +528,7 @@ export default function Settings() {
         allow_negative_stock: 'no', show_financial_summary: 'yes', show_low_stock_products: 'yes', show_customer_receivables: 'yes',
         show_sales_purchases_charts: 'yes', language: 'en', enable_product_color: 'no',
         brand_color: '#2563eb', enable_pos_sounds: 'yes', enable_alert_sounds: 'yes',
-        show_purchase_price_in_pos: 'no'
+        show_purchase_price_in_pos: 'no', allow_manager_excel: 'no'
     });
     const [inv, setInv] = useState({
         invoice_title_sales: t('sales_invoice') || 'Sales Invoice', invoice_title_purchase: t('purchase_invoice') || 'Purchase Invoice',
@@ -484,24 +545,33 @@ export default function Settings() {
     });
 
     const SECTIONS = [
-        { id: 'company', l: t('company_details') || 'بيانات الشركة', icon: Building2 },
-        { id: 'general', l: t('general_settings') || 'الإعدادات العامة', icon: Ico },
-        { id: 'print_invoice', l: t('invoice_settings') || 'إعدادات الفاتورة', icon: FileText },
-        ...((isAdmin || user?.permissions?.excel_backup?.can_view || user?.permissions?.excel_backup?.can_create) ? [
-            { id: 'excel_program', l: 'برنامج Excel المصغر والأرشيف', icon: FileText },
+        { id: 'company', l: tr('company_details', 'بيانات الشركة'), icon: Building2 },
+        { id: 'general', l: tr('general_settings', 'الإعدادات العامة'), icon: Ico },
+        { id: 'print_invoice', l: tr('invoice_settings', 'إعدادات الفاتورة'), icon: FileText },
+        ...((canAccess('excel_backup', 'can_view') || canAccess('excel_backup', 'can_create')) ? [
+            { id: 'excel_program', l: tr('excel_mini_program', 'برنامج Excel المصغر والأرشيف'), icon: FileText },
         ] : []),
-        ...(isAdmin ? [
-            { id: 'users', l: t('users') || 'إدارة المستخدمين', icon: Users },
-            { id: 'permissions', l: t('permissions') || 'الصلاحيات', icon: Shield },
+        ...((canAccess('users', 'can_view') || canAccess('admin_user_management', 'can_view')) ? [
+            { id: 'users', l: tr('users', 'إدارة المستخدمين'), icon: Users },
         ] : []),
-        ...((isAdmin || user?.permissions?.ai_assistant?.can_edit) ? [
-            { id: 'ai_assistant', l: t('ai_assistant') || 'المساعد الذكي', icon: Key },
+        ...((canAccess('permissions', 'can_view')) ? [
+            { id: 'permissions', l: tr('permissions', 'الصلاحيات'), icon: Shield },
         ] : []),
-        ...(isAdmin ? [
-            { id: 'activity_log', l: t('activity_log') || 'سجل النشاط', icon: FileText },
+        ...((canAccess('ai_assistant', 'can_edit') || canAccess('ai_assistant', 'can_view')) ? [
+            { id: 'ai_assistant', l: tr('ai_assistant', 'المساعد الذكي'), icon: Key },
         ] : []),
-        { id: 'database', l: t('database') || 'قاعدة البيانات', icon: Database },
+        ...((canAccess('activity_log', 'can_view') || canAccess('admin_activity_log', 'can_view')) ? [
+            { id: 'activity_log', l: tr('activity_log', 'سجل النشاط'), icon: FileText },
+        ] : []),
+        { id: 'database', l: tr('database', 'قاعدة البيانات'), icon: Database },
     ];
+
+    useEffect(() => {
+        const allowedIds = SECTIONS.map(s => s.id);
+        if (allowedIds.length > 0 && !allowedIds.includes(sec)) {
+            setSec(allowedIds[0]);
+        }
+    }, [user?.permissions, sec]);
 
 
 
@@ -513,7 +583,15 @@ export default function Settings() {
     const sentinelRef = useRef(null);
 
     useEffect(() => { loadData(); }, []);
-    useEffect(() => { if (sec === 'permissions' && !permLoaded) loadPerms(); }, [sec]);
+    useEffect(() => {
+        if (!isAdmin && sec === 'permissions') {
+            setSec('company');
+        } else if (sec === 'excel_program' && !canAccess('excel_backup')) {
+            setSec('company');
+        } else if (sec === 'permissions' && !permLoaded) {
+            loadPerms();
+        }
+    }, [sec, isAdmin, permLoaded, gen.allow_manager_excel]);
     useEffect(() => { if (sec === 'activity_log') loadActivityLog(logFilters); }, [sec]);
 
     const loadActivityLog = async (filters = logFilters, isAppend = false) => {
@@ -595,7 +673,8 @@ export default function Settings() {
                     tax_rate: sd.tax?.tax_rate || prev.tax_rate,
                     brand_color: sd.general?.brand_color || '#2563eb',
                     enable_pos_sounds: sd.general?.enable_pos_sounds !== undefined ? sd.general.enable_pos_sounds : 'yes',
-                    enable_alert_sounds: sd.general?.enable_alert_sounds !== undefined ? sd.general.enable_alert_sounds : 'yes'
+                    enable_alert_sounds: sd.general?.enable_alert_sounds !== undefined ? sd.general.enable_alert_sounds : 'yes',
+                    allow_manager_excel: sd.general?.allow_manager_excel !== undefined ? sd.general.allow_manager_excel : 'no'
                 }));
             }
             if (sd?.ai) {
@@ -619,11 +698,6 @@ export default function Settings() {
                 const b64 = await window.api.file.readAsBase64(sd.company.company_logo);
                 if (b64) setLogoPreview(b64);
             }
-            const [path, size] = await Promise.all([
-                window.api.settings?.getDbPath?.() || '',
-                window.api.settings?.getDbSize?.() || ''
-            ]);
-            setDbPath(path || ''); setDbSize(size || '');
             
             // Load Database status
             if (window.api.database?.getConnectionStatus) {
@@ -633,13 +707,6 @@ export default function Settings() {
                 } catch (dbStatErr) {
                     console.error("Error loading database connection status:", dbStatErr);
                 }
-            }
-            
-            // Load backup path
-            if (window.api.database?.getBackupPath) {
-                const bkp = await window.api.database.getBackupPath();
-                setBackupPath(bkp.backupDbPath);
-                setBackupLastTime(bkp.lastBackupTime);
             }
 
             // Load counts for database diagnostics
@@ -703,18 +770,11 @@ export default function Settings() {
 
     const loadPerms = async () => {
         try {
-            const [a, u, ad] = await Promise.all([
+            const [a, u] = await Promise.all([
                 window.api.permissions.getByRole('accountant'),
-                window.api.permissions.getByRole('user'),
-                window.api.permissions.getByRole('admin')
+                window.api.permissions.getByRole('user')
             ]);
-            const adminPerms = { ...(ad || {}) };
-            ADMIN_PERM_MODS.forEach(m => {
-                if (!adminPerms[m.m] || (!adminPerms[m.m].can_view && !adminPerms[m.m].can_edit && !adminPerms[m.m].can_create)) {
-                    adminPerms[m.m] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
-                }
-            });
-            setPermState({ accountant: a || {}, user: u || {}, admin: adminPerms });
+            setPermState({ accountant: a || {}, user: u || {} });
             setPermLoaded(true);
         } catch (e) { console.error(e); }
     };
@@ -769,12 +829,13 @@ export default function Settings() {
                 if (upUserIdRef.current !== u.id) return; // check again after second await
                 userPermsState = { ...(rolePerms || {}) };
             }
-            if (u.role === 'admin' || u.username === 'admin') {
-                ADMIN_PERM_MODS.forEach(m => {
-                    if (!userPermsState[m.m] || (!userPermsState[m.m].can_view && !userPermsState[m.m].can_edit && !userPermsState[m.m].can_create)) {
-                        userPermsState[m.m] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
+            if (u.id === 1 || u.username === 'admin') {
+                const adminMods = ['permissions', 'users', 'admin_system_reset', 'admin_user_management', 'admin_cloud_database', 'admin_excel_export'];
+                for (const mod of adminMods) {
+                    if (userPermsState[mod] === undefined) {
+                        userPermsState[mod] = { can_view: true, can_create: true, can_edit: true, can_delete: true };
                     }
-                });
+                }
             }
             setUpState(userPermsState);
         } catch (e) { console.error(e); }
@@ -867,7 +928,6 @@ export default function Settings() {
     };
     const triggerResetApp = () => {
         setPwdAction('resetApp');
-        setPwdValue('');
         setConfirmPhraseValue('');
         setResetOptions({
             deleteTransactions: true,
@@ -880,7 +940,6 @@ export default function Settings() {
 
     const triggerDeleteAllProducts = () => {
         setPwdAction('deleteAllProducts');
-        setPwdValue('');
         setConfirmPhraseValue('');
         setPwdModalOpen(true);
     };
@@ -968,14 +1027,11 @@ export default function Settings() {
             {/* ── Sidebar ── */}
             <div style={{
                 width: 220, flexShrink: 0,
-                background: theme === 'dark' ? 'rgba(30, 41, 59, 0.45)' : 'rgba(255, 255, 255, 0.45)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                borderLeft: '1px solid var(--border)',
-                borderRadius: '16px',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: '14px',
                 margin: '16px 8px 16px 16px',
                 padding: '16px 8px',
-                boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.05)',
                 display: 'flex', flexDirection: 'column', overflowY: 'auto',
                 transition: 'all 0.3s ease'
             }}>
@@ -1008,7 +1064,7 @@ export default function Settings() {
 
                 {/* ══ 1. COMPANY ══════════════════════════════════════════════════════ */}
                 {sec === 'company' && <>
-                    <Card title={t('company_logo') || 'Company Logo'} icon={Image}>
+                    <Card title={tr('company_logo', 'شعار الشركة')} icon={Image}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
                             {/* Logo drop zone */}
                             <div ref={dropRef} onClick={handleLogo}
@@ -1031,39 +1087,39 @@ export default function Settings() {
                                 }}>
                                 {logoPreview
                                     ? <img src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                    : <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}><Image size={32} /><div style={{ fontSize: '.72rem', marginTop: 6 }}>{t('drag_or_click_logo') || 'Drag logo or click'}</div></div>}
+                                    : <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}><Image size={32} /><div style={{ fontSize: '.72rem', marginTop: 6 }}>{tr('drag_or_click_logo', 'أسحب واسقط اللوجو هنا أو انقر للاختيار')}</div></div>}
                             </div>
                             <div style={{ flex: 1 }}>
                                 <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.6 }}>
-                                    {t('logo_hint') || 'Drag logo here or click to select. It appears in printed invoices and vouchers.'}
+                                    {tr('logo_hint', 'أسحب واسقط الشعار هنا أو انقر للاختيار. يظهر الشعار على الفواتير والسندات المطبوعة.')}
                                 </p>
                                 <div style={{ display: 'flex', gap: 8 }}>
                                     <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} onClick={handleLogo}>
-                                        <Upload size={14} /> {t('upload_logo') || 'Upload Logo'}
+                                        <Upload size={14} /> {tr('upload_logo', 'رفع الشعار')}
                                     </button>
                                     {logoPreview && <button style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--danger)' }}
                                         onClick={() => { setLogoPreview(''); setCo(f => ({ ...f, company_logo: '' })); }}>
-                                        <X size={14} /> {t('remove') || 'Remove'}
+                                        <X size={14} /> {tr('remove', 'حذف')}
                                     </button>}
                                 </div>
                             </div>
                         </div>
                     </Card>
 
-                    <Card title={t('company_details') || 'Company Details'} icon={Building2}>
+                    <Card title={tr('company_details', 'بيانات الشركة')} icon={Building2}>
                         <div style={gridTwo}>
-                            <Fld label={t('company_name') || 'Company Name'}><input style={inp} value={co.company_name} onChange={e => setCo(f => ({ ...f, company_name: e.target.value }))} /></Fld>
-                            <Fld label={t('tax_number') || 'Tax Number'}><input style={inp} value={co.company_tax_number} onChange={e => setCo(f => ({ ...f, company_tax_number: e.target.value }))} /></Fld>
+                            <Fld label={tr('company_name', 'اسم الشركة / المؤسسة')}><input style={inp} value={co.company_name} onChange={e => setCo(f => ({ ...f, company_name: e.target.value }))} /></Fld>
+                            <Fld label={tr('tax_number', 'الرقم الضريبي / السجل التجاري')}><input style={inp} value={co.company_tax_number} onChange={e => setCo(f => ({ ...f, company_tax_number: e.target.value }))} /></Fld>
                         </div>
                         <div style={gridTwo}>
-                            <Fld label={t('phone') || 'Phone'}><input style={inp} value={co.company_phone} onChange={e => setCo(f => ({ ...f, company_phone: e.target.value }))} /></Fld>
-                            <Fld label={t('email') || 'Email'}><input style={inp} value={co.company_email} onChange={e => setCo(f => ({ ...f, company_email: e.target.value }))} /></Fld>
+                            <Fld label={tr('phone', 'رقم الهاتف')}><input style={inp} value={co.company_phone} onChange={e => setCo(f => ({ ...f, company_phone: e.target.value }))} /></Fld>
+                            <Fld label={tr('email', 'البريد الإلكتروني')}><input style={inp} value={co.company_email} onChange={e => setCo(f => ({ ...f, company_email: e.target.value }))} /></Fld>
                         </div>
-                        <Fld label={t('address') || 'Address'}><input style={inp} value={co.company_address} onChange={e => setCo(f => ({ ...f, company_address: e.target.value }))} /></Fld>
+                        <Fld label={tr('address', 'العنوان')}><input style={inp} value={co.company_address} onChange={e => setCo(f => ({ ...f, company_address: e.target.value }))} /></Fld>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
                             <button style={{ ...btnStyle, background: 'var(--primary)', color: '#fff' }} disabled={saving}
-                                onClick={() => saveSection('company', co, t('saved_company_details') || 'Company details saved')}>
-                                <Save size={14} /> {saving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
+                                onClick={() => saveSection('company', co, tr('saved_company_details', 'تم حفظ بيانات الشركة بنجاح'))}>
+                                <Save size={14} /> {saving ? (tr('saving', 'جاري الحفظ...')) : (tr('save', 'حفظ التغييرات'))}
                             </button>
                         </div>
                     </Card>
@@ -1122,6 +1178,9 @@ export default function Settings() {
                         <TRow label={t('allow_negative_stock') || 'Allow Negative Stock'} desc={t('desc_negative_stock') || 'Allows completing sales even when stock is depleted'} value={gen.allow_negative_stock} onChange={v => setGen(f => ({ ...f, allow_negative_stock: v }))} />
                         <TRow label={t('enable_product_color') || 'Enable Product Color Field'} desc={t('desc_product_color') || 'Add color field for paint products (Drum, Gallon, Liter)'} value={gen.enable_product_color} onChange={v => setGen(f => ({ ...f, enable_product_color: v }))} />
                         <TRow label={t('show_purchase_price_in_pos') || 'Show Purchase Price in POS'} desc={t('desc_show_purchase_price_in_pos') || 'Show an eye icon on products in POS to quickly view the purchase price'} value={gen.show_purchase_price_in_pos} onChange={v => setGen(f => ({ ...f, show_purchase_price_in_pos: v }))} />
+                        {isSuperAdmin && (
+                            <TRow label={t('allow_manager_excel') || 'إمكانية رؤية المدير لشيت الإكسيل المصغر'} desc={t('allow_manager_excel_desc') || 'السماح أو المنع للمدير والموظفين من رؤية قسم برنامج Excel المصغر وتصديره'} value={gen.allow_manager_excel} onChange={v => setGen(f => ({ ...f, allow_manager_excel: v }))} />
+                        )}
                     </Card>
                     <Card title={t('system_sounds') || 'أصوات وتنبيهات النظام'} icon={Globe}>
                         <TRow label={t('enable_pos_sounds') || 'تفعيل أصوات نقطة البيع'} desc={t('desc_pos_sounds') || 'إصدار صوت خفيف عند مسح الباركود وإتمام الدفع بنجاح'} value={gen.enable_pos_sounds} onChange={v => setGen(f => ({ ...f, enable_pos_sounds: v }))} />
@@ -1409,8 +1468,8 @@ export default function Settings() {
                         {/* Role selector tabs */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
                             {[
-                                { id: 'accountant', label: t('accountant_role') || 'Accountant', desc: 'صلاحيات متوسطة مخصصة لإدارة العمليات المالية والقيود والحسابات.', icon: Key, color: '#6366f1' },
-                                { id: 'user', label: t('user_role') || 'User', desc: 'صلاحيات محدودة مخصصة لإصدار الفواتير ونقاط البيع بدون العمليات الإدارية.', icon: User, color: '#10b981' }
+                                { id: 'accountant', label: tr('accountant_role', 'محاسب'), desc: 'صلاحيات متوسطة مخصصة لإدارة العمليات المالية والقيود والحسابات.', icon: Key, color: '#6366f1' },
+                                { id: 'user', label: tr('user_role', 'مستخدم'), desc: 'صلاحيات محدودة مخصصة لإصدار الفواتير ونقاط البيع بدون العمليات الإدارية.', icon: User, color: '#10b981' }
                             ].map(role => {
                                 const selected = selRole === role.id;
                                 return (
@@ -1456,94 +1515,157 @@ export default function Settings() {
 
                         {!permLoaded && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}><div className="spinner" /></div>}
                         {permLoaded && (
-                            <Card title={`${t('role_permissions') || 'Role Permissions'}: ${roleName(selRole)}`} icon={Shield}
-                                action={
-                                    selRole === 'admin' ? <span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,.1)', color: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 700 }}>{t('admin_role') || 'Admin'}</span> : null
-                                }
-                            >
-                                <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
-                                        <thead>
-                                            <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-                                                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, fontSize: '.8rem', color: 'var(--text-secondary)', width: '40%' }}>{t('module') || 'Module'}</th>
-                                                {PERM_KEYS.map(pk => <th key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600, fontSize: '.8rem', color: 'var(--text-secondary)', width: '15%' }}>{pk.label}</th>)}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {PERM_MODS.map((m, i) => (
-                                                <tr key={m.m} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
-                                                    <td style={{ padding: '12px 16px', fontWeight: 600, fontSize: '.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                                                        <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(37,99,235,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                            {getModIcon(m.m)}
-                                                        </div>
-                                                        <span>{m.l}</span>
-                                                    </td>
-                                                    {PERM_KEYS.map(pk => (
-                                                        <td key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
-                                                            <PermCell has={!!permState[selRole]?.[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
-                                                                onToggle={() => togglePerm(selRole, m.m, pk.key)} />
-                                                        </td>
-                                                    ))}
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                            <>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, padding: '0 4px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
+                                        <Shield size={20} style={{ color: 'var(--primary)' }} />
+                                        {tr('role_permissions', 'صلاحيات الأدوار')}: <span style={{ color: 'var(--primary)' }}>{roleName(selRole)}</span>
+                                    </div>
+                                    {selRole === 'admin' && (
+                                        <span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,.1)', color: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 700 }}>
+                                            {tr('admin_role', 'مدير النظام')}
+                                        </span>
+                                    )}
                                 </div>
-                                {isSuperAdmin && (
-                                    <div style={{ marginTop: 24 }}>
-                                        <Card title="صلاحيات مدير النظام الإدارية الحصرية (الأدمن الرئيسي)" icon={Shield}
-                                            action={<span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,.12)', color: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 700 }}>خاص بالأدمن الرئيسي</span>}
-                                        >
-                                            <div style={{ fontSize: '.8rem', color: 'var(--text-muted)', marginBottom: 12 }}>
-                                                صلاحيات التحكم المتقدمة بالعمليات الحساسة وإصدار ملفات إكسيل وإدارة السحابة وتصفير البيانات.
-                                            </div>
-                                            <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid rgba(239,68,68,0.2)', background: 'var(--surface)' }}>
-                                                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
-                                                    <thead>
-                                                        <tr style={{ background: 'rgba(239,68,68,0.06)', borderBottom: '1px solid rgba(239,68,68,0.15)' }}>
-                                                            <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, fontSize: '.8rem', color: '#ef4444', width: '40%' }}>صلاحية مدير النظام</th>
-                                                            {PERM_KEYS.map(pk => <th key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600, fontSize: '.8rem', color: 'var(--text-secondary)', width: '15%' }}>{pk.label}</th>)}
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {ADMIN_PERM_MODS.map((m, i) => (
-                                                            <tr key={m.m} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
-                                                                <td style={{ padding: '12px 16px', fontWeight: 600, fontSize: '.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                                                                    <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                        <Shield size={14} style={{ color: '#ef4444' }} />
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                    {PERM_CATEGORIES.map((cat) => {
+                                        const isExpanded = !!expandedCats[cat.id];
+                                        return (
+                                            <div key={cat.id} style={{ 
+                                                borderRadius: 14, 
+                                                border: '1px solid var(--border)', 
+                                                background: 'var(--surface)', 
+                                                overflow: 'hidden',
+                                                boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                                                transition: 'all 0.2s ease',
+                                                width: '100%',
+                                                boxSizing: 'border-box'
+                                            }}>
+                                                {/* Category Header Bar */}
+                                                <div 
+                                                    onClick={() => toggleCat(cat.id)}
+                                                    style={{ 
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'space-between',
+                                                        background: 'var(--surface)', 
+                                                        borderBottom: isExpanded ? '1px solid var(--border-light)' : 'none',
+                                                        cursor: 'pointer',
+                                                        userSelect: 'none',
+                                                        padding: '16px 20px',
+                                                        boxSizing: 'border-box',
+                                                        transition: 'background 0.2s',
+                                                        width: '100%'
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: 1 }}>
+                                                        <div style={{ 
+                                                            width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                                                            background: isExpanded ? 'var(--primary)' : 'rgba(37,99,235,0.08)', 
+                                                            color: isExpanded ? '#fff' : 'var(--primary)',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            transition: 'all 0.2s'
+                                                        }}>
+                                                            <cat.icon size={18} />
+                                                        </div>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+                                                            <span style={{ fontWeight: 700, fontSize: '.95rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.title}</span>
+                                                            <span style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>
+                                                                {cat.modules.length} {language === 'ar' ? 'صلاحيات فرعية' : 'sub-permissions'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ 
+                                                        width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                                                        background: 'var(--bg-secondary)', 
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        color: 'var(--text-secondary)' 
+                                                    }}>
+                                                        {isExpanded ? <ChevronDown size={16} /> : (language === 'ar' ? <ChevronLeft size={16} /> : <ChevronRight size={16} />)}
+                                                    </div>
+                                                </div>
+
+                                                {/* Accordion Content Grid */}
+                                                {isExpanded && (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box' }}>
+                                                        {/* Column Titles */}
+                                                        <div style={{ 
+                                                            display: 'grid',
+                                                            gridTemplateColumns: '2fr repeat(4, 1fr)',
+                                                            alignItems: 'center',
+                                                            background: 'var(--bg-secondary)', 
+                                                            borderBottom: '1px solid var(--border-light)', 
+                                                            padding: '10px 20px', 
+                                                            fontWeight: 700, 
+                                                            fontSize: '.78rem', 
+                                                            color: 'var(--text-secondary)',
+                                                            width: '100%',
+                                                            boxSizing: 'border-box'
+                                                        }}>
+                                                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: language === 'ar' ? 'right' : 'left' }}>
+                                                                {tr('module', 'اسم الوحدة / الخاصية')}
+                                                            </div>
+                                                            {PERM_KEYS.map(pk => (
+                                                                <div key={pk.key} style={{ textAlign: 'center' }}>{pk.label}</div>
+                                                            ))}
+                                                        </div>
+
+                                                        {/* Child Module Rows */}
+                                                        {cat.modules.map((m, idx) => (
+                                                            <div key={m.m} style={{ 
+                                                                display: 'grid',
+                                                                gridTemplateColumns: '2fr repeat(4, 1fr)',
+                                                                alignItems: 'center', 
+                                                                background: 'var(--surface)', 
+                                                                borderBottom: idx === cat.modules.length - 1 ? 'none' : '1px solid var(--border-light)', 
+                                                                padding: '12px 20px',
+                                                                width: '100%',
+                                                                boxSizing: 'border-box'
+                                                            }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                                                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(100,116,139,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                                                                        {getModIcon(m.m)}
                                                                     </div>
-                                                                    <span>{m.l}</span>
-                                                                </td>
+                                                                    <span style={{ 
+                                                                        fontWeight: 600, fontSize: '.83rem', color: 'var(--text-primary)', 
+                                                                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 
+                                                                    }} title={m.l}>
+                                                                        {m.l}
+                                                                    </span>
+                                                                </div>
+
                                                                 {PERM_KEYS.map(pk => (
-                                                                    <td key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                                                    <div key={pk.key} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                                                                         <PermCell has={!!permState[selRole]?.[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
                                                                             onToggle={() => togglePerm(selRole, m.m, pk.key)} />
-                                                                    </td>
+                                                                    </div>
                                                                 ))}
-                                                            </tr>
+                                                            </div>
                                                         ))}
-                                                    </tbody>
-                                                </table>
+                                                    </div>
+                                                )}
                                             </div>
-                                        </Card>
-                                    </div>
-                                )}
-                            </Card>
+                                        );
+                                    })}
+                                </div>
+                            </>
                         )}
                         {permLoaded && <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
                             <button style={{ ...btnStyle, background: 'linear-gradient(135deg, var(--primary), #3b82f6)', color: '#fff', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)', transition: 'all .2s' }} disabled={saving} onClick={savePerms}>
-                                <Save size={15} /> {saving ? (t('saving') || 'Saving...') : (t('save_role_permissions') || 'Save Role Permissions')}
+                                <Save size={15} /> {saving ? (tr('saving', 'جاري الحفظ...')) : (tr('save_role_permissions', 'حفظ صلاحيات الأدوار'))}
                             </button>
                         </div>}
                     </>}
 
                     {/* ── INDIVIDUAL USER MODE ── */}
                     {permMode === 'user' && <>
-                        <Card title={t('select_user_permissions') || 'Select a user to customize permissions'} icon={Users}>
+                        <Card title={tr('select_user_permissions', 'اختر مستخدماً لتخصيص صلاحياته المستقلة')} icon={Users}>
                             {/* Search bar */}
                             <div style={{ position: 'relative', marginBottom: 16 }}>
                                 <input
-                                    placeholder={t('search_user_placeholder') || 'ابحث بالاسم...'}
+                                    placeholder={tr('search_user_placeholder', 'ابحث باسم المستخدم...')}
                                     value={permSearch}
                                     onChange={e => setPermSearch(e.target.value)}
                                     style={{ width: '100%', padding: '12px 16px', border: '1px solid var(--border)', borderRadius: 12, fontSize: '.9rem', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'all .2s' }}
@@ -1558,15 +1680,15 @@ export default function Settings() {
                             {/* User grid */}
                             {(() => {
                                 const filtered = users.filter(u =>
-                                    u.role !== 'admin' && (
+                                    (u.id !== 1 && u.username !== 'admin' && u.role !== 'admin') && (
                                         !permSearch ||
                                         u.full_name?.toLowerCase().includes(permSearch.toLowerCase()) ||
                                         u.username?.toLowerCase().includes(permSearch.toLowerCase()) ||
                                         roleName(u.role)?.toLowerCase().includes(permSearch.toLowerCase())
                                     )
                                 );
-                                if (users.length === 0) return <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: '.875rem' }}>{t('loading') || 'جاري التحميل...'}</div>;
-                                if (filtered.length === 0) return <div style={{ textAlign: 'center', padding: 16, color: 'var(--text-muted)', fontSize: '.875rem' }}>{t('no_results') || 'لا توجد نتائج'}</div>;
+                                if (users.length === 0) return <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: '.875rem' }}>{tr('loading', 'جاري التحميل...')}</div>;
+                                if (filtered.length === 0) return <div style={{ textAlign: 'center', padding: 16, color: 'var(--text-muted)', fontSize: '.875rem' }}>{tr('no_results', 'لا توجد نتائج')}</div>;
                                 return (
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
                                         {filtered.map(u => {
@@ -1600,92 +1722,151 @@ export default function Settings() {
                         </Card>
 
                         {selUser && (
-                            <Card
-                                title={`${t('override_role_permissions') || 'Override Role Permissions'}: ${selUser.full_name || selUser.username}`}
-                                icon={Shield}
-                                action={upHasInd
-                                    ? <span style={{ fontSize: '.72rem', background: 'rgba(16,185,129,.12)', color: 'var(--success)', padding: '4px 12px', borderRadius: 20, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }}></span> {t('custom_permissions_badge') || 'Custom Permissions Active'}</span>
-                                    : <span style={{ fontSize: '.72rem', background: 'var(--bg-secondary)', color: 'var(--text-muted)', padding: '4px 12px', borderRadius: 20, fontWeight: 700 }}>{t('default_role_permissions_badge') || 'Using Role Permissions'}</span>}
-                            >
-                                {upLoading ? <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}><div className="spinner" /></div> : <>
-                                    <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', marginBottom: 16 }}>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
-                                            <thead>
-                                                <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-                                                    <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, fontSize: '.8rem', color: 'var(--text-secondary)', width: '40%' }}>{t('module') || 'Module'}</th>
-                                                    {PERM_KEYS.map(pk => <th key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600, fontSize: '.8rem', color: 'var(--text-secondary)', width: '15%' }}>{pk.label}</th>)}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {PERM_MODS.map((m, i) => (
-                                                    <tr key={m.m} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
-                                                        <td style={{ padding: '12px 16px', fontWeight: 600, fontSize: '.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                                                            <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(37,99,235,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                {getModIcon(m.m)}
-                                                            </div>
-                                                            <span>{m.l}</span>
-                                                        </td>
-                                                        {PERM_KEYS.map(pk => (
-                                                            <td key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
-                                                                <PermCell has={!!upState[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
-                                                                    onToggle={() => setUpState(p => ({ ...p, [m.m]: { ...p[m.m], [pk.key]: !p[m.m]?.[pk.key] } }))} />
-                                                            </td>
-                                                        ))}
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                            <div style={{ marginTop: 20 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, padding: '0 4px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
+                                        <Shield size={20} style={{ color: 'var(--primary)' }} />
+                                        {tr('override_role_permissions', 'تخصيص صلاحيات المستخدم')}: <span style={{ color: 'var(--primary)' }}>{selUser.full_name || selUser.username}</span>
                                     </div>
-                                    {isSuperAdmin && (
-                                        <div style={{ marginTop: 24, marginBottom: 16 }}>
-                                            <Card title="صلاحيات مدير النظام الإدارية الحصرية (الأدمن الرئيسي)" icon={Shield}
-                                                action={<span style={{ fontSize: '.72rem', background: 'rgba(239,68,68,.12)', color: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 700 }}>خاص بالأدمن الرئيسي</span>}
-                                            >
-                                                <div style={{ fontSize: '.8rem', color: 'var(--text-muted)', marginBottom: 12 }}>
-                                                    صلاحيات التحكم المتقدمة بالعمليات الحساسة وإصدار ملفات إكسيل وإدارة السحابة وتصفير البيانات.
-                                                </div>
-                                                <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid rgba(239,68,68,0.2)', background: 'var(--surface)' }}>
-                                                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
-                                                        <thead>
-                                                            <tr style={{ background: 'rgba(239,68,68,0.06)', borderBottom: '1px solid rgba(239,68,68,0.15)' }}>
-                                                                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, fontSize: '.8rem', color: '#ef4444', width: '40%' }}>صلاحية مدير النظام</th>
-                                                                {PERM_KEYS.map(pk => <th key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600, fontSize: '.8rem', color: 'var(--text-secondary)', width: '15%' }}>{pk.label}</th>)}
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {ADMIN_PERM_MODS.map((m, i) => (
-                                                                <tr key={m.m} style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg-secondary)', borderBottom: '1px solid var(--border-light)' }}>
-                                                                    <td style={{ padding: '12px 16px', fontWeight: 600, fontSize: '.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                                                                        <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                            <Shield size={14} style={{ color: '#ef4444' }} />
+                                    {upHasInd
+                                        ? <span style={{ fontSize: '.72rem', background: 'rgba(16,185,129,.12)', color: 'var(--success)', padding: '4px 12px', borderRadius: 20, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }}></span> {tr('custom_permissions_badge', 'صلاحيات مخصصة مفعلة')}</span>
+                                        : <span style={{ fontSize: '.72rem', background: 'var(--bg-secondary)', color: 'var(--text-muted)', padding: '4px 12px', borderRadius: 20, fontWeight: 700 }}>{tr('default_role_permissions_badge', 'مستوردة من صلاحيات الدور')}</span>}
+                                </div>
+
+                                {upLoading ? <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}><div className="spinner" /></div> : <>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 16 }}>
+                                        {PERM_CATEGORIES.map((cat) => {
+                                            const isExpanded = !!expandedCats[cat.id];
+                                            return (
+                                                <div key={cat.id} style={{ 
+                                                    borderRadius: 14, 
+                                                    border: '1px solid var(--border)', 
+                                                    background: 'var(--surface)', 
+                                                    overflow: 'hidden',
+                                                    boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                                                    transition: 'all 0.2s ease',
+                                                    width: '100%',
+                                                    boxSizing: 'border-box'
+                                                }}>
+                                                    {/* Category Header Bar */}
+                                                    <div 
+                                                        onClick={() => toggleCat(cat.id)}
+                                                        style={{ 
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'space-between',
+                                                            background: 'var(--surface)', 
+                                                            borderBottom: isExpanded ? '1px solid var(--border-light)' : 'none',
+                                                            cursor: 'pointer',
+                                                            userSelect: 'none',
+                                                            padding: '16px 20px',
+                                                            boxSizing: 'border-box',
+                                                            transition: 'background 0.2s',
+                                                            width: '100%'
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: 1 }}>
+                                                            <div style={{ 
+                                                                width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                                                                background: isExpanded ? 'var(--primary)' : 'rgba(37,99,235,0.08)', 
+                                                                color: isExpanded ? '#fff' : 'var(--primary)',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                transition: 'all 0.2s'
+                                                            }}>
+                                                                <cat.icon size={18} />
+                                                            </div>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+                                                                <span style={{ fontWeight: 700, fontSize: '.95rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.title}</span>
+                                                                <span style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>
+                                                                    {cat.modules.length} {language === 'ar' ? 'صلاحيات فرعية' : 'sub-permissions'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div style={{ 
+                                                            width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                                                            background: 'var(--bg-secondary)', 
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            color: 'var(--text-secondary)' 
+                                                        }}>
+                                                            {isExpanded ? <ChevronDown size={16} /> : (language === 'ar' ? <ChevronLeft size={16} /> : <ChevronRight size={16} />)}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Accordion Content Grid */}
+                                                    {isExpanded && (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box' }}>
+                                                            {/* Column Titles */}
+                                                            <div style={{ 
+                                                                display: 'grid',
+                                                                gridTemplateColumns: '2fr repeat(4, 1fr)',
+                                                                alignItems: 'center',
+                                                                background: 'var(--bg-secondary)', 
+                                                                borderBottom: '1px solid var(--border-light)', 
+                                                                padding: '10px 20px', 
+                                                                fontWeight: 700, 
+                                                                fontSize: '.78rem', 
+                                                                color: 'var(--text-secondary)',
+                                                                width: '100%',
+                                                                boxSizing: 'border-box'
+                                                            }}>
+                                                                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: language === 'ar' ? 'right' : 'left' }}>
+                                                                    {tr('module', 'اسم الوحدة / الخاصية')}
+                                                                </div>
+                                                                {PERM_KEYS.map(pk => (
+                                                                    <div key={pk.key} style={{ textAlign: 'center' }}>{pk.label}</div>
+                                                                ))}
+                                                            </div>
+
+                                                            {/* Child Module Rows */}
+                                                            {cat.modules.map((m, idx) => (
+                                                                <div key={m.m} style={{ 
+                                                                    display: 'grid',
+                                                                    gridTemplateColumns: '2fr repeat(4, 1fr)',
+                                                                    alignItems: 'center', 
+                                                                    background: 'var(--surface)', 
+                                                                    borderBottom: idx === cat.modules.length - 1 ? 'none' : '1px solid var(--border-light)', 
+                                                                    padding: '12px 20px',
+                                                                    width: '100%',
+                                                                    boxSizing: 'border-box'
+                                                                }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                                                        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(100,116,139,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                                                                            {getModIcon(m.m)}
                                                                         </div>
-                                                                        <span>{m.l}</span>
-                                                                    </td>
+                                                                        <span style={{ 
+                                                                            fontWeight: 600, fontSize: '.83rem', color: 'var(--text-primary)', 
+                                                                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 
+                                                                        }} title={m.l}>
+                                                                            {m.l}
+                                                                        </span>
+                                                                    </div>
+
                                                                     {PERM_KEYS.map(pk => (
-                                                                        <td key={pk.key} style={{ padding: '12px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                                                        <div key={pk.key} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                                                                             <PermCell has={!!upState[m.m]?.[pk.key]} enabled={m.a.includes(pk.act)}
                                                                                 onToggle={() => setUpState(p => ({ ...p, [m.m]: { ...p[m.m], [pk.key]: !p[m.m]?.[pk.key] } }))} />
-                                                                        </td>
+                                                                        </div>
                                                                     ))}
-                                                                </tr>
+                                                                </div>
                                                             ))}
-                                                        </tbody>
-                                                    </table>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            </Card>
-                                        </div>
-                                    )}
-                                    <div style={{ display: 'flex', gap: 10 }}>
+                                            );
+                                        })}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                                         <button style={{ ...btnStyle, background: 'linear-gradient(135deg, var(--primary), #3b82f6)', color: '#fff', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)', transition: 'all .2s' }} disabled={saving} onClick={saveUserPerms}>
-                                            <Save size={15} /> {saving ? (t('saving') || 'Saving...') : (t('save_individual_permissions') || 'Save Individual Permissions')}
+                                            <Save size={15} /> {saving ? (tr('saving', 'جاري الحفظ...')) : (tr('save_individual_permissions', 'حفظ الصلاحيات المخصصة للمستخدم'))}
                                         </button>
                                         {upHasInd && <button style={{ ...btnStyle, background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
                                             disabled={saving} onClick={clearUserPerms}>
-                                            <RefreshCw size={14} /> {t('reset_to_role_permissions') || 'Reset to Role Permissions'}
+                                            <RefreshCw size={14} /> {tr('reset_to_role_permissions', 'إعادة ضبط إلى صلاحيات الدور الافتراضية')}
                                         </button>}
                                     </div>
                                 </>}
-                            </Card>
+                            </div>
                         )}
                     </>}
                 </>}
@@ -1931,8 +2112,40 @@ export default function Settings() {
                 })()}
 
                 {/* ══ EXCEL PROGRAM & BACKUP ════════════════════════════════════════════════ */}
-                {sec === 'excel_program' && (isAdmin || user?.permissions?.excel_backup?.can_view || user?.permissions?.excel_backup?.can_create) && (
+                {sec === 'excel_program' && (canAccess('excel_backup', 'can_view') || canAccess('excel_backup', 'can_create')) && (
                     <>
+                        {isSuperAdmin && (
+                            <div style={{
+                                background: 'var(--surface)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 12,
+                                padding: '14px 20px',
+                                marginBottom: 16,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                boxShadow: 'var(--shadow-sm)'
+                            }}>
+                                <div>
+                                    <div style={{ fontWeight: 600, fontSize: '.9rem', color: 'var(--text-primary)' }}>
+                                        {t('allow_manager_excel') || 'صلاحية رؤية شيت الإكسيل المصغر للمدير والموظفين'}
+                                    </div>
+                                    <div style={{ fontSize: '.78rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                                        {t('allow_manager_excel_desc') || 'تحديد ما إذا كان يسمح للمدير والمستخدمين غير الأدمن برؤية وتنزيل شيت الإكسيل المصغر أم حظره عليهم'}
+                                    </div>
+                                </div>
+                                <Tog
+                                    on={gen.allow_manager_excel === 'yes'}
+                                    onChange={async () => {
+                                        const newVal = gen.allow_manager_excel === 'yes' ? 'no' : 'yes';
+                                        setGen(f => ({ ...f, allow_manager_excel: newVal }));
+                                        await saveSetting('general', 'allow_manager_excel', newVal);
+                                        window.dispatchEvent(new Event('settingsUpdated'));
+                                        toast.success(newVal === 'yes' ? 'تم تفعيل رؤية شيت الإكسيل المصغر للمدير' : 'تم تعطيل رؤية شيت الإكسيل المصغر عن المدير');
+                                    }}
+                                />
+                            </div>
+                        )}
                         <Card title="برنامج Excel المصغر والنسخ الاحتياطي للأرشيف" icon={FileText}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                                 <p style={{ fontSize: '.9rem', color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>
@@ -1940,7 +2153,7 @@ export default function Settings() {
                                 </p>
 
                                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
-                                    {(isAdmin || user?.permissions?.excel_backup?.can_create) && (
+                                    {canAccess('excel_backup', 'can_create') && (
                                         <button
                                             style={{ ...btnStyle, background: '#107c41', color: '#fff', padding: '10px 20px', boxShadow: '0 4px 14px rgba(16,124,65,0.25)' }}
                                             onClick={backupToExcel}
@@ -1955,7 +2168,7 @@ export default function Settings() {
                                         <Check size={18} style={{ color: '#107c41' }} /> مميزات برنامج Excel المصغر المدمج:
                                     </div>
                                     <ul style={{ paddingRight: 20, margin: 0, fontSize: '.875rem', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-                                        <li><strong>تثبيت اسم العميل/المورد افتراضياً:</strong> يتم اختيار "عميل نقدي" أو "مورد عام" تلقائياً في خانة العميل/المورد، وتكرار نفس اسم العميل بالسطر التالي فوراً لإدخال أصناف متعددة لنفس الفاتورة.</li>
+                                        <li><strong>تثبيت اسم العميل/المورد افتراضياً:</strong> يتم اختيار "عميل نقدي" أو "مورد نقدي" تلقائياً في خانة العميل/المورد، وتكرار نفس اسم العميل بالسطر التالي فوراً لإدخال أصناف متعددة لنفس الفاتورة.</li>
                                         <li><strong>تحديد حالة الدفع ومعالجة المديونيات:</strong> اختيار حالة الدفع ("مدفوع" / "أجل") حيث يتم ترحيل الآجل تلقائياً لمديونية العميل أو دائنية المورد دون خصمه من الخزينة النقدية.</li>
                                         <li><strong>تسميع الرصيد الافتتاحي:</strong> ترحيل صافي المديونيات الحالية مباشرة إلى الرصيد الافتتاحي عند البدء من جديد بشيت جديد.</li>
                                         <li><strong>المطابقة الذكية للأكواد والأسماء:</strong> استنتاج أسماء وأكواد المنتجات والأسعار تلقائياً من صفحة المنتجات بدون أخطاء.</li>

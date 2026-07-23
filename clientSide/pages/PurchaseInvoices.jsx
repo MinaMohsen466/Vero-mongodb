@@ -43,12 +43,22 @@ function PurchaseInvoices() {
     const [editingId, setEditingId] = useState(null);
     const [visibleInvoicesCount, setVisibleInvoicesCount] = useState(50);
 
-    const emptyForm = () => ({
-        supplier_id: '', date: new Date().toISOString().split('T')[0], due_date: '', notes: '',
-        status: 'paid', payment_method: 'cash', payment_account_id: '', paid: 0, image: '',
-        manual_discount: 0,
-        items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }]
-    });
+    const emptyForm = () => {
+        const defaultSupp = suppliers.find(s => s.code === 'SUPP-CASH');
+        return {
+            supplier_id: defaultSupp ? String(defaultSupp.id) : '', 
+            date: new Date().toISOString().split('T')[0], 
+            due_date: '', 
+            notes: '',
+            status: 'paid', 
+            payment_method: 'cash', 
+            payment_account_id: '', 
+            paid: 0, 
+            image: '',
+            manual_discount: 0,
+            items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, discount: 0, total: 0, color: '' }]
+        };
+    };
 
     const [formData, setFormData] = useState(emptyForm());
     const searchInputRef = React.useRef(null);

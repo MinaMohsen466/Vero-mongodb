@@ -154,7 +154,6 @@ function POS() {
     const [lastReceipt, setLastReceipt] = useState(null);
     const [lastInvoiceId, setLastInvoiceId] = useState(null);
     const [showReceipt, setShowReceipt] = useState(false);
-    const [refreshing, setRefreshing] = useState(false);
     const [showInvoicePreview, setShowInvoicePreview] = useState(false);
     const [previewInvoice, setPreviewInvoice] = useState(null);
     const [visiblePurchasePrices, setVisiblePurchasePrices] = useState({});

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Wallet, Building, Plus, RefreshCw, ArrowDownCircle, ArrowUpCircle, Calendar, Clock, ChevronDown } from 'lucide-react';
+import { Wallet, Building, RefreshCw, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';

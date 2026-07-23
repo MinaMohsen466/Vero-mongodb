@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Key, Shield, LogOut, X, Save, Eye, EyeOff, ChevronDown } from 'lucide-react';
+import { User, Key, LogOut, X, Save, Eye, EyeOff, ChevronDown } from 'lucide-react';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, X, Send, Sparkles, AlertCircle, RefreshCw, Check, AlertTriangle, Image as ImageIcon } from 'lucide-react';
+import { Bot, X, Send, Sparkles, RefreshCw, Check, AlertTriangle, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { useAuth } from '../App';
 import { toast } from 'react-hot-toast';
 
@@ -526,13 +526,15 @@ export default function AiAssistantBubble() {
                             {messages.length > 0 && (
                                 <button
                                     onClick={clearChat}
-                                    title={isRtl ? 'مسح المحادثة' : 'Clear Chat'}
+                                    title={isRtl ? 'مسح المحادثة بالكامل' : 'Clear Chat History'}
                                     style={{
-                                        border: 'none', background: 'none', color: 'var(--text-muted)',
-                                        cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center'
+                                        border: 'none', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444',
+                                        cursor: 'pointer', padding: '4px 8px', borderRadius: 6,
+                                        display: 'flex', alignItems: 'center', gap: 4, fontSize: '.75rem', fontWeight: 600
                                     }}
                                 >
-                                    <RefreshCw size={14} />
+                                    <Trash2 size={14} />
+                                    <span>{isRtl ? 'مسح الشات' : 'Clear'}</span>
                                 </button>
                             )}
                             <button
