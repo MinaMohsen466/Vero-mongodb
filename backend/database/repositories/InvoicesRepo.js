@@ -176,6 +176,22 @@ class InvoicesRepo {
                 total: parseFloat(item.total) || (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0)
             }));
 
+            // Check stock availability BEFORE creating invoice
+            if (inv.type !== 'quotation' && inv.type === 'sales') {
+                const allowNegativeSetting = await Setting.findOne({ key: 'allow_negative_stock' }).lean();
+                const allowNegative = allowNegativeSetting && (allowNegativeSetting.value === 'yes' || allowNegativeSetting.value === '1');
+                if (!allowNegative) {
+                    for (const item of items) {
+                        if (item.product_id) {
+                            const product = await Product.findOne({ id: item.product_id }).lean();
+                            if (product && (product.shop_stock || 0) < item.quantity) {
+                                return { success: false, error: `الكمية المتوفرة في المخزن للمنتج "${product.name}" (${product.shop_stock || 0}) غير كافية للبيع (المطلوب: ${item.quantity})` };
+                            }
+                        }
+                    }
+                }
+            }
+
             const nextId = await getNextSequenceValue('invoices');
             await Invoice.create({
                 id: nextId, invoice_number: num, type: inv.type, customer_id: inv.customer_id || null,
@@ -189,22 +205,6 @@ class InvoicesRepo {
             });
 
             if (inv.type !== 'quotation') {
-                // Check stock availability for sales invoices
-                if (inv.type === 'sales') {
-                    const allowNegativeSetting = await Setting.findOne({ key: 'allow_negative_stock' }).lean();
-                    const allowNegative = allowNegativeSetting && (allowNegativeSetting.value === 'yes' || allowNegativeSetting.value === '1');
-                    if (!allowNegative) {
-                        for (const item of items) {
-                            if (item.product_id) {
-                                const product = await Product.findOne({ id: item.product_id }).lean();
-                                if (product && (product.shop_stock || 0) < item.quantity) {
-                                    return { success: false, error: `الكمية المتوفرة في المخزن للمنتج "${product.name}" (${product.shop_stock || 0}) غير كافية للبيع (المطلوب: ${item.quantity})` };
-                                }
-                            }
-                        }
-                    }
-                }
-
                 for (const item of items) {
                     if (item.product_id) {
                         if (inv.type === 'sales') {

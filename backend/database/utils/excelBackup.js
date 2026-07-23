@@ -88,6 +88,33 @@ function styleWorksheet(worksheet, headers, totalRows, sumCols = []) {
     }
 }
 
+function applyProtection(worksheet, unlockedColIndexes = []) {
+    worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+        if (rowNumber === 1) return; // Header row remains locked
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            if (unlockedColIndexes.includes(colNumber)) {
+                cell.protection = { locked: false };
+            } else {
+                cell.protection = { locked: true };
+            }
+        });
+    });
+
+    try {
+        worksheet.protect('', {
+            selectLockedCells: true,
+            selectUnlockedCells: true,
+            formatCells: true,
+            formatColumns: true,
+            formatRows: true,
+            insertRows: true,
+            deleteRows: true,
+            autoFilter: true,
+            sort: true
+        });
+    } catch(e) {}
+}
+
 function formatDate(d) {
     if (!d) return '';
     try {
@@ -188,12 +215,25 @@ async function exportToExcel(db, filePath, includeData = true) {
             productMap[String(p.id)] = p;
         });
 
-        // Calculate Db totals for products to deduce correct initial stock
+        // Calculate Db totals for products and gather existing flat database items
         const dbPurchasedQty = {};
         const dbSoldQty = {};
+        const dbSalesItems = [];
+        const dbPurchasesItems = [];
 
         invoices.forEach(inv => {
-            if (inv.items) {
+            if (inv.items && inv.items.length > 0) {
+                const isCredit = (inv.status === 'unpaid' || inv.status === 'credit');
+
+                let rawNotes = (inv.invoice_number || '');
+                if (inv.notes) {
+                    let cleanNoteText = inv.notes;
+                    if (inv.status !== 'written_off') {
+                        cleanNoteText = cleanNoteText.replace(/\[?تم شطب\/إعدام مبلغ .*? كدين معدوم\]?/g, '').replace(/\[?تم شطب.*?\]?/g, '').trim();
+                    }
+                    if (cleanNoteText) rawNotes += ` - ${cleanNoteText}`;
+                }
+
                 inv.items.forEach(item => {
                     const pId = item.product_id;
                     const qty = item.quantity || 0;
@@ -203,6 +243,38 @@ async function exportToExcel(db, filePath, includeData = true) {
                     } else if (inv.type === 'sales') {
                         dbSoldQty[pId] = (dbSoldQty[pId] || 0) + qty;
                         if (pId) dbSoldQty[String(pId)] = (dbSoldQty[String(pId)] || 0) + qty;
+                    }
+
+                    let pObj = productMap[item.product_id] || productMap[String(item.product_id)] || productMap[parseInt(item.product_id, 10)];
+                    if (!pObj && item.product_id) {
+                        pObj = products.find(p => String(p.id) === String(item.product_id) || p.code === item.product_code);
+                    }
+                    if (!pObj && item.product_code) {
+                        pObj = products.find(p => p.code === item.product_code);
+                    }
+                    if (!pObj && (item.product_name || item.description || item.name)) {
+                        const searchName = item.product_name || item.description || item.name;
+                        pObj = products.find(p => p.name === searchName);
+                    }
+
+                    const productName = item.product_name || item.name || item.description || pObj?.name || (item.product_id ? `منتج #${item.product_id}` : '');
+                    const productCode = productCodeMap[item.product_id] || productCodeMap[String(item.product_id)] || pObj?.code || item.product_code || item.code || '';
+
+                    const rowData = {
+                        date: formatDate(inv.date),
+                        entityName: inv.type === 'sales' ? (customerMap[inv.customer_id] || 'عميل نقدي') : (supplierMap[inv.supplier_id] || 'مورد نقدي'),
+                        entityId: inv.type === 'sales' ? inv.customer_id : inv.supplier_id,
+                        productCode: productCode,
+                        productName: productName,
+                        quantity: item.quantity || 0,
+                        unitPrice: item.unit_price || item.price || pObj?.sale_price || 0,
+                        paymentStatus: isCredit ? 'أجل' : 'مدفوع',
+                        notes: rawNotes
+                    };
+                    if (inv.type === 'sales') {
+                        dbSalesItems.push(rowData);
+                    } else if (inv.type === 'purchase') {
+                        dbPurchasesItems.push(rowData);
                     }
                 });
             }
@@ -227,25 +299,42 @@ async function exportToExcel(db, filePath, includeData = true) {
             cell.alignment = { horizontal: 'center', vertical: 'middle' };
         });
 
+        const dbTotalCashSales = dbSalesItems.reduce((acc, item) => acc + (item.paymentStatus !== 'أجل' ? (item.quantity * item.unitPrice) : 0), 0);
+        const dbTotalCreditSales = dbSalesItems.reduce((acc, item) => acc + (item.paymentStatus === 'أجل' ? (item.quantity * item.unitPrice) : 0), 0);
+        const dbTotalSales = dbTotalCashSales + dbTotalCreditSales;
+
+        const dbTotalCashPurchases = dbPurchasesItems.reduce((acc, item) => acc + (item.paymentStatus !== 'أجل' ? (item.quantity * item.unitPrice) : 0), 0);
+        const dbTotalCreditPurchases = dbPurchasesItems.reduce((acc, item) => acc + (item.paymentStatus === 'أجل' ? (item.quantity * item.unitPrice) : 0), 0);
+        const dbTotalPurchases = dbTotalCashPurchases + dbTotalCreditPurchases;
+
+        const dbTotalExpenses = expenses.reduce((acc, item) => acc + (parseFloat(item.amount) || 0), 0);
+        const dbOperatingProfit = dbTotalSales - dbTotalPurchases;
+        const dbNetProfit = dbOperatingProfit - dbTotalExpenses;
+        const dbCashBalance = dbTotalCashSales - dbTotalCashPurchases - dbTotalExpenses;
+
+        const dbTotalStockValue = products.reduce((acc, p) => acc + ((parseFloat(p.sale_price || p.purchase_price) || 0) * (parseFloat(p.initial_stock) || 0)), 0);
+        const dbTotalCustomerDebts = customers.reduce((acc, c) => acc + (parseFloat(c.balance || c.opening_balance) || 0), 0);
+        const dbTotalSupplierDebts = suppliers.reduce((acc, s) => acc + (parseFloat(s.balance || s.opening_balance) || 0), 0);
+
         // KPI Rows data & formulas (Referencing updated columns: E=Total, F=Cash, G=Credit)
         const kpiRows = [
-            { kpi: 'إجمالي المبيعات النقدية (الخزينة)', val: { formula: "=IFERROR(SUM(المبيعات!F3:F20002), 0)" }, desc: 'مجموع النقدية المحصلة بالدرج من المبيعات المدفوعة' },
-            { kpi: 'إجمالي المبيعات الآجلة (ديون العملاء)', val: { formula: "=IFERROR(SUM(المبيعات!G3:G20002), 0)" }, desc: 'مجموع المبيعات الآجلة المستحقة على العملاء' },
-            { kpi: 'إجمالي المبيعات الكلية', val: { formula: "=IFERROR(SUM(المبيعات!E3:E20002), 0)" }, desc: 'إجمالي قيمة جميع فواتير البيع (نقدي + أجل)' },
-            { kpi: 'إجمالي المشتريات النقدية (الخزينة)', val: { formula: "=IFERROR(SUM(المشتريات!F3:F20002), 0)" }, desc: 'مجموع النقدية المدفوعة للمشتريات من الخزينة' },
-            { kpi: 'إجمالي المشتريات الآجلة (مستحقات الموردين)', val: { formula: "=IFERROR(SUM(المشتريات!G3:G20002), 0)" }, desc: 'مجموع المشتريات الآجلة المستحقة للموردين' },
-            { kpi: 'إجمالي المشتريات الكلية', val: { formula: "=IFERROR(SUM(المشتريات!E3:E20002), 0)" }, desc: 'إجمالي قيمة جميع فواتير الشراء (نقدي + أجل)' },
-            { kpi: 'رصيد النقدية الحالي بالدرج (الخزينة)', val: { formula: "=IFERROR(B2-B5-B10, 0)" }, desc: 'النقدية الفعلية المتاحة في الخزينة (المبيعات النقدية - المشتريات النقدية - المصروفات)' },
-            { kpi: 'صافي الأرباح التشغيلية', val: { formula: "=IFERROR(B4-B7, 0)" }, desc: 'الأرباح التشغيلية المباشرة (إجمالي المبيعات - إجمالي المشتريات)' },
-            { kpi: 'إجمالي المصروفات العامة', val: { formula: "=IFERROR(SUM(المصروفات!D3:D5002), 0)" }, desc: 'مجموع المصروفات الإدارية والعمومية والرواتب' },
-            { kpi: 'صافي الربح النهائي', val: { formula: "=IFERROR(B8-B9, 0)" }, desc: 'الربح الصافي بعد خصم المصروفات العمومية' },
-            { kpi: 'إجمالي قيمة المخزون الحالي', val: { formula: "=IFERROR(SUM(المنتجات!L3:L5002), 0)" }, desc: 'القيمة المالية الإجمالية للبضاعة المتاحة في المخازن' },
-            { kpi: 'إجمالي مديونيات العملاء الآجلة', val: { formula: "=IFERROR(SUM(العملاء!H3:H5002), 0)" }, desc: 'إجمالي المبالغ المطلوبة من العملاء (الرصيد الافتتاحي + الآجل)' },
-            { kpi: 'إجمالي مستحقات الموردين الآجلة', val: { formula: "=IFERROR(SUM(الموردين!H3:H5002), 0)" }, desc: 'إجمالي المبالغ المستحقة للموردين (الرصيد الافتتاحي + الآجل)' },
-            { kpi: 'إجمالي عدد المنتجات المسجلة', val: { formula: "=IFERROR(COUNTIF(المنتجات!B3:B5002, \"?*\"), 0)" }, desc: 'عدد الأصناف المعرفة والمسجلة في ورقة المنتجات' },
-            { kpi: 'إجمالي عدد العملاء', val: { formula: "=IFERROR(COUNTIF(العملاء!B3:B5002, \"?*\"), 0)" }, desc: 'عدد العملاء المسجلين في ورقة العملاء' },
-            { kpi: 'إجمالي عدد الموردين', val: { formula: "=IFERROR(COUNTIF(الموردين!B3:B5002, \"?*\"), 0)" }, desc: 'عدد الموردين المسجلين في ورقة الموردين' },
-            { kpi: 'متوسط قيمة الحركة/الفاتورة', val: { formula: "=IFERROR(AVERAGEIF(المبيعات!E3:E20002, \">0\"), 0)" }, desc: 'متوسط قيم فواتير المبيعات' }
+            { kpi: 'إجمالي المبيعات النقدية (الخزينة)', val: { formula: "=IFERROR(SUM(المبيعات!F3:F20002), 0)", result: dbTotalCashSales }, desc: 'مجموع النقدية المحصلة بالدرج من المبيعات المدفوعة' }, // Row 2 (B2)
+            { kpi: 'إجمالي المبيعات الآجلة (ديون العملاء)', val: { formula: "=IFERROR(SUM(المبيعات!G3:G20002), 0)", result: dbTotalCreditSales }, desc: 'مجموع المبيعات الآجلة المستحقة على العملاء' }, // Row 3 (B3)
+            { kpi: 'إجمالي المبيعات الكلية', val: { formula: "=IFERROR(SUM(المبيعات!E3:E20002), 0)", result: dbTotalSales }, desc: 'إجمالي قيمة جميع فواتير البيع (نقدي + أجل)' }, // Row 4 (B4)
+            { kpi: 'إجمالي المشتريات النقدية (الخزينة)', val: { formula: "=IFERROR(SUM(المشتريات!F3:F20002), 0)", result: dbTotalCashPurchases }, desc: 'مجموع النقدية المدفوعة للمشتريات من الخزينة' }, // Row 5 (B5)
+            { kpi: 'إجمالي المشتريات الآجلة (مستحقات الموردين)', val: { formula: "=IFERROR(SUM(المشتريات!G3:G20002), 0)", result: dbTotalCreditPurchases }, desc: 'مجموع المشتريات الآجلة المستحقة للموردين' }, // Row 6 (B6)
+            { kpi: 'إجمالي المشتريات الكلية', val: { formula: "=IFERROR(SUM(المشتريات!E3:E20002), 0)", result: dbTotalPurchases }, desc: 'إجمالي قيمة جميع فواتير الشراء (نقدي + أجل)' }, // Row 7 (B7)
+            { kpi: 'رصيد النقدية الحالي بالدرج (الخزينة)', val: { formula: "=IFERROR(B2-B5-B10, 0)", result: dbCashBalance }, desc: 'النقدية الفعلية المتاحة في الخزينة (المبيعات النقدية - المشتريات النقدية - المصروفات)' }, // Row 8 (B8)
+            { kpi: 'صافي الأرباح التشغيلية', val: { formula: "=IFERROR(B4-B7, 0)", result: dbOperatingProfit }, desc: 'الأرباح التشغيلية المباشرة (إجمالي المبيعات - إجمالي المشتريات)' }, // Row 9 (B9)
+            { kpi: 'إجمالي المصروفات العامة', val: { formula: "=IFERROR(SUM(المصروفات!D3:D5002), 0)", result: dbTotalExpenses }, desc: 'مجموع المصروفات الإدارية والعمومية والرواتب' }, // Row 10 (B10)
+            { kpi: 'صافي الربح النهائي', val: { formula: "=IFERROR(B9-B10, 0)", result: dbNetProfit }, desc: 'الربح الصافي بعد خصم المصروفات العمومية' }, // Row 11 (B11)
+            { kpi: 'إجمالي قيمة المخزون الحالي', val: { formula: "=IFERROR(SUM(المنتجات!L3:L5002), 0)", result: dbTotalStockValue }, desc: 'القيمة المالية الإجمالية للبضاعة المتاحة في المخازن' }, // Row 12 (B12)
+            { kpi: 'إجمالي مديونيات العملاء الآجلة', val: { formula: "=IFERROR(SUM(العملاء!H3:H5002), 0)", result: dbTotalCustomerDebts }, desc: 'إجمالي المبالغ المطلوبة من العملاء (الرصيد الافتتاحي + الآجل)' }, // Row 13 (B13)
+            { kpi: 'إجمالي مستحقات الموردين الآجلة', val: { formula: "=IFERROR(SUM(الموردين!H3:H5002), 0)", result: dbTotalSupplierDebts }, desc: 'إجمالي المبالغ المستحقة للموردين (الرصيد الافتتاحي + الآجل)' }, // Row 14 (B14)
+            { kpi: 'إجمالي عدد المنتجات المسجلة', val: { formula: "=IFERROR(COUNTIF(المنتجات!B3:B5002, \"?*\"), 0)", result: products.length }, desc: 'عدد الأصناف المعرفة والمسجلة في ورقة المنتجات' }, // Row 15 (B15)
+            { kpi: 'إجمالي عدد العملاء', val: { formula: "=IFERROR(COUNTIF(العملاء!B3:B5002, \"?*\"), 0)", result: customers.length }, desc: 'عدد العملاء المسجلين في ورقة العملاء' }, // Row 16 (B16)
+            { kpi: 'إجمالي عدد الموردين', val: { formula: "=IFERROR(COUNTIF(الموردين!B3:B5002, \"?*\"), 0)", result: suppliers.length }, desc: 'عدد الموردين المسجلين في ورقة الموردين' }, // Row 17 (B17)
+            { kpi: 'متوسط قيمة الحركة/الفاتورة', val: { formula: "=IFERROR(AVERAGEIF(المبيعات!E3:E20002, \">0\"), 0)", result: dbSalesItems.length ? (dbTotalSales / dbSalesItems.length) : 0 }, desc: 'متوسط قيم فواتير المبيعات' } // Row 18 (B18)
         ];
 
         kpiRows.forEach((item, idx) => {
@@ -537,58 +626,7 @@ async function exportToExcel(db, filePath, includeData = true) {
         }
         styleWorksheet(suppliersSheet, suppliersSheet.columns, 5001, [3, 4, 5, 6, 7]);
 
-        // Gather existing flat database items
-        const dbSalesItems = [];
-        const dbPurchasesItems = [];
 
-        invoices.forEach(inv => {
-            if (inv.items && inv.items.length > 0) {
-                const isCredit = (inv.status === 'unpaid' || inv.status === 'credit');
-
-                let rawNotes = (inv.invoice_number || '');
-                if (inv.notes) {
-                    let cleanNoteText = inv.notes;
-                    if (inv.status !== 'written_off') {
-                        cleanNoteText = cleanNoteText.replace(/\[?تم شطب\/إعدام مبلغ .*? كدين معدوم\]?/g, '').replace(/\[?تم شطب.*?\]?/g, '').trim();
-                    }
-                    if (cleanNoteText) rawNotes += ` - ${cleanNoteText}`;
-                }
-
-                inv.items.forEach(item => {
-                    let pObj = productMap[item.product_id] || productMap[String(item.product_id)] || productMap[parseInt(item.product_id, 10)];
-                    if (!pObj && item.product_id) {
-                        pObj = products.find(p => String(p.id) === String(item.product_id) || p.code === item.product_code);
-                    }
-                    if (!pObj && item.product_code) {
-                        pObj = products.find(p => p.code === item.product_code);
-                    }
-                    if (!pObj && (item.product_name || item.description || item.name)) {
-                        const searchName = item.product_name || item.description || item.name;
-                        pObj = products.find(p => p.name === searchName);
-                    }
-
-                    const productName = item.product_name || item.name || item.description || pObj?.name || (item.product_id ? `منتج #${item.product_id}` : '');
-                    const productCode = productCodeMap[item.product_id] || productCodeMap[String(item.product_id)] || pObj?.code || item.product_code || item.code || '';
-
-                    const rowData = {
-                        date: formatDate(inv.date),
-                        entityName: inv.type === 'sales' ? (customerMap[inv.customer_id] || 'عميل نقدي') : (supplierMap[inv.supplier_id] || 'مورد نقدي'),
-                        entityId: inv.type === 'sales' ? inv.customer_id : inv.supplier_id,
-                        productCode: productCode,
-                        productName: productName,
-                        quantity: item.quantity || 0,
-                        unitPrice: item.unit_price || item.price || pObj?.sale_price || 0,
-                        paymentStatus: isCredit ? 'أجل' : 'مدفوع',
-                        notes: rawNotes
-                    };
-                    if (inv.type === 'sales') {
-                        dbSalesItems.push(rowData);
-                    } else if (inv.type === 'purchase') {
-                        dbPurchasesItems.push(rowData);
-                    }
-                });
-            }
-        });
 
         // --- 6. Sales Sheet (المبيعات) ---
         // Column Order requested: Product Code, Product Name, Qty, Sale Price, Total, Cash, Credit, Customer, Payment Status, Date, Notes
@@ -635,8 +673,8 @@ async function exportToExcel(db, filePath, includeData = true) {
                 const itemTotal = dbItem.quantity * dbItem.unitPrice;
 
                 salesSheet.addRow({
-                    product_code: dbItem.productCode || { formula: `=IF(B${rowNum}="","",IFERROR(INDEX(المنتجات!A:A,MATCH(B${rowNum},المنتجات!B:B,0)),""))` },
-                    product_name: dbItem.productName || '',
+                    product_code: dbItem.productCode || '',
+                    product_name: dbItem.productName || { formula: `=IF(A${rowNum}="","",IFERROR(INDEX(المنتجات!B:B,MATCH(A${rowNum},المنتجات!A:A,0)),""))` },
                     quantity: dbItem.quantity,
                     sale_price: dbItem.unitPrice,
                     total: {
@@ -657,16 +695,16 @@ async function exportToExcel(db, filePath, includeData = true) {
                     notes: dbItem.notes
                 });
             } else {
-                // Auto-fill customer: Row 3 defaults to 'عميل نقدي' or H2, subsequent rows inherit previous row's customer (H_{rowNum-1})
+                // Auto-fill customer when EITHER Code (A) or Name (B) is filled
                 const custFormula = rowNum === 3 
-                    ? `=IF(B3<>"","عميل نقدي", "")`
-                    : `=IF(B${rowNum}<>"", IF(H${rowNum-1}="","عميل نقدي", H${rowNum-1}), "")`;
+                    ? `=IF(OR(A3<>"",B3<>""),"عميل نقدي", "")`
+                    : `=IF(OR(A${rowNum}<>"",B${rowNum}<>""), IF(H${rowNum-1}="","عميل نقدي", H${rowNum-1}), "")`;
 
                 salesSheet.addRow({
-                    product_code: { formula: `=IF(B${rowNum}="","",IFERROR(INDEX(المنتجات!A:A,MATCH(B${rowNum},المنتجات!B:B,0)),""))` },
-                    product_name: '',
+                    product_code: '',
+                    product_name: { formula: `=IF(A${rowNum}="","",IFERROR(INDEX(المنتجات!B:B,MATCH(A${rowNum},المنتجات!A:A,0)),""))` },
                     quantity: '',
-                    sale_price: { formula: `=IF(B${rowNum}="","",IFERROR(VLOOKUP(B${rowNum},المنتجات!B:G,6,FALSE),0))` },
+                    sale_price: { formula: `=IF(A${rowNum}<>"",IFERROR(INDEX(المنتجات!G:G,MATCH(A${rowNum},المنتجات!A:A,0)),0),IF(B${rowNum}<>"",IFERROR(INDEX(المنتجات!G:G,MATCH(B${rowNum},المنتجات!B:B,0)),0),""))` },
                     total: { formula: `=IF(OR(C${rowNum}="",D${rowNum}=""),"",C${rowNum}*D${rowNum})` },
                     cash_amount: { formula: `=IF(OR(C${rowNum}="",D${rowNum}=""),"", IF(I${rowNum}="أجل", 0, C${rowNum}*D${rowNum}))` },
                     credit_amount: { formula: `=IF(OR(C${rowNum}="",D${rowNum}=""),"", IF(I${rowNum}="أجل", C${rowNum}*D${rowNum}, 0))` },
@@ -679,18 +717,18 @@ async function exportToExcel(db, filePath, includeData = true) {
         }
         styleWorksheet(salesSheet, salesSheet.columns, 20001, [2, 3, 4, 5, 6]);
 
-        // Named Ranges: cover full sheet ranges (5002 rows) so manually added items in Excel show in dropdowns
-        const customerLastRow = Math.max(customers.length + 2, 5002);
-        const supplierLastRow = Math.max(suppliers.length + 2, 5002);
-        const productLastRow = Math.max(products.length + 2, 3);
-        const employeeLastRow = Math.max(employees.length + 2, 3);
+        // Named Ranges: Start at Row 2 and end exactly at the last row of actual data so dropdown lists are compact without scrollbar whitespace
+        const customerLastRow = Math.max(customers.length + 2, 2);
+        const supplierLastRow = Math.max(suppliers.length + 2, 2);
+        const productLastRow = Math.max(products.length + 2, 2);
+        const employeeLastRow = Math.max(employees.length + 2, 2);
 
         // Define Named Ranges for cross-sheet validations
-        workbook.definedNames.add(`العملاء!$B$3:$B$${customerLastRow}`, 'CustomerList');
-        workbook.definedNames.add(`الموردين!$B$3:$B$${supplierLastRow}`, 'SupplierList');
-        workbook.definedNames.add(`المنتجات!$B$3:$B$${productLastRow}`, 'ProductList');
-        workbook.definedNames.add(`المنتجات!$A$3:$A$${productLastRow}`, 'ProductCodes');
-        workbook.definedNames.add(`الموظفين!$A$3:$A$${employeeLastRow}`, 'EmployeeList');
+        workbook.definedNames.add(`العملاء!$B$2:$B$${customerLastRow}`, 'CustomerList');
+        workbook.definedNames.add(`الموردين!$B$2:$B$${supplierLastRow}`, 'SupplierList');
+        workbook.definedNames.add(`المنتجات!$B$2:$B$${productLastRow}`, 'ProductList');
+        workbook.definedNames.add(`المنتجات!$A$2:$A$${productLastRow}`, 'ProductCodes');
+        workbook.definedNames.add(`الموظفين!$A$2:$A$${employeeLastRow}`, 'EmployeeList');
 
         for (let r = 2; r <= 20002; r++) {
             const row = salesSheet.getRow(r);
@@ -761,8 +799,8 @@ async function exportToExcel(db, filePath, includeData = true) {
                 const itemTotal = dbItem.quantity * dbItem.unitPrice;
 
                 purchasesSheet.addRow({
-                    product_code: dbItem.productCode || { formula: `=IF(B${rowNum}="","",IFERROR(INDEX(المنتجات!A:A,MATCH(B${rowNum},المنتجات!B:B,0)),""))` },
-                    product_name: dbItem.productName || '',
+                    product_code: dbItem.productCode || '',
+                    product_name: dbItem.productName || { formula: `=IF(A${rowNum}="","",IFERROR(INDEX(المنتجات!B:B,MATCH(A${rowNum},المنتجات!A:A,0)),""))` },
                     quantity: dbItem.quantity,
                     purchase_price: dbItem.unitPrice,
                     total: {
@@ -783,16 +821,16 @@ async function exportToExcel(db, filePath, includeData = true) {
                     notes: dbItem.notes
                 });
             } else {
-                // Auto-fill supplier: Row 3 defaults to 'مورد نقدي' or H2, subsequent rows inherit previous row's supplier (H_{rowNum-1})
+                // Auto-fill supplier when EITHER Code (A) or Name (B) is filled
                 const suppFormula = rowNum === 3 
-                    ? `=IF(B3<>"","مورد نقدي", "")`
-                    : `=IF(B${rowNum}<>"", IF(H${rowNum-1}="","مورد نقدي", H${rowNum-1}), "")`;
+                    ? `=IF(OR(A3<>"",B3<>""),"مورد نقدي", "")`
+                    : `=IF(OR(A${rowNum}<>"",B${rowNum}<>""), IF(H${rowNum-1}="","مورد نقدي", H${rowNum-1}), "")`;
 
                 purchasesSheet.addRow({
-                    product_code: { formula: `=IF(B${rowNum}="","",IFERROR(INDEX(المنتجات!A:A,MATCH(B${rowNum},المنتجات!B:B,0)),""))` },
-                    product_name: '',
+                    product_code: '',
+                    product_name: { formula: `=IF(A${rowNum}="","",IFERROR(INDEX(المنتجات!B:B,MATCH(A${rowNum},المنتجات!A:A,0)),""))` },
                     quantity: '',
-                    purchase_price: { formula: `=IF(B${rowNum}="","",IFERROR(VLOOKUP(B${rowNum},المنتجات!B:F,5,FALSE),0))` },
+                    purchase_price: { formula: `=IF(A${rowNum}<>"",IFERROR(INDEX(المنتجات!F:F,MATCH(A${rowNum},المنتجات!A:A,0)),0),IF(B${rowNum}<>"",IFERROR(INDEX(المنتجات!F:F,MATCH(B${rowNum},المنتجات!B:B,0)),0),""))` },
                     total: { formula: `=IF(OR(C${rowNum}="",D${rowNum}=""),"",C${rowNum}*D${rowNum})` },
                     cash_amount: { formula: `=IF(OR(C${rowNum}="",D${rowNum}=""),"", IF(I${rowNum}="أجل", 0, C${rowNum}*D${rowNum}))` },
                     credit_amount: { formula: `=IF(OR(C${rowNum}="",D${rowNum}=""),"", IF(I${rowNum}="أجل", C${rowNum}*D${rowNum}, 0))` },
@@ -947,6 +985,16 @@ async function exportToExcel(db, filePath, includeData = true) {
             }
         }
         styleWorksheet(employeesSheet, employeesSheet.columns, 5001, [3]);
+
+        // Apply Protection to protect auto-generated formulas while keeping input columns unlocked
+        applyProtection(productsSheet, [1, 2, 3, 4, 5, 6, 7, 8]);
+        applyProtection(customersSheet, [1, 2, 3, 4]);
+        applyProtection(suppliersSheet, [1, 2, 3, 4]);
+        applyProtection(salesSheet, [1, 2, 3, 4, 8, 9, 10, 11]);
+        applyProtection(purchasesSheet, [1, 2, 3, 4, 8, 9, 10, 11]);
+        applyProtection(expensesSheet, [1, 2, 3, 4, 5]);
+        applyProtection(employeesSheet, [1, 2, 3, 4, 5]);
+        applyProtection(dashboardSheet, []);
 
         // Write file
         await workbook.xlsx.writeFile(filePath);

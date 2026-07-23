@@ -11,13 +11,20 @@ class UsersRepo {
     constructor(db) { this.db = db; }
     
     async login(username, password) {
-        const userDoc = await User.findOne({ username, is_active: true });
+        const safeUsername = typeof username === 'string' ? username.trim() : String(username || '').trim();
+        const safePassword = typeof password === 'string' ? password : String(password || '');
+
+        if (!safeUsername || !safePassword) {
+            return { success: false, message: 'اسم المستخدم وكلمة المرور مطلوبان' };
+        }
+
+        const userDoc = await User.findOne({ username: safeUsername, is_active: true });
         if (userDoc) {
-            const isMatch = verifyPassword(password, userDoc.password_hash);
+            const isMatch = verifyPassword(safePassword, userDoc.password_hash);
             if (isMatch) {
                 // Auto-upgrade plain-text password to hash on successful login
                 if (!userDoc.password_hash.startsWith('pbkdf2v2$')) {
-                    userDoc.password_hash = hashPassword(password);
+                    userDoc.password_hash = hashPassword(safePassword);
                     await User.updateOne({ id: userDoc.id }, { $set: { password_hash: userDoc.password_hash } });
                 }
 
@@ -69,9 +76,9 @@ class UsersRepo {
             const nextId = await getNextSequenceValue('users');
             await User.create({
                 id: nextId,
-                username: user.username,
-                password_hash: hashPassword(user.password),
-                full_name: user.full_name,
+                username: String(user.username || '').trim(),
+                password_hash: hashPassword(String(user.password || '')),
+                full_name: String(user.full_name || '').trim(),
                 role: user.role || 'user'
             });
             return { success: true, id: nextId };
@@ -83,19 +90,19 @@ class UsersRepo {
     async update(user) {
         try {
             const updateData = {
-                username: user.username,
-                full_name: user.full_name,
+                username: String(user.username || '').trim(),
+                full_name: String(user.full_name || '').trim(),
                 role: user.role,
                 is_active: user.is_active ? true : false
             };
             if (user.password) {
-                if (user.current_password !== undefined) {
+                if (user.require_current_password || user.current_password) {
                     const existing = await User.findOne({ id: user.id });
-                    if (!existing || !verifyPassword(user.current_password, existing.password_hash)) {
+                    if (!existing || !verifyPassword(user.current_password || '', existing.password_hash)) {
                         return { success: false, error: 'كلمة المرور الحالية غير صحيحة' };
                     }
                 }
-                updateData.password_hash = hashPassword(user.password);
+                updateData.password_hash = hashPassword(String(user.password));
             }
             await User.updateOne({ id: user.id }, { $set: updateData });
             return { success: true };

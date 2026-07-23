@@ -118,25 +118,35 @@ class ReportsRepo {
     }
 
     async profitLoss(startDate, endDate) {
-        // 1. Total Sales
+        // 1. Total Sales & Sales Returns
         const salesFilter = { type: 'sales' };
+        const salesReturnFilter = { type: 'sales_return' };
         if (startDate || endDate) {
             salesFilter.date = {};
-            if (startDate) salesFilter.date.$gte = startDate;
-            if (endDate) salesFilter.date.$lte = endDate;
+            salesReturnFilter.date = {};
+            if (startDate) { salesFilter.date.$gte = startDate; salesReturnFilter.date.$gte = startDate; }
+            if (endDate) { salesFilter.date.$lte = endDate; salesReturnFilter.date.$lte = endDate; }
         }
         const salesInvoices = await Invoice.find(salesFilter).lean();
-        const totalSalesAmt = salesInvoices.reduce((s, i) => s + (i.total || 0), 0);
+        const salesReturns = await Return.find(salesReturnFilter).lean();
+        const grossSalesAmt = salesInvoices.reduce((s, i) => s + (i.total || 0), 0);
+        const totalSalesReturnsAmt = salesReturns.reduce((s, r) => s + (r.total || 0), 0);
+        const totalSalesAmt = Math.max(0, grossSalesAmt - totalSalesReturnsAmt);
 
-        // 2. Total Purchases
+        // 2. Total Purchases & Purchase Returns
         const purchasesFilter = { type: 'purchase' };
+        const purchaseReturnFilter = { type: 'purchase_return' };
         if (startDate || endDate) {
             purchasesFilter.date = {};
-            if (startDate) purchasesFilter.date.$gte = startDate;
-            if (endDate) purchasesFilter.date.$lte = endDate;
+            purchaseReturnFilter.date = {};
+            if (startDate) { purchasesFilter.date.$gte = startDate; purchaseReturnFilter.date.$gte = startDate; }
+            if (endDate) { purchasesFilter.date.$lte = endDate; purchaseReturnFilter.date.$lte = endDate; }
         }
         const purchaseInvoices = await Invoice.find(purchasesFilter).lean();
-        const totalPurchasesAmt = purchaseInvoices.reduce((s, i) => s + (i.total || 0), 0);
+        const purchaseReturns = await Return.find(purchaseReturnFilter).lean();
+        const grossPurchasesAmt = purchaseInvoices.reduce((s, i) => s + (i.total || 0), 0);
+        const totalPurchaseReturnsAmt = purchaseReturns.reduce((s, r) => s + (r.total || 0), 0);
+        const totalPurchasesAmt = Math.max(0, grossPurchasesAmt - totalPurchaseReturnsAmt);
 
         // 3. Expenses
         const totalExpensesAmt = await this.db.expenses.getTotal(startDate, endDate);
@@ -146,7 +156,7 @@ class ReportsRepo {
         const endingInventory = activeProducts.reduce((s, p) => s + ((p.stock_quantity || 0) * (p.purchase_price || 0)), 0);
         const beginningInventory = 0;
         
-        const cogs = totalPurchasesAmt + beginningInventory - endingInventory;
+        const cogs = Math.max(0, totalPurchasesAmt + beginningInventory - endingInventory);
         const grossProfit = totalSalesAmt - cogs;
         const rightSide = totalPurchasesAmt + beginningInventory + totalExpensesAmt;
         const leftSide = totalSalesAmt + endingInventory;
