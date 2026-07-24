@@ -212,8 +212,22 @@ class InvoicesRepo {
                                 $inc: { shop_stock: -item.quantity, stock_quantity: -item.quantity }
                             });
                         } else if (inv.type === 'purchase') {
+                            const product = await Product.findOne({ id: item.product_id }).lean();
+                            let weightedPrice = parseFloat(item.unit_price) || 0;
+                            if (product) {
+                                const oldStock = Math.max(0, parseFloat(product.stock_quantity) || 0);
+                                const oldPrice = parseFloat(product.purchase_price) || 0;
+                                const newQty = parseFloat(item.quantity) || 0;
+                                const newPrice = parseFloat(item.unit_price) || 0;
+
+                                if (oldStock > 0 && oldPrice > 0 && newQty > 0) {
+                                    weightedPrice = ((oldStock * oldPrice) + (newQty * newPrice)) / (oldStock + newQty);
+                                }
+                                weightedPrice = Math.round(weightedPrice * 1000) / 1000;
+                            }
                             await Product.updateOne({ id: item.product_id }, {
-                                $inc: { shop_stock: item.quantity, stock_quantity: item.quantity }
+                                $inc: { shop_stock: item.quantity, stock_quantity: item.quantity },
+                                $set: { purchase_price: weightedPrice }
                             });
                         }
                     }
@@ -323,8 +337,22 @@ class InvoicesRepo {
                                 $inc: { shop_stock: -item.quantity, stock_quantity: -item.quantity }
                             });
                         } else if (oldInvoice.type === 'purchase') {
+                            const product = await Product.findOne({ id: item.product_id }).lean();
+                            let weightedPrice = parseFloat(item.unit_price) || 0;
+                            if (product) {
+                                const oldStock = Math.max(0, parseFloat(product.stock_quantity) || 0);
+                                const oldPrice = parseFloat(product.purchase_price) || 0;
+                                const newQty = parseFloat(item.quantity) || 0;
+                                const newPrice = parseFloat(item.unit_price) || 0;
+
+                                if (oldStock > 0 && oldPrice > 0 && newQty > 0) {
+                                    weightedPrice = ((oldStock * oldPrice) + (newQty * newPrice)) / (oldStock + newQty);
+                                }
+                                weightedPrice = Math.round(weightedPrice * 1000) / 1000;
+                            }
                             await Product.updateOne({ id: item.product_id }, {
-                                $inc: { shop_stock: item.quantity, stock_quantity: item.quantity }
+                                $inc: { shop_stock: item.quantity, stock_quantity: item.quantity },
+                                $set: { purchase_price: weightedPrice }
                             });
                         }
                     }

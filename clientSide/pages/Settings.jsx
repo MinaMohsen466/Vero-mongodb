@@ -201,9 +201,20 @@ export default function Settings() {
         const res = await window.api.database.backupToExcel(excelExportPath, includeData);
         setIsResetting(false);
         setResetLoadingText('');
-        res?.success 
-            ? toast.success(t('savedSuccess') || 'Saved successfully') 
-            : toast.error((t('failed') || 'Failed') + ': ' + (res?.error || ''));
+        if (res?.success) {
+            if (res.warning) {
+                toast.success(res.warning, { duration: 6000 });
+            } else {
+                toast.success(t('savedSuccess') || 'تم حفظ وتصدير ملف الإكسيل بنجاح');
+            }
+        } else {
+            const errText = res?.error || '';
+            if (errText.includes('EBUSY') || errText.includes('busy or locked')) {
+                toast.error('فشل الحفظ: ملف الإكسيل مفتوح حالياً في برنامج Excel. يرجى إغلاق ملف الإكسيل أولاً وإعادة المحاولة.', { duration: 6000 });
+            } else {
+                toast.error((t('failed') || 'فشل التصدير') + ': ' + errText);
+            }
+        }
         setExcelExportPath('');
     };
 

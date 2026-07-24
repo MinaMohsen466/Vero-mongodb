@@ -559,7 +559,6 @@ function Products() {
 
     const openModal = async (product = null) => {
         setEditingProduct(product);
-        setSupplierSearchQuery('');
         if (product) {
             const isCustomUnit = !units.includes(product.unit);
             setShowCustomUnit(isCustomUnit);
@@ -603,7 +602,7 @@ function Products() {
         }
     };
 
-    const closeModal = () => { setShowModal(false); setEditingProduct(null); setShowCustomUnit(false); setSupplierSearchQuery(''); };
+    const closeModal = () => { setShowModal(false); setEditingProduct(null); setShowCustomUnit(false); };
 
     const openMovementsModal = async (product) => {
         setSelectedProductForTracking(product);

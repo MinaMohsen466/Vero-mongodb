@@ -219,27 +219,85 @@ JSON Structure:
             });
 
             // 6. Call Gemini API
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    contents,
-                    systemInstruction: {
-                        parts: [{ text: systemPrompt }]
-                    },
-                    generationConfig: {
-                        responseMimeType: 'application/json'
-                    }
-                })
-            });
+            let candidateConfigs = [
+                { ver: 'v1beta', model: 'gemini-2.0-flash' },
+                { ver: 'v1beta', model: 'gemini-1.5-flash-latest' },
+                { ver: 'v1beta', model: 'gemini-2.0-flash-lite' }
+            ];
 
-            if (!response.ok) {
-                const errText = await response.text();
-                console.error("Gemini API HTTP Error:", errText);
-                return { success: false, error: `فشل الاتصال بخادم الذكاء الاصطناعي (رمز الخطأ: ${response.status})` };
+            // Dynamic model discovery via ListModels endpoint
+            try {
+                const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                if (listRes.ok) {
+                    const listData = await listRes.json();
+                    const available = (listData.models || []).filter(m => 
+                        (m.supportedGenerationMethods || []).includes('generateContent')
+                    );
+                    if (available.length > 0) {
+                        const flashModel = available.find(m => m.name.includes('2.0-flash') || m.name.includes('flash'));
+                        const chosen = flashModel || available[0];
+                        const cleanName = chosen.name.replace('models/', '');
+                        candidateConfigs.unshift({ ver: 'v1beta', model: cleanName });
+                    }
+                }
+            } catch (e) {
+                console.error("Gemini ListModels error:", e);
+            }
+
+            let response = null;
+            let lastErrText = '';
+            let isQuotaError = false;
+
+            for (const cfg of candidateConfigs) {
+                const url = `https://generativelanguage.googleapis.com/${cfg.ver}/models/${cfg.model}:generateContent?key=${apiKey}`;
+                try {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            contents,
+                            systemInstruction: {
+                                parts: [{ text: systemPrompt }]
+                            },
+                            generationConfig: {
+                                responseMimeType: 'application/json'
+                            }
+                        })
+                    });
+                    if (res.ok) {
+                        response = res;
+                        break;
+                    }
+                    lastErrText = await res.text();
+                    console.error(`Gemini API (${cfg.ver}/${cfg.model}) Error:`, lastErrText);
+                    response = res;
+                    if (res.status === 429) {
+                        isQuotaError = true;
+                        break; // Don't try other models if quota/rate-limit is reached for this API key
+                    }
+                } catch (fetchErr) {
+                    console.error(`Fetch error for ${cfg.ver}/${cfg.model}:`, fetchErr);
+                    lastErrText = fetchErr.message;
+                }
+            }
+
+            if (!response || !response.ok) {
+                if (isQuotaError) {
+                    return { 
+                        success: false, 
+                        error: 'تجاوزت مفتاح API الحد المسموح به من الطلبات (Quota Exceeded / Rate Limit - 429). يرجى الانتظار لعدة ثوانٍ والمحاولة مجدداً، أو استبدال المفتاح بمفتاح جديد من Google AI Studio.' 
+                    };
+                }
+                let detailedMsg = '';
+                try {
+                    const parsedErr = JSON.parse(lastErrText);
+                    if (parsedErr.error && parsedErr.error.message) {
+                        detailedMsg = `: ${parsedErr.error.message}`;
+                    }
+                } catch (_) {}
+                return { success: false, error: `فشل الاتصال بخادم الذكاء الاصطناعي (رمز الخطأ: ${response ? response.status : 503})${detailedMsg}` };
             }
 
             const data = await response.json();

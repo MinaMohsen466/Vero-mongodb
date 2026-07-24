@@ -89,6 +89,12 @@ function styleWorksheet(worksheet, headers, totalRows, sumCols = []) {
 }
 
 function applyProtection(worksheet, unlockedColIndexes = []) {
+    unlockedColIndexes.forEach(colIdx => {
+        try {
+            worksheet.getColumn(colIdx).protection = { locked: false };
+        } catch(e) {}
+    });
+
     worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
         if (rowNumber === 1) return; // Header row remains locked
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
@@ -403,8 +409,9 @@ async function exportToExcel(db, filePath, includeData = true) {
             stock_value: { formula: `=IFERROR(IF(A2="","",N(F2)*N(K2)),1000)`, result: 1000 }
         });
 
-        // Rows 3 to 1002: Products data + empty rows
-        for (let idx = 0; idx < 1000; idx++) {
+        // Rows 3+: Products data + pre-filled empty rows
+        const maxProdRows = Math.max(products.length + 100, 100);
+        for (let idx = 0; idx < maxProdRows; idx++) {
             const rowNum = idx + 3;
             const p = products[idx];
 
@@ -442,7 +449,6 @@ async function exportToExcel(db, filePath, includeData = true) {
             } else {
                 productsSheet.addRow({
                     code: { formula: `=IF(B${rowNum}="","","P"&TEXT(ROW()-2,"0000"))` },
-                    name: '',
                     description: '',
                     unit: '',
                     category: '',
@@ -456,7 +462,7 @@ async function exportToExcel(db, filePath, includeData = true) {
                 });
             }
         }
-        styleWorksheet(productsSheet, productsSheet.columns, 1001, [5, 6, 7, 8, 9, 10, 11]);
+        styleWorksheet(productsSheet, productsSheet.columns, maxProdRows + 2, [5, 6, 7, 8, 9, 10, 11]);
 
         // --- 4. Customers Sheet (العملاء) ---
         const customersSheet = workbook.addWorksheet('العملاء');
@@ -483,10 +489,12 @@ async function exportToExcel(db, filePath, includeData = true) {
             balance: { formula: `=IFERROR(IF(A2="","",N(D2)+N(F2)),0)`, result: 0 }
         });
 
-        // Rows 3 to 5002
-        for (let idx = 0; idx < 5000; idx++) {
+        // Rows 3+: Actual Customers data + pre-filled empty rows
+        const realCustomers = customers.filter(c => c.name !== 'عميل نقدي' && c.code !== 'CUST-CASH');
+        const maxCustRows = Math.max(realCustomers.length + 100, 100);
+        for (let idx = 0; idx < maxCustRows; idx++) {
             const rowNum = idx + 3;
-            const c = customers[idx];
+            const c = realCustomers[idx];
 
             if (c) {
                 const custId = c.id;
@@ -530,7 +538,6 @@ async function exportToExcel(db, filePath, includeData = true) {
             } else {
                 customersSheet.addRow({
                     code: { formula: `=IF(B${rowNum}="","","C"&TEXT(ROW()-2,"0000"))` },
-                    name: '',
                     phone: '',
                     opening_balance: '',
                     cash_sales: { formula: `=IFERROR(IF(A${rowNum}="","",SUMIF(المبيعات!H3:H20002, B${rowNum}, المبيعات!F3:F20002)),"")` },
@@ -540,7 +547,7 @@ async function exportToExcel(db, filePath, includeData = true) {
                 });
             }
         }
-        styleWorksheet(customersSheet, customersSheet.columns, 5001, [3, 4, 5, 6, 7]);
+        styleWorksheet(customersSheet, customersSheet.columns, maxCustRows + 2, [3, 4, 5, 6, 7]);
 
         // --- 5. Suppliers Sheet (الموردين) ---
         const suppliersSheet = workbook.addWorksheet('الموردين');
@@ -555,7 +562,7 @@ async function exportToExcel(db, filePath, includeData = true) {
             { header: 'الرصيد الحالي (مستحق للمورد)', key: 'balance', width: 22 }
         ];
 
-        // Row 2: Example/Instruction row
+        // Row 2: Default cash supplier row
         suppliersSheet.addRow({
             code: 'SUPP-CASH',
             name: 'مورد نقدي',
@@ -567,10 +574,12 @@ async function exportToExcel(db, filePath, includeData = true) {
             balance: { formula: `=IFERROR(IF(A2="","",N(D2)+N(F2)),0)`, result: 0 }
         });
 
-        // Rows 3 to 5002
-        for (let idx = 0; idx < 5000; idx++) {
+        // Rows 3+: Actual Suppliers data + pre-filled empty rows
+        const realSuppliers = suppliers.filter(s => s.name !== 'مورد نقدي' && s.code !== 'SUPP-CASH' && s.name !== 'مورد عام' && s.code !== 'SUPP-GEN');
+        const maxSuppRows = Math.max(realSuppliers.length + 100, 100);
+        for (let idx = 0; idx < maxSuppRows; idx++) {
             const rowNum = idx + 3;
-            const s = suppliers[idx];
+            const s = realSuppliers[idx];
 
             if (s) {
                 const suppId = s.id;
@@ -614,7 +623,6 @@ async function exportToExcel(db, filePath, includeData = true) {
             } else {
                 suppliersSheet.addRow({
                     code: { formula: `=IF(B${rowNum}="","","S"&TEXT(ROW()-2,"0000"))` },
-                    name: '',
                     phone: '',
                     opening_balance: '',
                     cash_purchases: { formula: `=IFERROR(IF(A${rowNum}="","",SUMIF(المشتريات!H3:H20002, B${rowNum}, المشتريات!F3:F20002)),"")` },
@@ -624,11 +632,7 @@ async function exportToExcel(db, filePath, includeData = true) {
                 });
             }
         }
-        styleWorksheet(suppliersSheet, suppliersSheet.columns, 5001, [3, 4, 5, 6, 7]);
-
-
-
-        // --- 6. Sales Sheet (المبيعات) ---
+        styleWorksheet(suppliersSheet, suppliersSheet.columns, maxSuppRows + 2, [3, 4, 5, 6, 7]);
         // Column Order requested: Product Code, Product Name, Qty, Sale Price, Total, Cash, Credit, Customer, Payment Status, Date, Notes
         const salesSheet = workbook.addWorksheet('المبيعات');
         salesSheet.views = [{ rightToLeft: true }];
@@ -717,18 +721,23 @@ async function exportToExcel(db, filePath, includeData = true) {
         }
         styleWorksheet(salesSheet, salesSheet.columns, 20001, [2, 3, 4, 5, 6]);
 
-        // Named Ranges: Start at Row 2 and end exactly at the last row of actual data so dropdown lists are compact without scrollbar whitespace
-        const customerLastRow = Math.max(customers.length + 2, 2);
-        const supplierLastRow = Math.max(suppliers.length + 2, 2);
-        const productLastRow = Math.max(products.length + 2, 2);
-        const employeeLastRow = Math.max(employees.length + 2, 2);
-
-        // Define Named Ranges for cross-sheet validations
-        workbook.definedNames.add(`العملاء!$B$2:$B$${customerLastRow}`, 'CustomerList');
-        workbook.definedNames.add(`الموردين!$B$2:$B$${supplierLastRow}`, 'SupplierList');
-        workbook.definedNames.add(`المنتجات!$B$2:$B$${productLastRow}`, 'ProductList');
-        workbook.definedNames.add(`المنتجات!$A$2:$A$${productLastRow}`, 'ProductCodes');
-        workbook.definedNames.add(`الموظفين!$A$2:$A$${employeeLastRow}`, 'EmployeeList');
+        // Define Dynamic Named Ranges using OFFSET formulas so dropdown lists contain ZERO white blank lines
+        // while dynamically expanding as users add new customers, suppliers, products, or employees in Excel
+        Object.defineProperty(workbook._definedNames, 'model', {
+            get() {
+                return [
+                    { name: 'CustomerList', ranges: ["OFFSET('العملاء'!$B$2,0,0,MAX(1,COUNTA('العملاء'!$B:$B)-1),1)"] },
+                    { name: 'SupplierList', ranges: ["OFFSET('الموردين'!$B$2,0,0,MAX(1,COUNTA('الموردين'!$B:$B)-1),1)"] },
+                    // Start ProductList & ProductCodes at Row 3 to SKIP example product 'مثال: منتج تجريبي' at Row 2!
+                    { name: 'ProductList', ranges: ["OFFSET('المنتجات'!$B$3,0,0,MAX(1,COUNTA('المنتجات'!$B:$B)-2),1)"] },
+                    { name: 'ProductCodes', ranges: ["OFFSET('المنتجات'!$A$3,0,0,MAX(1,COUNTA('المنتجات'!$A:$A)-2),1)"] },
+                    // Start EmployeeList at Row 3 (Column B: Full Name) to SKIP example employee 'مثال: هاني' at Row 2!
+                    { name: 'EmployeeList', ranges: ["OFFSET('الموظفين'!$B$3,0,0,MAX(1,COUNTA('الموظفين'!$B:$B)-2),1)"] }
+                ];
+            },
+            set() {},
+            configurable: true
+        });
 
         for (let r = 2; r <= 20002; r++) {
             const row = salesSheet.getRow(r);
@@ -947,6 +956,7 @@ async function exportToExcel(db, filePath, includeData = true) {
         // --- 9. Employees Sheet (الموظفين) ---
         const employeesSheet = workbook.addWorksheet('الموظفين');
         employeesSheet.columns = [
+            { header: 'كود الموظف', key: 'code', width: 18 },
             { header: 'الاسم بالكامل', key: 'full_name', width: 26 },
             { header: 'الهاتف', key: 'phone', width: 16 },
             { header: 'المسمى الوظيفي', key: 'job_title', width: 20 },
@@ -956,18 +966,23 @@ async function exportToExcel(db, filePath, includeData = true) {
 
         // Row 2: Example/Instruction row
         employeesSheet.addRow({
-            full_name: 'مثال: محمد علي',
+            code: 'EMP-CASH',
+            full_name: 'مثال: هاني',
             phone: 'مثال: 99999999',
             job_title: 'مثال: محاسب',
             base_salary: 350,
             hire_date: '2026-01-15'
         });
 
-        // Rows 3 to 5002
-        for (let idx = 0; idx < 5000; idx++) {
+        // Rows 3+: Employees data + pre-filled empty rows with auto-code formula
+        const maxEmpRows = Math.max(employees.length + 100, 100);
+        for (let idx = 0; idx < maxEmpRows; idx++) {
+            const rowNum = idx + 3;
             const emp = employees[idx];
+
             if (emp) {
                 employeesSheet.addRow({
+                    code: emp.code || `EMP-${emp.id}`,
                     full_name: emp.full_name || '',
                     phone: emp.phone || '',
                     job_title: emp.job_title || '',
@@ -976,7 +991,7 @@ async function exportToExcel(db, filePath, includeData = true) {
                 });
             } else {
                 employeesSheet.addRow({
-                    full_name: '',
+                    code: { formula: `=IF(B${rowNum}="","","EMP"&TEXT(ROW()-2,"0000"))` },
                     phone: '',
                     job_title: '',
                     base_salary: '',
@@ -984,16 +999,16 @@ async function exportToExcel(db, filePath, includeData = true) {
                 });
             }
         }
-        styleWorksheet(employeesSheet, employeesSheet.columns, 5001, [3]);
+        styleWorksheet(employeesSheet, employeesSheet.columns, maxEmpRows + 2, [3]);
 
-        // Apply Protection to protect auto-generated formulas while keeping input columns unlocked
-        applyProtection(productsSheet, [1, 2, 3, 4, 5, 6, 7, 8]);
-        applyProtection(customersSheet, [1, 2, 3, 4]);
-        applyProtection(suppliersSheet, [1, 2, 3, 4]);
+        // Apply Protection: LOCK Column 1 (Code column) on all master sheets while keeping input columns unlocked
+        applyProtection(productsSheet, [2, 3, 4, 5, 6, 7, 8]);
+        applyProtection(customersSheet, [2, 3, 4]);
+        applyProtection(suppliersSheet, [2, 3, 4]);
         applyProtection(salesSheet, [1, 2, 3, 4, 8, 9, 10, 11]);
         applyProtection(purchasesSheet, [1, 2, 3, 4, 8, 9, 10, 11]);
         applyProtection(expensesSheet, [1, 2, 3, 4, 5]);
-        applyProtection(employeesSheet, [1, 2, 3, 4, 5]);
+        applyProtection(employeesSheet, [2, 3, 4, 5, 6]);
         applyProtection(dashboardSheet, []);
 
         // Write file
